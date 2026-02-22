@@ -79,3 +79,15 @@ status: active
   - LLMLocalTests test target added to Package.swift
   - 18 new tests in 7 suites (service flow, presets, re-exports)
   - Total: 113 tests in 24 suites passing
+
+### T8: Implement Integration Tests
+- **Completed**: 2026-02-22
+- **Branch**: feat/t08-integration-tests
+- **Result**:
+  - IntegrationTests.swift with 5 test cases
+  - Full flow (Service → Backend → load → generate → stats)
+  - Error handling (invalid model → loadFailed)
+  - Cancellation, re-generation, stats validation
+  - Tests guarded with #if !targetEnvironment(simulator) + .disabled()
+  - LLMLocal dependency added to LLMLocalMLXTests target
+  - Compilation verified, not run (requires Metal GPU + 1.5GB model)
