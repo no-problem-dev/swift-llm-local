@@ -18,7 +18,7 @@ references:
 | T4: Config + Stats + Error | 1-2 | ✅ done | claude | GenerationConfig, GenerationStats, LLMLocalError + 33 tests |
 | T5: ModelManager + cache | 1-3 | ✅ done | claude | ModelManager actor + CachedModelInfo + ModelCache, 26 tests, 97% coverage |
 | T6: MLXBackend | 1-4 | ✅ done | claude | MLXBackend actor + GenerationConfig+MLX, 17 tests, exclusive load control |
-| T7: Umbrella + Service + Presets | 1-5 | pending | - | blocked by T5, T6 |
+| T7: Umbrella + Service + Presets | 1-5 | ✅ done | claude | LLMLocalService actor, ModelPresets.gemma2B, 18 tests, re-exports |
 | T8: Integration Tests | 1-6 | pending | - | blocked by T7 |
 | T9: E2E + Manual QA | 1-7 | pending | - | blocked by T8 |
 
@@ -63,7 +63,7 @@ references:
 | Wave 1-1 完了 | T1, T2 完了 | ✅ done |
 | Wave 1-2 完了 | T3, T4 完了 | ✅ done |
 | Wave 1-3/1-4 完了 | T5, T6 完了 | ✅ done |
-| Wave 1-5 完了 | T7 完了 | pending |
+| Wave 1-5 完了 | T7 完了 | ✅ done |
 | Wave 1-6 完了 | T8 完了 | pending |
 | **Phase 1 完了（v0.1.0）** | T9 完了 | pending |
 | Wave 2-1/2-2 完了 | T10-T13 完了 | pending |

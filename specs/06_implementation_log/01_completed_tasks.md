@@ -67,3 +67,15 @@ status: active
   - nonisolated generate with actor-isolated performGenerate
   - 17 tests in 8 suites
   - @preconcurrency import for ChatSession Sendable handling
+
+### T7: Implement LLMLocal umbrella, LLMLocalService, and ModelPresets
+- **Completed**: 2026-02-22
+- **Branch**: feat/t07-service-presets
+- **Result**:
+  - LLMLocal.swift: @_exported import for LLMLocalClient, LLMLocalModels, LLMLocalMLX
+  - LLMLocalService actor: generate (auto-load → infer), isModelCached, prefetch, lastGenerationStats
+  - ModelPresets enum: gemma2B (gemma-2-2b-it-4bit, contextLength 8192)
+  - MockBackend actor for testing (nonisolated generate pattern)
+  - LLMLocalTests test target added to Package.swift
+  - 18 new tests in 7 suites (service flow, presets, re-exports)
+  - Total: 113 tests in 24 suites passing
