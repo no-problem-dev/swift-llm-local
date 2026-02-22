@@ -12,8 +12,8 @@ references:
 
 | Task | Wave | Status | Owner | Notes |
 |---|---|---|---|---|
-| T1: Verify mlx-swift-lm API | 1-1 | pending | - | - |
-| T2: Initialize Package.swift | 1-1 | pending | - | - |
+| T1: Verify mlx-swift-lm API | 1-1 | ✅ done | claude | swallow model ID invalid, others verified |
+| T2: Initialize Package.swift | 1-1 | ✅ done | claude | resolved mlx-swift-lm 0.12.1 |
 | T3: Protocol + model types | 1-2 | pending | - | blocked by T2 |
 | T4: Config + Stats + Error | 1-2 | pending | - | blocked by T2 |
 | T5: ModelManager + cache | 1-3 | pending | - | blocked by T3, T4 |
@@ -47,10 +47,10 @@ references:
 
 | # | 項目 | 関連タスク | 優先度 | 状態 |
 |---|---|---|---|---|
-| 1 | mlx-swift-lm のパッケージ URL・プロダクト名の確定 | T1, T2 | 高 | 未着手 |
-| 2 | GenerateParameters の正確なフィールド確認 | T1, T6 | 高 | 未着手 |
-| 3 | iOS Sandbox での HuggingFace Hub キャッシュ動作確認 | T1, T5 | 高 | 未着手 |
-| 4 | プリセットモデル HuggingFace ID の実在確認 | T1, T7 | 中 | 未着手 |
+| 1 | mlx-swift-lm のパッケージ URL・プロダクト名の確定 | T1, T2 | 高 | ✅ 確認済み（URL, MLXLLM, MLXLMCommon） |
+| 2 | GenerateParameters の正確なフィールド確認 | T1, T6 | 高 | ✅ 確認済み（temperature, maxTokens, topP, repetitionPenalty） |
+| 3 | iOS Sandbox での HuggingFace Hub キャッシュ動作確認 | T1, T5 | 高 | ✅ 確認済み（Documents or Application Support） |
+| 4 | プリセットモデル HuggingFace ID の実在確認 | T1, T7 | 中 | ⚠️ gemma OK, swallow-7b-instruct-4bit は存在しない |
 | 5 | CI 設定（GitHub Actions）の検討 | - | 低 | 将来対応 |
 | 6 | DocC ホスティングの検討 | - | 低 | 将来対応 |
 
@@ -60,7 +60,7 @@ references:
 
 | マイルストーン | 条件 | 状態 |
 |---|---|---|
-| Wave 1-1 完了 | T1, T2 完了 | pending |
+| Wave 1-1 完了 | T1, T2 完了 | ✅ done |
 | Wave 1-2 完了 | T3, T4 完了 | pending |
 | Wave 1-3/1-4 完了 | T5, T6 完了 | pending |
 | Wave 1-5 完了 | T7 完了 | pending |
