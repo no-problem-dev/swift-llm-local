@@ -149,3 +149,13 @@ status: active
   - Backward compatibility maintained (nil adapter → original behavior)
   - 22 new tests in 5 suites (protocol, config, resolveAdapter, error paths, backward compat)
   - Total: 212 tests in 58 suites passing
+
+### T14: Implement Phase 2 Integration Tests
+- **Completed**: 2026-02-22
+- **Branch**: feat/t14-phase2-integration
+- **Result**:
+  - Phase2IntegrationTests.swift with 6 test cases (disabled, requires Metal GPU)
+  - Tests cover: DownloadProgress stream, memory warning unload, adapter resolution skip, Phase 1 regression, MemoryMonitor tier/context, AdapterManager error handling
+  - Guarded with #if !targetEnvironment(simulator) + .disabled()
+  - Compilation verified, not run (requires Metal GPU + model download)
+  - Total: 218 tests in 59 suites passing (6 skipped)

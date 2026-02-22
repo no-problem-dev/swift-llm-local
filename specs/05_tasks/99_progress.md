@@ -30,7 +30,7 @@ references:
 | T11: Memory monitoring | 2-1 | ✅ done | claude | MemoryMonitor actor + LLMLocalService integration, 21 tests |
 | T12: AdapterManager | 2-2 | ✅ done | claude | AdapterManager actor + AdapterNetworkDelegate, 22 tests |
 | T13: LoRA merge | 2-2 | ✅ done | claude | AdapterResolving protocol + MLXBackend adapter support, 22 tests |
-| T14: Phase 2 Integration Tests | 2-3 | pending | - | blocked by T10-T13 |
+| T14: Phase 2 Integration Tests | 2-3 | ✅ done | claude | 6 integration tests, compilation verified, requires Metal GPU |
 | T15: Phase 2 E2E + QA | 2-4 | pending | - | blocked by T14 |
 
 ## Phase 3: Nice-to-have（v0.3.0）
@@ -67,7 +67,7 @@ references:
 | Wave 1-6 完了 | T8 完了 | ✅ done |
 | **Phase 1 完了（v0.1.0）** | T9 完了 | ✅ done (code complete) |
 | Wave 2-1/2-2 完了 | T10-T13 完了 | ✅ done |
-| Wave 2-3 完了 | T14 完了 | pending |
+| Wave 2-3 完了 | T14 完了 | ✅ done |
 | **Phase 2 完了（v0.2.0）** | T15 完了 | pending |
 | Wave 3-1 完了 | T16, T17 完了 | pending |
 | **Phase 3 完了（v0.3.0）** | T18 完了 | pending |
