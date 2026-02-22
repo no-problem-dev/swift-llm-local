@@ -8,6 +8,11 @@ struct LLMLocalExampleApp: App {
     @State private var chatState: ChatState
     @State private var modelState: ModelState
     @State private var settingsState = SettingsState()
+    @State private var toolState = ToolState(tools: [
+        CalculatorTool(),
+        DateTimeTool(),
+        DiceRollTool(),
+    ])
 
     init() {
         let services = ServiceFactory.makeServices()
@@ -25,6 +30,7 @@ struct LLMLocalExampleApp: App {
                 .environment(chatState)
                 .environment(modelState)
                 .environment(settingsState)
+                .environment(toolState)
                 .theme(themeProvider)
                 .task {
                     await chatState.startMemoryMonitoring()

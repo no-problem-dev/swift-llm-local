@@ -6,6 +6,7 @@ struct ChatView: View {
     @Environment(ChatState.self) private var chatState
     @Environment(ModelState.self) private var modelState
     @Environment(SettingsState.self) private var settingsState
+    @Environment(ToolState.self) private var toolState
     @Environment(\.colorPalette) private var colors
     @Environment(\.spacingScale) private var spacing
 
@@ -37,7 +38,17 @@ struct ChatView: View {
                 ToolbarItem(placement: .topBarLeading) {
                     modelBadge
                 }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button("コピー", systemImage: "doc.on.doc") {
+                        let text = chatState.formatSession(
+                            model: modelState.selectedModel,
+                            config: settingsState.config,
+                            systemPrompt: settingsState.systemPrompt
+                        )
+                        UIPasteboard.general.string = text
+                    }
+                    .disabled(chatState.messages.isEmpty)
+
                     Button("クリア", systemImage: "trash") {
                         chatState.clearMessages()
                     }
@@ -57,7 +68,7 @@ struct ChatView: View {
                         emptyState
                     }
                     ForEach(chatState.messages) { message in
-                        MessageBubble(message: message)
+                        messageBubble(for: message)
                             .id(message.id)
                     }
                 }
@@ -75,6 +86,16 @@ struct ChatView: View {
     }
 
     @ViewBuilder
+    private func messageBubble(for message: ChatMessage) -> some View {
+        switch message.role {
+        case .user, .assistant:
+            MessageBubble(message: message)
+        case .toolCall, .toolResult:
+            ToolCallBubble(message: message)
+        }
+    }
+
+    @ViewBuilder
     private var streamingBubble: some View {
         if chatState.isGenerating {
             HStack {
@@ -86,6 +107,20 @@ struct ChatView: View {
                             Text("モデル読み込み中...")
                                 .typography(.bodyMedium)
                                 .foregroundStyle(colors.onSurfaceVariant)
+                        }
+                    } else if chatState.isExecutingTool {
+                        HStack(spacing: spacing.xs) {
+                            ProgressView()
+                                .controlSize(.small)
+                            if let name = chatState.executingToolName {
+                                Text("ツール実行中: \(name)")
+                                    .typography(.bodyMedium)
+                                    .foregroundStyle(colors.onSurfaceVariant)
+                            } else {
+                                Text("ツール実行中...")
+                                    .typography(.bodyMedium)
+                                    .foregroundStyle(colors.onSurfaceVariant)
+                            }
                         }
                     } else if !chatState.streamingContent.isEmpty {
                         StreamingResponseView(
@@ -174,7 +209,9 @@ struct ChatView: View {
     private func sendMessage() {
         chatState.send(
             model: modelState.selectedModel,
-            config: settingsState.config
+            config: settingsState.config,
+            toolState: toolState,
+            systemPrompt: settingsState.systemPrompt
         )
     }
 }

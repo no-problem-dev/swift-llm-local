@@ -73,6 +73,18 @@ enum ModelCatalog {
             sizeHint: "~7.5GB"
         ),
 
+        CatalogEntry(
+            spec: ModelSpec(
+                id: "qwen3-4b-ja-4bit",
+                base: .huggingFace(id: "taniguchi-kyoichi/Qwen3-4B-Instruct-2507-ja-4bit"),
+                contextLength: 4096,
+                displayName: "Qwen3 4B 日本語",
+                description: "Qwen3-4B を日本語データでファインチューニング。iPhone 向け最適化"
+            ),
+            category: .japanese,
+            sizeHint: "~2.3GB"
+        ),
+
         // MARK: - 多言語（日本語対応良好）
 
         CatalogEntry(
@@ -88,14 +100,14 @@ enum ModelCatalog {
         ),
         CatalogEntry(
             spec: ModelSpec(
-                id: "qwen3-4b-4bit",
-                base: .huggingFace(id: "mlx-community/Qwen3-4B-4bit"),
+                id: "qwen3-4b-instruct-2507-4bit",
+                base: .huggingFace(id: "mlx-community/Qwen3-4B-Instruct-2507-4bit"),
                 contextLength: 4096,
-                displayName: "Qwen3 4B",
-                description: "Alibaba の中型モデル。日本語・コード生成に強い"
+                displayName: "Qwen3 4B Instruct 2507",
+                description: "Alibaba の最新 Instruct モデル。日本語・コード生成に強い"
             ),
             category: .multilingual,
-            sizeHint: "~2.8GB"
+            sizeHint: "~2.3GB"
         ),
         CatalogEntry(
             spec: ModelSpec(

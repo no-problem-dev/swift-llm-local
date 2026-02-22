@@ -36,6 +36,9 @@ public actor MLXBackend: LLMLocalBackend {
     /// the expected URL and passes it to the model loading pipeline.
     private(set) var lastResolvedAdapterURL: URL?
 
+    /// The system prompt applied to new and existing chat sessions.
+    private var _systemPrompt: String?
+
     /// Tracks whether a model load is currently in progress, for exclusive control.
     private var isLoading: Bool = false
 
@@ -146,7 +149,7 @@ public actor MLXBackend: LLMLocalBackend {
                 }
             }
 
-            chatSession = ChatSession(modelContainer)
+            chatSession = ChatSession(modelContainer, instructions: _systemPrompt)
             loadedSpec = spec
         } catch let error as LLMLocalError {
             throw error
@@ -177,6 +180,27 @@ public actor MLXBackend: LLMLocalBackend {
         }
     }
 
+    public nonisolated func generateWithTools(
+        prompt: String,
+        config: GenerationConfig,
+        tools: [ToolDefinition]
+    ) -> AsyncThrowingStream<GenerationOutput, Error> {
+        AsyncThrowingStream { continuation in
+            Task { [weak self] in
+                guard let self else {
+                    continuation.finish(throwing: LLMLocalError.modelNotLoaded)
+                    return
+                }
+                await self.performGenerateWithTools(
+                    prompt: prompt,
+                    config: config,
+                    tools: tools,
+                    continuation: continuation
+                )
+            }
+        }
+    }
+
     public func unloadModel() async {
         chatSession = nil
         loadedSpec = nil
@@ -185,6 +209,13 @@ public actor MLXBackend: LLMLocalBackend {
     public var isLoaded: Bool { chatSession != nil }
 
     public var currentModel: ModelSpec? { loadedSpec }
+
+    public var systemPrompt: String? { _systemPrompt }
+
+    public func setSystemPrompt(_ prompt: String?) {
+        _systemPrompt = prompt
+        chatSession?.instructions = prompt
+    }
 
     // MARK: - Internal Helpers
 
@@ -229,10 +260,49 @@ public actor MLXBackend: LLMLocalBackend {
             return
         }
 
+        session.generateParameters = config.mlxParameters
+
         do {
             for try await text in session.streamResponse(to: prompt) {
                 try Task.checkCancellation()
                 continuation.yield(text)
+            }
+            continuation.finish()
+        } catch is CancellationError {
+            continuation.finish(throwing: LLMLocalError.cancelled)
+        } catch {
+            continuation.finish(throwing: error)
+        }
+    }
+
+    /// Performs generation with tool calling within the actor's isolation context.
+    private func performGenerateWithTools(
+        prompt: String,
+        config: GenerationConfig,
+        tools: [ToolDefinition],
+        continuation: AsyncThrowingStream<GenerationOutput, Error>.Continuation
+    ) async {
+        guard let session = chatSession else {
+            continuation.finish(throwing: LLMLocalError.modelNotLoaded)
+            return
+        }
+
+        session.tools = tools.map { $0.toolSpec }
+        session.generateParameters = config.mlxParameters
+
+        do {
+            for try await generation in session.streamDetails(
+                to: prompt, images: [], videos: []
+            ) {
+                try Task.checkCancellation()
+                switch generation {
+                case .chunk(let text):
+                    continuation.yield(.text(text))
+                case .toolCall(let toolCall):
+                    continuation.yield(.toolCall(ToolCallRequest(from: toolCall)))
+                case .info:
+                    break
+                }
             }
             continuation.finish()
         } catch is CancellationError {

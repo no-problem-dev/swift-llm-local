@@ -4,9 +4,12 @@ import LLMLocalClient
 actor MockBackend: LLMLocalBackend {
     var loadModelCalled = false
     var generateCalled = false
+    var generateWithToolsCalled = false
     var unloadCalled = false
     var shouldThrow: LLMLocalError?
     var mockTokens: [String] = ["Hello", " ", "World"]
+    var mockToolOutputs: [GenerationOutput]?
+    var lastToolDefinitions: [ToolDefinition]?
     private var _isLoaded = false
     private var _currentModel: ModelSpec?
 
@@ -42,6 +45,42 @@ actor MockBackend: LLMLocalBackend {
         continuation.finish()
     }
 
+    nonisolated func generateWithTools(
+        prompt: String,
+        config: GenerationConfig,
+        tools: [ToolDefinition]
+    ) -> AsyncThrowingStream<GenerationOutput, Error> {
+        AsyncThrowingStream { continuation in
+            Task {
+                await self.performGenerateWithTools(
+                    tools: tools, continuation: continuation
+                )
+            }
+        }
+    }
+
+    private func performGenerateWithTools(
+        tools: [ToolDefinition],
+        continuation: AsyncThrowingStream<GenerationOutput, Error>.Continuation
+    ) {
+        generateWithToolsCalled = true
+        lastToolDefinitions = tools
+        if let error = shouldThrow {
+            continuation.finish(throwing: error)
+            return
+        }
+        if let outputs = mockToolOutputs {
+            for output in outputs {
+                continuation.yield(output)
+            }
+        } else {
+            for token in mockTokens {
+                continuation.yield(.text(token))
+            }
+        }
+        continuation.finish()
+    }
+
     func unloadModel() async {
         unloadCalled = true
         _isLoaded = false
@@ -63,5 +102,9 @@ actor MockBackend: LLMLocalBackend {
 
     func setMockTokens(_ tokens: [String]) {
         mockTokens = tokens
+    }
+
+    func setMockToolOutputs(_ outputs: [GenerationOutput]) {
+        mockToolOutputs = outputs
     }
 }

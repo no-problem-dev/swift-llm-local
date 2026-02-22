@@ -128,6 +128,96 @@ public actor LLMLocalService {
         }
     }
 
+    /// Generates a response with tool calling support using the specified model.
+    ///
+    /// If the model is not currently loaded in the backend, it will be loaded
+    /// automatically before generation begins. Generation statistics are tracked
+    /// and available via ``lastGenerationStats`` after the stream completes.
+    /// Only text chunks are counted toward the token count.
+    ///
+    /// - Parameters:
+    ///   - model: The model specification to use for generation.
+    ///   - prompt: The input prompt to generate from.
+    ///   - tools: The tool definitions available to the model.
+    ///   - config: Configuration parameters controlling the generation. Defaults to ``GenerationConfig/default``.
+    /// - Returns: An asynchronous stream of ``GenerationOutput`` values.
+    public func generateWithTools(
+        model: ModelSpec,
+        prompt: String,
+        tools: [ToolDefinition],
+        config: GenerationConfig = .default
+    ) -> AsyncThrowingStream<GenerationOutput, Error> {
+        let backend = self.backend
+        let modelSwitcher = self.modelSwitcher
+        let startTime = ContinuousClock.now
+
+        return AsyncThrowingStream { continuation in
+            Task { [weak self] in
+                do {
+                    // Load model: use switcher if available, otherwise direct backend
+                    if let switcher = modelSwitcher {
+                        try await switcher.ensureLoaded(model)
+                    } else {
+                        let currentModel = await backend.currentModel
+                        if currentModel != model {
+                            try await backend.loadModel(model)
+                        }
+                    }
+
+                    // Generate and track stats
+                    var tokenCount = 0
+                    let innerStream = backend.generateWithTools(
+                        prompt: prompt, config: config, tools: tools
+                    )
+                    for try await output in innerStream {
+                        try Task.checkCancellation()
+                        if case .text = output {
+                            tokenCount += 1
+                        }
+                        continuation.yield(output)
+                    }
+
+                    // Record stats
+                    let duration = ContinuousClock.now - startTime
+                    let seconds = Double(duration.components.seconds)
+                        + Double(duration.components.attoseconds) / 1e18
+                    let tokensPerSecond = seconds > 0
+                        ? Double(tokenCount) / seconds : 0
+
+                    let stats = GenerationStats(
+                        tokenCount: tokenCount,
+                        tokensPerSecond: tokensPerSecond,
+                        duration: duration
+                    )
+                    await self?.updateStats(stats)
+
+                    continuation.finish()
+                } catch is CancellationError {
+                    continuation.finish(throwing: LLMLocalError.cancelled)
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+        }
+    }
+
+    // MARK: - System Prompt
+
+    /// The current system prompt, or `nil` if none is set.
+    public var systemPrompt: String? {
+        get async { await backend.systemPrompt }
+    }
+
+    /// Sets the system prompt for subsequent generations.
+    ///
+    /// The prompt is forwarded to the backend and applied to the active
+    /// chat session immediately.
+    ///
+    /// - Parameter prompt: The system prompt string, or `nil` to clear it.
+    public func setSystemPrompt(_ prompt: String?) async {
+        await backend.setSystemPrompt(prompt)
+    }
+
     /// Checks whether the specified model is cached (has been downloaded).
     ///
     /// - Parameter spec: The model specification to check.
