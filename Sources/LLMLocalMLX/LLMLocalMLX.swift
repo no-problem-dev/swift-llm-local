@@ -1,2 +1,5 @@
 // LLMLocalMLX - MLX backend implementation
-import LLMLocalClient
+//
+// Public API:
+// - MLXBackend (actor conforming to LLMLocalBackend)
+// - GenerationConfig.mlxParameters (extension for MLX parameter conversion)
