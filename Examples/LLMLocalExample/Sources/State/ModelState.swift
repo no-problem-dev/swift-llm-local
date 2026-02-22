@@ -10,7 +10,11 @@ final class ModelState {
 
     var availableModels: [ModelSpec] = ModelCatalog.specs
     var cachedModels: [CachedModelInfo] = []
-    var selectedModel: ModelSpec = ModelCatalog.defaultModel
+    var selectedModel: ModelSpec = ModelCatalog.defaultModel {
+        didSet {
+            UserDefaults.standard.set(selectedModel.id, forKey: "llmlocal.selectedModelId")
+        }
+    }
     var isDownloading: Bool = false
     var downloadingModelId: String?
     var downloadStatusText: String = ""
@@ -25,6 +29,11 @@ final class ModelState {
         self.service = service
         self.modelManager = modelManager
         self.memoryMonitor = memoryMonitor
+
+        if let savedId = UserDefaults.standard.string(forKey: "llmlocal.selectedModelId"),
+           let found = availableModels.first(where: { $0.id == savedId }) {
+            selectedModel = found
+        }
     }
 
     func refreshCache() async {

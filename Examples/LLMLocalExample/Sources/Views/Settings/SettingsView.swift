@@ -2,10 +2,16 @@ import SwiftUI
 import DesignSystem
 
 struct SettingsView: View {
+    @Environment(SettingsState.self) private var settingsState
+
     var body: some View {
+        @Bindable var settings = settingsState
+
         NavigationStack {
             Form {
+                SystemPromptSection(systemPrompt: $settings.systemPrompt)
                 GenerationConfigSection()
+                ToolSettingsSection()
                 ThemeSelectorView()
                 MemoryInfoView()
 
