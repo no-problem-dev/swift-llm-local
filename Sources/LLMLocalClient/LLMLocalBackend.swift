@@ -8,6 +8,17 @@ public protocol LLMLocalBackend: Sendable {
     /// - Throws: An error if the model cannot be loaded.
     func loadModel(_ spec: ModelSpec) async throws
 
+    /// Loads the specified model into memory, reporting download progress.
+    ///
+    /// - Parameters:
+    ///   - spec: The model specification describing which model to load.
+    ///   - progressHandler: A closure called with download progress updates.
+    /// - Throws: An error if the model cannot be loaded.
+    func loadModel(
+        _ spec: ModelSpec,
+        progressHandler: @Sendable @escaping (DownloadProgress) -> Void
+    ) async throws
+
     /// Generates text from the given prompt, streaming tokens as they are produced.
     /// - Parameters:
     ///   - prompt: The input prompt to generate from.
@@ -23,4 +34,16 @@ public protocol LLMLocalBackend: Sendable {
 
     /// The specification of the currently loaded model, or `nil` if no model is loaded.
     var currentModel: ModelSpec? { get async }
+}
+
+// MARK: - Default Implementation
+
+extension LLMLocalBackend {
+    /// Default implementation that ignores the progress handler and delegates to `loadModel(_:)`.
+    public func loadModel(
+        _ spec: ModelSpec,
+        progressHandler: @Sendable @escaping (DownloadProgress) -> Void
+    ) async throws {
+        try await loadModel(spec)
+    }
 }

@@ -147,6 +147,19 @@ public actor LLMLocalService {
         try await backend.loadModel(spec)
     }
 
+    /// Preloads the specified model, reporting download progress.
+    ///
+    /// - Parameters:
+    ///   - spec: The model specification to preload.
+    ///   - onProgress: A closure called with download progress updates.
+    /// - Throws: An error if the model cannot be loaded.
+    public func prefetch(
+        _ spec: ModelSpec,
+        onProgress: @Sendable @escaping (DownloadProgress) -> Void
+    ) async throws {
+        try await backend.loadModel(spec, progressHandler: onProgress)
+    }
+
     // MARK: - Memory Monitoring
 
     /// Starts memory monitoring. When a memory warning is received,

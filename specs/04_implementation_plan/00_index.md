@@ -22,6 +22,7 @@ swift-llm-local パッケージの実装計画書。Design Spec の設計を Pha
 | 03_test_strategy.md | テスト戦略（Unit/Integration/E2E/Manual QA） |
 | 04_development_rules.md | 開発ルール（ブランチ戦略、コーディング指針） |
 | 05_rollout.md | ロールアウト・ロールバック手順 |
+| 06_sample_app.md | サンプルアプリ（LLMLocalExample）実装計画 |
 | 99_ai_instruction_template.md | AI 指示構成テンプレート + コンパクション条件 |
 
 ## Phase 概要

@@ -81,6 +81,7 @@ Phase 3: Nice-to-have（FF-09〜FF-10）→ v0.3.0
 | 01_phase1_core.md | Phase 1 のタスク定義（T1〜T9） |
 | 02_phase2_enhanced.md | Phase 2 のタスク定義（T10〜T15） |
 | 03_phase3_nicetohave.md | Phase 3 のタスク定義（T16〜T18） |
+| 04_sample_app.md | サンプルアプリタスク定義（S1〜S5） |
 | 99_dependencies.md | タスク依存関係（テキスト形式） |
 | 99_dependency_graph.md | 依存関係の Mermaid 図 |
 | 99_progress.md | 進捗管理・検討事項 |

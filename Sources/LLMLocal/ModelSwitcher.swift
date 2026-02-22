@@ -55,6 +55,23 @@ public actor ModelSwitcher {
     /// - Parameter spec: The model specification to load.
     /// - Throws: An error if the backend cannot load the model.
     public func ensureLoaded(_ spec: ModelSpec) async throws {
+        try await ensureLoaded(spec, progressHandler: { _ in })
+    }
+
+    /// Ensures the specified model is loaded, reporting download progress.
+    ///
+    /// If the model is already loaded, its access time is updated without
+    /// reloading. If the cache is at capacity, the least recently used model
+    /// is evicted before loading the new one.
+    ///
+    /// - Parameters:
+    ///   - spec: The model specification to load.
+    ///   - progressHandler: A closure called with download progress updates.
+    /// - Throws: An error if the backend cannot load the model.
+    public func ensureLoaded(
+        _ spec: ModelSpec,
+        progressHandler: @Sendable @escaping (DownloadProgress) -> Void
+    ) async throws {
         // If model is already tracked, just update its access time
         if loadedModels[spec.id] != nil {
             loadedModels[spec.id]?.lastAccessed = Date()
@@ -67,7 +84,7 @@ public actor ModelSwitcher {
         }
 
         // Load the model via backend
-        try await backend.loadModel(spec)
+        try await backend.loadModel(spec, progressHandler: progressHandler)
 
         // Track the newly loaded model
         loadedModels[spec.id] = LoadedModelEntry(

@@ -1,0 +1,52 @@
+name: LLMLocalExample
+options:
+  bundleIdPrefix: dev.noproblem
+  deploymentTarget:
+    iOS: "18.0"
+  xcodeVersion: "16.0"
+  createIntermediateGroups: true
+  defaultConfig: Debug
+
+settings:
+  base:
+    SWIFT_VERSION: "6.2"
+    IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+
+packages:
+  swift-llm-local:
+    path: ../..
+  DesignSystem:
+    url: https://github.com/no-problem-dev/swift-design-system.git
+    majorVersion: 1.0.0
+  swift-markdown-view:
+    url: https://github.com/no-problem-dev/swift-markdown-view.git
+    majorVersion: 1.0.0
+
+targets:
+  LLMLocalExample:
+    type: application
+    platform: iOS
+    sources:
+      - path: App/Sources
+      - path: Sources
+    resources:
+      - path: App/Resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.noproblem.LLMLocalExample
+        PRODUCT_NAME: LLMLocalExample
+        GENERATE_INFOPLIST_FILE: true
+        CURRENT_PROJECT_VERSION: 1
+        MARKETING_VERSION: 0.1.0
+        INFOPLIST_KEY_UILaunchScreen_Generation: true
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: Y8MG29W5VM
+    dependencies:
+      - package: swift-llm-local
+        product: LLMLocal
+      - package: DesignSystem
+      - package: swift-markdown-view
+        product: SwiftMarkdownView
+      - package: swift-markdown-view
+        product: SwiftMarkdownViewHighlightJS

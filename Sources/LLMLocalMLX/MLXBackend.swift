@@ -71,6 +71,21 @@ public actor MLXBackend: LLMLocalBackend {
     // MARK: - LLMLocalBackend
 
     public func loadModel(_ spec: ModelSpec) async throws {
+        try await performLoad(spec, progressHandler: nil)
+    }
+
+    public func loadModel(
+        _ spec: ModelSpec,
+        progressHandler: @Sendable @escaping (DownloadProgress) -> Void
+    ) async throws {
+        try await performLoad(spec, progressHandler: progressHandler)
+    }
+
+    /// Shared implementation for model loading with optional progress reporting.
+    private func performLoad(
+        _ spec: ModelSpec,
+        progressHandler: (@Sendable (DownloadProgress) -> Void)?
+    ) async throws {
         // If same model already loaded, skip
         if loadedSpec == spec { return }
 
@@ -101,8 +116,24 @@ public actor MLXBackend: LLMLocalBackend {
         }
 
         do {
-            // Load base model
-            let modelContainer = try await MLXLMCommon.loadModelContainer(id: hfID)
+            // Load base model (with or without progress tracking)
+            let modelContainer: ModelContainer
+            if let progressHandler {
+                let config = ModelConfiguration(id: hfID)
+                modelContainer = try await LLMModelFactory.shared.loadContainer(
+                    configuration: config,
+                    progressHandler: { progress in
+                        progressHandler(DownloadProgress(
+                            fraction: progress.fractionCompleted,
+                            completedBytes: progress.completedUnitCount,
+                            totalBytes: progress.totalUnitCount,
+                            currentFile: nil
+                        ))
+                    }
+                )
+            } else {
+                modelContainer = try await MLXLMCommon.loadModelContainer(id: hfID)
+            }
 
             // Apply adapter if resolved
             if let adapterURL {
