@@ -2,6 +2,7 @@
 //
 // Public API:
 // - LLMLocalBackend (protocol)
+// - AdapterResolving (protocol)
 // - ModelSpec (struct)
 // - ModelSource (enum)
 // - AdapterSource (enum)
