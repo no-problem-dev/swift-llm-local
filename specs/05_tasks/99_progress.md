@@ -28,7 +28,7 @@ references:
 |---|---|---|---|---|
 | T10: DownloadProgress | 2-1 | ✅ done | claude | DownloadProgress + downloadWithProgress + delegate, 16 tests |
 | T11: Memory monitoring | 2-1 | ✅ done | claude | MemoryMonitor actor + LLMLocalService integration, 21 tests |
-| T12: AdapterManager | 2-2 | pending | - | blocked by T3, T5 |
+| T12: AdapterManager | 2-2 | ✅ done | claude | AdapterManager actor + AdapterNetworkDelegate, 22 tests |
 | T13: LoRA merge | 2-2 | pending | - | blocked by T6, T12 |
 | T14: Phase 2 Integration Tests | 2-3 | pending | - | blocked by T10-T13 |
 | T15: Phase 2 E2E + QA | 2-4 | pending | - | blocked by T14 |

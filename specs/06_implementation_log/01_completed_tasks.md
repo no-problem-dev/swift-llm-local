@@ -124,3 +124,15 @@ status: active
   - LLMLocalService integration (startMemoryMonitoring, stopMemoryMonitoring, recommendedContextLength)
   - 14 MemoryMonitor tests + 7 LLMLocalService memory integration tests
   - Total: 170 tests in 44 suites passing
+
+### T12: Implement AdapterManager
+- **Completed**: 2026-02-22
+- **Branch**: feat/t12-adapter-manager
+- **Result**:
+  - AdapterNetworkDelegate protocol for testable download injection
+  - StubAdapterNetworkDelegate (internal default)
+  - AdapterInfo struct (Sendable, Codable: key, version, source, downloadedAt, localPath)
+  - AdapterCache internal helper (adapter-registry.json persistence)
+  - AdapterManager actor (resolve, cachedAdapters, isCached, deleteAdapter, clearAll, isUpdateAvailable, cacheKey)
+  - 22 new tests in 8 suites (cacheKey, resolve, isUpdateAvailable, cachedAdapters, isCached, deleteAdapter, clearAll, persistence)
+  - Total: 190 tests in 53 suites passing
