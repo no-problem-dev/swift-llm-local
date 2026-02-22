@@ -136,3 +136,16 @@ status: active
   - AdapterManager actor (resolve, cachedAdapters, isCached, deleteAdapter, clearAll, isUpdateAvailable, cacheKey)
   - 22 new tests in 8 suites (cacheKey, resolve, isUpdateAvailable, cachedAdapters, isCached, deleteAdapter, clearAll, persistence)
   - Total: 190 tests in 53 suites passing
+
+### T13: Extend MLXBackend for LoRA adapter merging
+- **Completed**: 2026-02-22
+- **Branch**: feat/t13-lora-merge
+- **Result**:
+  - AdapterResolving protocol in LLMLocalClient (Layer 0) for cross-layer DI
+  - MLXBackend extended: adapterResolver init param, resolveAdapter() method
+  - Adapter resolution before GPU access (early error reporting)
+  - Model loading flow: base model → adapter load via ModelAdapterFactory → apply
+  - lastResolvedAdapterURL for test verification
+  - Backward compatibility maintained (nil adapter → original behavior)
+  - 22 new tests in 5 suites (protocol, config, resolveAdapter, error paths, backward compat)
+  - Total: 212 tests in 58 suites passing
