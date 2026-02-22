@@ -1,15 +1,25 @@
 import LLMLocalClient
+import LLMLocalMLX
 import LLMLocalModels
 
 /// A facade that integrates a backend and model manager for convenient LLM operations.
 ///
 /// `LLMLocalService` provides a high-level API for text generation. It automatically
-/// handles model loading when needed and tracks generation statistics.
+/// handles model loading when needed and tracks generation statistics. Optionally,
+/// a ``MemoryMonitor`` can be provided to enable automatic model unloading on
+/// memory pressure.
 ///
 /// ## Usage
 ///
 /// ```swift
-/// let service = LLMLocalService(backend: mlxBackend, modelManager: modelManager)
+/// let monitor = MemoryMonitor()
+/// let service = LLMLocalService(
+///     backend: mlxBackend,
+///     modelManager: modelManager,
+///     memoryMonitor: monitor
+/// )
+/// await service.startMemoryMonitoring()
+///
 /// let stream = await service.generate(
 ///     model: ModelPresets.gemma2B,
 ///     prompt: "What is Swift?"
@@ -22,19 +32,28 @@ public actor LLMLocalService {
 
     private let backend: any LLMLocalBackend
     private let modelManager: ModelManager
+    private let memoryMonitor: MemoryMonitor?
 
     /// Statistics from the most recent completed generation, or `nil` if
     /// no generation has completed yet.
     private(set) public var lastGenerationStats: GenerationStats?
 
-    /// Creates a new service with the specified backend and model manager.
+    /// Creates a new service with the specified backend, model manager,
+    /// and optional memory monitor.
     ///
     /// - Parameters:
     ///   - backend: The inference backend to use for model loading and text generation.
     ///   - modelManager: The model manager for cache queries.
-    public init(backend: any LLMLocalBackend, modelManager: ModelManager) {
+    ///   - memoryMonitor: An optional memory monitor for automatic model unloading
+    ///     on memory pressure. Defaults to `nil`.
+    public init(
+        backend: any LLMLocalBackend,
+        modelManager: ModelManager,
+        memoryMonitor: MemoryMonitor? = nil
+    ) {
         self.backend = backend
         self.modelManager = modelManager
+        self.memoryMonitor = memoryMonitor
     }
 
     /// Generates text from the given prompt using the specified model.
@@ -115,6 +134,42 @@ public actor LLMLocalService {
     /// - Throws: An error if the model cannot be loaded.
     public func prefetch(_ spec: ModelSpec) async throws {
         try await backend.loadModel(spec)
+    }
+
+    // MARK: - Memory Monitoring
+
+    /// Starts memory monitoring. When a memory warning is received,
+    /// the currently loaded model will be automatically unloaded.
+    ///
+    /// If no ``MemoryMonitor`` was provided at initialization, this method
+    /// does nothing.
+    public func startMemoryMonitoring() async {
+        guard let monitor = memoryMonitor else { return }
+        let backend = self.backend
+        await monitor.startMonitoring {
+            await backend.unloadModel()
+        }
+    }
+
+    /// Stops memory monitoring.
+    ///
+    /// If no ``MemoryMonitor`` was provided at initialization, this method
+    /// does nothing.
+    public func stopMemoryMonitoring() async {
+        await memoryMonitor?.stopMonitoring()
+    }
+
+    /// Returns the recommended context length based on device memory.
+    ///
+    /// The recommendation is based on the device's total physical memory:
+    /// - 8GB or less: 2048
+    /// - 12GB or more: 4096
+    ///
+    /// - Returns: The recommended context length, or `nil` if no memory
+    ///   monitor is configured.
+    public func recommendedContextLength() async -> Int? {
+        guard let monitor = memoryMonitor else { return nil }
+        return await monitor.recommendedContextLength()
     }
 
     // MARK: - Private
