@@ -17,7 +17,7 @@ let package = Package(
     ],
     dependencies: [
         // MLX LLM inference
-        .package(url: "https://github.com/ml-explore/mlx-swift-lm", from: "0.1.0"),
+        .package(url: "https://github.com/ml-explore/mlx-swift-lm", from: "2.30.0"),
         // Documentation generation
         .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.4.0"),
     ],
