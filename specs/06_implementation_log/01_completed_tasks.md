@@ -169,3 +169,43 @@ status: active
   - Manual QA checklist: 7 items pending Metal GPU testing
   - Performance benchmarks: pending hardware execution
   - Phase 2 code complete, v0.2.0 pending manual QA pass
+
+## Phase 3: Nice-to-have
+
+### T16: Implement background download
+- **Completed**: 2026-02-22
+- **Branch**: feat/t16-background-download
+- **Result**:
+  - BackgroundDownloadDelegate protocol for testable download injection
+  - StubBackgroundDownloadDelegate (internal default)
+  - DownloadState enum (downloading, paused, completed, failed)
+  - BackgroundDownloadError enum (noResumeData, notDownloading, resumeDataPersistenceFailed)
+  - BackgroundDownloader actor (download, pause, resume, cancel, isDownloading, hasResumeData)
+  - ModelManager.backgroundDownloader computed property
+  - URLSession background config identifier: com.llmlocal.background-download
+  - 32 new tests in 8 suites
+  - Total: 250 tests in 67 suites passing
+
+### T17: Implement multi-model switching
+- **Completed**: 2026-02-22
+- **Branch**: feat/t17-multi-model
+- **Result**:
+  - ModelSwitcher actor with LRU eviction strategy
+  - LoadedModelEntry internal struct (spec + lastAccessed timestamp)
+  - ensureLoaded, loadedModelSpecs, loadedCount, unload, unloadAll, isLoaded
+  - LLMLocalService integration (optional modelSwitcher parameter)
+  - Backward compatibility maintained (nil modelSwitcher = old behavior)
+  - nonisolated let maxLoadedModels for safe external access
+  - 22 new tests in 6 suites
+  - Total: 272 tests in 73 suites passing
+
+### T18: Verify Phase 3 Integration Tests and QA
+- **Completed**: 2026-02-22
+- **Branch**: feat/t18-phase3-qa
+- **Result**:
+  - Phase3IntegrationTests.swift with 5 test cases (disabled, requires Metal GPU)
+  - Tests cover: background download, pause/resume, model switching, service integration, Phase 1-2 regression
+  - QA results document (wave-3-2-qa-results.md)
+  - Automated verification: 277 tests (261 pass, 16 skipped), build verified
+  - Manual QA checklist: 6 items pending Metal GPU testing
+  - All 3 phases code complete, v0.3.0 pending manual QA pass

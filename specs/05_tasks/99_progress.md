@@ -37,9 +37,9 @@ references:
 
 | Task | Wave | Status | Owner | Notes |
 |---|---|---|---|---|
-| T16: Background download | 3-1 | pending | - | blocked by T10 |
-| T17: Multi-model switching | 3-1 | pending | - | blocked by T7, T11 |
-| T18: Phase 3 Integration + QA | 3-2 | pending | - | blocked by T16, T17 |
+| T16: Background download | 3-1 | ✅ done | claude | BackgroundDownloader actor + delegate, 32 tests |
+| T17: Multi-model switching | 3-1 | ✅ done | claude | ModelSwitcher actor + LRU eviction, 22 tests |
+| T18: Phase 3 Integration + QA | 3-2 | ✅ done | claude | 5 integration tests + QA doc, 277 total tests |
 
 ---
 
@@ -69,5 +69,5 @@ references:
 | Wave 2-1/2-2 完了 | T10-T13 完了 | ✅ done |
 | Wave 2-3 完了 | T14 完了 | ✅ done |
 | **Phase 2 完了（v0.2.0）** | T15 完了 | ✅ done (code complete) |
-| Wave 3-1 完了 | T16, T17 完了 | pending |
-| **Phase 3 完了（v0.3.0）** | T18 完了 | pending |
+| Wave 3-1 完了 | T16, T17 完了 | ✅ done |
+| **Phase 3 完了（v0.3.0）** | T18 完了 | ✅ done (code complete) |
