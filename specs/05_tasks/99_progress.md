@@ -14,8 +14,8 @@ references:
 |---|---|---|---|---|
 | T1: Verify mlx-swift-lm API | 1-1 | ✅ done | claude | swallow model ID invalid, others verified |
 | T2: Initialize Package.swift | 1-1 | ✅ done | claude | resolved mlx-swift-lm 0.12.1 |
-| T3: Protocol + model types | 1-2 | pending | - | blocked by T2 |
-| T4: Config + Stats + Error | 1-2 | pending | - | blocked by T2 |
+| T3: Protocol + model types | 1-2 | ✅ done | claude | LLMLocalBackend, ModelSpec, ModelSource, AdapterSource + 36 tests |
+| T4: Config + Stats + Error | 1-2 | ✅ done | claude | GenerationConfig, GenerationStats, LLMLocalError + 33 tests |
 | T5: ModelManager + cache | 1-3 | pending | - | blocked by T3, T4 |
 | T6: MLXBackend | 1-4 | pending | - | blocked by T1, T3, T4 |
 | T7: Umbrella + Service + Presets | 1-5 | pending | - | blocked by T5, T6 |
@@ -61,7 +61,7 @@ references:
 | マイルストーン | 条件 | 状態 |
 |---|---|---|
 | Wave 1-1 完了 | T1, T2 完了 | ✅ done |
-| Wave 1-2 完了 | T3, T4 完了 | pending |
+| Wave 1-2 完了 | T3, T4 完了 | ✅ done |
 | Wave 1-3/1-4 完了 | T5, T6 完了 | pending |
 | Wave 1-5 完了 | T7 完了 | pending |
 | Wave 1-6 完了 | T8 完了 | pending |
