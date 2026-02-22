@@ -33,27 +33,33 @@ public actor LLMLocalService {
     private let backend: any LLMLocalBackend
     private let modelManager: ModelManager
     private let memoryMonitor: MemoryMonitor?
+    private let modelSwitcher: ModelSwitcher?
 
     /// Statistics from the most recent completed generation, or `nil` if
     /// no generation has completed yet.
     private(set) public var lastGenerationStats: GenerationStats?
 
     /// Creates a new service with the specified backend, model manager,
-    /// and optional memory monitor.
+    /// and optional memory monitor and model switcher.
     ///
     /// - Parameters:
     ///   - backend: The inference backend to use for model loading and text generation.
     ///   - modelManager: The model manager for cache queries.
     ///   - memoryMonitor: An optional memory monitor for automatic model unloading
     ///     on memory pressure. Defaults to `nil`.
+    ///   - modelSwitcher: An optional model switcher for LRU-based multi-model
+    ///     management. When provided, model loading is delegated to the switcher
+    ///     instead of directly calling the backend. Defaults to `nil`.
     public init(
         backend: any LLMLocalBackend,
         modelManager: ModelManager,
-        memoryMonitor: MemoryMonitor? = nil
+        memoryMonitor: MemoryMonitor? = nil,
+        modelSwitcher: ModelSwitcher? = nil
     ) {
         self.backend = backend
         self.modelManager = modelManager
         self.memoryMonitor = memoryMonitor
+        self.modelSwitcher = modelSwitcher
     }
 
     /// Generates text from the given prompt using the specified model.
@@ -73,15 +79,20 @@ public actor LLMLocalService {
         config: GenerationConfig = .default
     ) -> AsyncThrowingStream<String, Error> {
         let backend = self.backend
+        let modelSwitcher = self.modelSwitcher
         let startTime = ContinuousClock.now
 
         return AsyncThrowingStream { continuation in
             Task { [weak self] in
                 do {
-                    // Load model if not already loaded
-                    let currentModel = await backend.currentModel
-                    if currentModel != model {
-                        try await backend.loadModel(model)
+                    // Load model: use switcher if available, otherwise direct backend
+                    if let switcher = modelSwitcher {
+                        try await switcher.ensureLoaded(model)
+                    } else {
+                        let currentModel = await backend.currentModel
+                        if currentModel != model {
+                            try await backend.loadModel(model)
+                        }
                     }
 
                     // Generate tokens and track stats
