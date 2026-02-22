@@ -30,6 +30,17 @@ public actor ModelManager {
     /// Delegate that performs the actual download work.
     private let downloadDelegate: any DownloadProgressDelegate
 
+    /// The background downloader instance for resumable downloads.
+    private let _backgroundDownloader: BackgroundDownloader
+
+    /// The background downloader for managing resumable background downloads.
+    ///
+    /// Use this to start, pause, resume, or cancel background model downloads
+    /// with resume capability.
+    public var backgroundDownloader: BackgroundDownloader {
+        _backgroundDownloader
+    }
+
     /// Creates a new model manager.
     ///
     /// - Parameters:
@@ -37,9 +48,12 @@ public actor ModelManager {
     ///     Defaults to `~/Library/Application Support/LLMLocal/models`.
     ///   - downloadDelegate: An optional delegate for performing downloads.
     ///     When `nil`, a stub delegate is used that simulates an instant download.
+    ///   - backgroundDownloader: An optional background downloader instance.
+    ///     When `nil`, a default ``BackgroundDownloader`` is created using the cache directory.
     public init(
         cacheDirectory: URL? = nil,
-        downloadDelegate: (any DownloadProgressDelegate)? = nil
+        downloadDelegate: (any DownloadProgressDelegate)? = nil,
+        backgroundDownloader: BackgroundDownloader? = nil
     ) {
         let dir = cacheDirectory
             ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
@@ -49,6 +63,10 @@ public actor ModelManager {
         self.cache = ModelCache(directory: dir)
         self.cachedMetadata = cache.load()
         self.downloadDelegate = downloadDelegate ?? StubDownloadDelegate()
+        self._backgroundDownloader = backgroundDownloader
+            ?? BackgroundDownloader(
+                storageDirectory: dir.appendingPathComponent("bg-downloads")
+            )
     }
 
     // MARK: - Public API
