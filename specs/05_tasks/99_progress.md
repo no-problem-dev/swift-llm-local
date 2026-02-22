@@ -26,8 +26,8 @@ references:
 
 | Task | Wave | Status | Owner | Notes |
 |---|---|---|---|---|
-| T10: DownloadProgress | 2-1 | pending | - | blocked by T5 |
-| T11: Memory monitoring | 2-1 | pending | - | blocked by T6, T7 |
+| T10: DownloadProgress | 2-1 | ✅ done | claude | DownloadProgress + downloadWithProgress + delegate, 16 tests |
+| T11: Memory monitoring | 2-1 | ✅ done | claude | MemoryMonitor actor + LLMLocalService integration, 21 tests |
 | T12: AdapterManager | 2-2 | pending | - | blocked by T3, T5 |
 | T13: LoRA merge | 2-2 | pending | - | blocked by T6, T12 |
 | T14: Phase 2 Integration Tests | 2-3 | pending | - | blocked by T10-T13 |

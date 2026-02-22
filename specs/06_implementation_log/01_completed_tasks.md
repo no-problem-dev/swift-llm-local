@@ -101,3 +101,26 @@ status: active
   - Manual QA checklist: 7 items pending Metal GPU testing
   - Performance benchmarks: pending hardware execution
   - Phase 1 code complete, v0.1.0 pending manual QA pass
+
+## Phase 2: Enhanced
+
+### T10: Implement DownloadProgress stream
+- **Completed**: 2026-02-22
+- **Branch**: feat/t10-download-progress
+- **Result**:
+  - DownloadProgress struct (Sendable: fraction, completedBytes, totalBytes, currentFile)
+  - DownloadProgressDelegate protocol for testable download injection
+  - StubDownloadDelegate (internal default)
+  - ModelManager.downloadWithProgress(_:) returning AsyncThrowingStream<DownloadProgress, Error>
+  - 16 new tests in 4 suites (type, download flow, mock delegate, cancellation)
+  - Total: 42 tests in LLMLocalModelsTests
+
+### T11: Implement memory monitoring and auto-unload
+- **Completed**: 2026-02-22
+- **Branch**: feat/t11-memory-monitor
+- **Result**:
+  - MemoryMonitor actor (DeviceMemoryTier, recommendedContextLength, startMonitoring, stopMonitoring)
+  - MemoryProvider protocol + SystemMemoryProvider (os_proc_available_memory, vm_statistics64)
+  - LLMLocalService integration (startMemoryMonitoring, stopMemoryMonitoring, recommendedContextLength)
+  - 14 MemoryMonitor tests + 7 LLMLocalService memory integration tests
+  - Total: 170 tests in 44 suites passing
