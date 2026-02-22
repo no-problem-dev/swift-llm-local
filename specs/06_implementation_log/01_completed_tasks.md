@@ -45,3 +45,25 @@ status: active
   - LLMLocalError enum (Error, Sendable, Equatable, String-based reasons)
   - 33 tests across 3 test files
   - mlx-swift-lm bumped to 2.30.x (stable manifest)
+
+### T5: Implement ModelManager actor and cache types
+- **Completed**: 2026-02-22
+- **Branch**: feat/t05-model-manager
+- **Result**:
+  - ModelManager actor with cachedModels, isCached, totalCacheSize, deleteCache, clearAllCache
+  - CachedModelInfo struct (Sendable, Codable)
+  - ModelCache internal helper (registry.json persistence)
+  - 26 tests in 10 suites, 97% coverage
+  - Tests use temporary directory for isolation
+
+### T6: Implement MLXBackend actor
+- **Completed**: 2026-02-22
+- **Branch**: feat/t06-mlx-backend
+- **Result**:
+  - MLXBackend actor conforming to LLMLocalBackend protocol
+  - GenerationConfig+MLX extension for parameter conversion
+  - Exclusive load control (loadInProgress)
+  - GPU cache via MLX.Memory.cacheLimit (non-deprecated API)
+  - nonisolated generate with actor-isolated performGenerate
+  - 17 tests in 8 suites
+  - @preconcurrency import for ChatSession Sendable handling
