@@ -70,5 +70,10 @@ let package = Package(
             dependencies: ["LLMLocalMLX", "LLMLocalClient"],
             path: "Tests/LLMLocalMLXTests"
         ),
+        .testTarget(
+            name: "LLMLocalTests",
+            dependencies: ["LLMLocal", "LLMLocalClient"],
+            path: "Tests/LLMLocalTests"
+        ),
     ]
 )
