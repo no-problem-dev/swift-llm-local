@@ -27,11 +27,20 @@ public actor ModelManager {
     /// Internal helper for persisting the registry to disk.
     private let cache: ModelCache
 
+    /// Delegate that performs the actual download work.
+    private let downloadDelegate: any DownloadProgressDelegate
+
     /// Creates a new model manager.
     ///
-    /// - Parameter cacheDirectory: The directory for storing registry and adapter files.
-    ///   Defaults to `~/Library/Application Support/LLMLocal/models`.
-    public init(cacheDirectory: URL? = nil) {
+    /// - Parameters:
+    ///   - cacheDirectory: The directory for storing registry and adapter files.
+    ///     Defaults to `~/Library/Application Support/LLMLocal/models`.
+    ///   - downloadDelegate: An optional delegate for performing downloads.
+    ///     When `nil`, a stub delegate is used that simulates an instant download.
+    public init(
+        cacheDirectory: URL? = nil,
+        downloadDelegate: (any DownloadProgressDelegate)? = nil
+    ) {
         let dir = cacheDirectory
             ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
                 .first!
@@ -39,6 +48,7 @@ public actor ModelManager {
         self.cacheDirectory = dir
         self.cache = ModelCache(directory: dir)
         self.cachedMetadata = cache.load()
+        self.downloadDelegate = downloadDelegate ?? StubDownloadDelegate()
     }
 
     // MARK: - Public API
@@ -108,5 +118,67 @@ public actor ModelManager {
         )
         cachedMetadata[spec.id] = info
         try cache.save(cachedMetadata)
+    }
+
+    // MARK: - Download with Progress
+
+    /// Downloads a model with progress reporting.
+    ///
+    /// Returns an `AsyncThrowingStream` that yields ``DownloadProgress`` updates
+    /// as the download progresses. The stream completes when the download
+    /// finishes and the model is registered in the cache.
+    ///
+    /// In Phase 2, this wraps the HuggingFace Hub download with progress tracking.
+    /// For now, it simulates progress by yielding start (0.0) and completion (1.0)
+    /// after registering the model.
+    ///
+    /// - Parameter spec: The model specification to download.
+    /// - Returns: An ``AsyncThrowingStream`` of ``DownloadProgress`` values.
+    public func downloadWithProgress(
+        _ spec: ModelSpec
+    ) -> AsyncThrowingStream<DownloadProgress, Error> {
+        let delegate = self.downloadDelegate
+
+        return AsyncThrowingStream { continuation in
+            Task { [weak self] in
+                do {
+                    try Task.checkCancellation()
+
+                    // Yield initial progress
+                    continuation.yield(DownloadProgress(
+                        fraction: 0.0,
+                        completedBytes: 0,
+                        totalBytes: 0,
+                        currentFile: nil
+                    ))
+
+                    try Task.checkCancellation()
+
+                    // Perform download via delegate
+                    let sizeInBytes = try await delegate.download(spec) { progress in
+                        continuation.yield(progress)
+                    }
+
+                    try Task.checkCancellation()
+
+                    // Register model in cache
+                    if let self = self {
+                        try await self.registerModel(spec, sizeInBytes: sizeInBytes)
+                    }
+
+                    // Yield completion
+                    continuation.yield(DownloadProgress(
+                        fraction: 1.0,
+                        completedBytes: sizeInBytes,
+                        totalBytes: sizeInBytes,
+                        currentFile: nil
+                    ))
+
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+        }
     }
 }
