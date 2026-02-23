@@ -1,22 +1,22 @@
 import Foundation
 
-/// Protocol for providing memory information.
+/// メモリ情報を提供するプロトコル
 ///
-/// Conforming types supply total and available memory values.
-/// The protocol enables dependency injection for testability,
-/// allowing tests to use mock providers instead of querying the system.
+/// 準拠する型はデバイスの総メモリと利用可能メモリの値を提供します。
+/// テスト容易性のための依存性注入を可能にし、テストでシステム照会の代わりに
+/// モックプロバイダーを使用できます。
 public protocol MemoryProvider: Sendable {
-    /// Returns the total physical memory of the device in bytes.
+    /// デバイスの物理メモリ総量をバイト単位で返します。
     func totalMemoryBytes() -> UInt64
 
-    /// Returns the currently available memory in bytes.
+    /// 現在利用可能なメモリをバイト単位で返します。
     func availableMemoryBytes() -> UInt64
 }
 
-/// System implementation using `ProcessInfo` and platform-specific APIs.
+/// `ProcessInfo` とプラットフォーム固有APIを使用するシステム実装
 ///
-/// On iOS/tvOS/watchOS, uses `os_proc_available_memory()` for available memory.
-/// On macOS, uses `vm_statistics64` via Mach APIs as a fallback.
+/// iOS/tvOS/watchOS では `os_proc_available_memory()` を、
+/// macOS では Mach API 経由の `vm_statistics64` をフォールバックとして使用します。
 struct SystemMemoryProvider: MemoryProvider, Sendable {
     func totalMemoryBytes() -> UInt64 {
         UInt64(ProcessInfo.processInfo.physicalMemory)
@@ -52,10 +52,10 @@ struct SystemMemoryProvider: MemoryProvider, Sendable {
     }
 }
 
-/// Monitors device memory and provides memory-aware configuration.
+/// デバイスメモリを監視し、メモリ適応型の設定を提供するアクター
 ///
-/// `MemoryMonitor` tracks available memory using `os_proc_available_memory()`
-/// and listens for memory warning notifications to trigger model unloading.
+/// `MemoryMonitor` は `os_proc_available_memory()` を使用して利用可能メモリを追跡し、
+/// メモリ警告通知を監視してモデルのアンロードをトリガーします。
 ///
 /// ## Usage
 ///
@@ -69,47 +69,47 @@ struct SystemMemoryProvider: MemoryProvider, Sendable {
 /// ```
 public actor MemoryMonitor {
 
-    /// Memory thresholds for context length recommendation.
+    /// コンテキスト長推奨のためのメモリ閾値。
     public enum DeviceMemoryTier: Sendable, Equatable {
-        /// 8GB or less (e.g., iPhone 16 Pro)
+        /// 8GB以下（例: iPhone 16 Pro）
         case standard
-        /// 12GB or more (e.g., iPhone 17 Pro)
+        /// 12GB以上（例: iPhone 17 Pro）
         case high
     }
 
-    /// Callback to be invoked when a memory warning occurs.
-    /// The callback should trigger model unloading.
+    /// メモリ警告発生時に呼び出されるコールバック。
+    /// コールバックはモデルのアンロードをトリガーする必要があります。
     public typealias MemoryWarningHandler = @Sendable () async -> Void
 
     private var memoryWarningHandler: MemoryWarningHandler?
     private var isMonitoring: Bool = false
     private var observationTask: Task<Void, Never>?
 
-    /// Provider for memory information, injectable for testability.
+    /// メモリ情報のプロバイダー。テスト容易性のために注入可能。
     private let memoryProvider: any MemoryProvider
 
-    /// Creates a new memory monitor.
+    /// 新しいメモリモニターを作成します。
     ///
-    /// - Parameter memoryProvider: The provider for memory information.
-    ///   Defaults to `SystemMemoryProvider` which queries the OS.
+    /// - Parameter memoryProvider: メモリ情報のプロバイダー。
+    ///   デフォルトはOSに問い合わせる `SystemMemoryProvider`。
     public init(memoryProvider: (any MemoryProvider)? = nil) {
         self.memoryProvider = memoryProvider ?? SystemMemoryProvider()
     }
 
-    /// Whether monitoring is currently active.
+    /// 監視が現在アクティブかどうか。
     ///
-    /// This property is exposed for testing purposes to verify
-    /// that `startMonitoring` and `stopMonitoring` work correctly.
+    /// `startMonitoring` と `stopMonitoring` が正しく動作することを検証するために
+    /// テスト目的で公開されています。
     public var isCurrentlyMonitoring: Bool {
         isMonitoring
     }
 
-    /// Returns the recommended context length based on device memory.
+    /// デバイスメモリに基づく推奨コンテキスト長を返します。
     ///
-    /// - 8GB or less: 2048
-    /// - 12GB or more: 4096
+    /// - 8GB以下: 2048
+    /// - 12GB以上: 4096
     ///
-    /// - Returns: The recommended context length in tokens.
+    /// - Returns: 推奨コンテキスト長（トークン単位）。
     public func recommendedContextLength() -> Int {
         let tier = deviceMemoryTier()
         switch tier {
@@ -118,10 +118,9 @@ public actor MemoryMonitor {
         }
     }
 
-    /// Returns the device memory tier based on total physical memory.
+    /// 物理メモリ総量に基づくデバイスメモリティアを返します。
     ///
-    /// - Returns: `.standard` for devices with less than 12GB,
-    ///   `.high` for devices with 12GB or more.
+    /// - Returns: 12GB未満のデバイスは `.standard`、12GB以上は `.high`。
     public func deviceMemoryTier() -> DeviceMemoryTier {
         let totalMemory = memoryProvider.totalMemoryBytes()
         if totalMemory >= 12 * 1024 * 1024 * 1024 { // 12GB
@@ -131,20 +130,20 @@ public actor MemoryMonitor {
         }
     }
 
-    /// Returns currently available memory in bytes.
+    /// 現在利用可能なメモリをバイト単位で返します。
     ///
-    /// - Returns: The number of bytes of memory currently available to the process.
+    /// - Returns: プロセスが現在利用可能なメモリのバイト数。
     public func availableMemory() -> UInt64 {
         memoryProvider.availableMemoryBytes()
     }
 
-    /// Starts monitoring for memory warnings.
+    /// メモリ警告の監視を開始します。
     ///
-    /// When a memory warning is detected, the handler will be called.
-    /// Calling this method multiple times will update the handler
-    /// but will not create duplicate observers.
+    /// メモリ警告が検出されると、ハンドラが呼び出されます。
+    /// このメソッドを複数回呼び出すとハンドラは更新されますが、
+    /// 重複するオブザーバーは作成されません。
     ///
-    /// - Parameter handler: The closure to call when a memory warning is received.
+    /// - Parameter handler: メモリ警告を受信した際に呼び出されるクロージャ。
     public func startMonitoring(onWarning handler: @escaping MemoryWarningHandler) {
         self.memoryWarningHandler = handler
         guard !isMonitoring else { return }
@@ -163,9 +162,9 @@ public actor MemoryMonitor {
         }
     }
 
-    /// Stops monitoring for memory warnings.
+    /// メモリ警告の監視を停止します。
     ///
-    /// Cancels the notification observation task and clears the handler.
+    /// 通知監視タスクをキャンセルし、ハンドラをクリアします。
     public func stopMonitoring() {
         observationTask?.cancel()
         observationTask = nil
@@ -177,10 +176,10 @@ public actor MemoryMonitor {
         isMonitoring = value
     }
 
-    /// The notification name for memory warnings.
+    /// メモリ警告の通知名。
     ///
-    /// On iOS this corresponds to `UIApplication.didReceiveMemoryWarningNotification`.
-    /// A string-based name is used to avoid a UIKit dependency in the package.
+    /// iOS では `UIApplication.didReceiveMemoryWarningNotification` に対応します。
+    /// パッケージでの UIKit 依存を避けるために文字列ベースの名前を使用しています。
     nonisolated public static let memoryWarningNotificationName = Notification.Name(
         "UIApplicationDidReceiveMemoryWarningNotification"
     )

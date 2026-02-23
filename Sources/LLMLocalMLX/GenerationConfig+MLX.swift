@@ -2,7 +2,7 @@ import LLMLocalClient
 import MLXLMCommon
 
 extension GenerationConfig {
-    /// Converts this ``GenerationConfig`` to MLX ``GenerateParameters``.
+    /// この ``GenerationConfig`` を MLX の ``GenerateParameters`` に変換します。
     var mlxParameters: GenerateParameters {
         GenerateParameters(
             maxTokens: maxTokens,

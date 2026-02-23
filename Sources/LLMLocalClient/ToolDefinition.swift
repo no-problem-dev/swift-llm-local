@@ -1,10 +1,10 @@
-/// Describes a tool that can be invoked by the language model during generation.
+/// 言語モデルが生成中に呼び出し可能なツールの定義
 public struct ToolDefinition: Sendable {
-    /// The name of the tool (used by the model to reference it).
+    /// ツールの名前（モデルが参照に使用）。
     public let name: String
-    /// A human-readable description of what the tool does.
+    /// ツールの機能を説明する人間可読な説明文。
     public let description: String
-    /// The parameters the tool accepts.
+    /// ツールが受け付けるパラメータ。
     public let parameters: [ParameterDefinition]
 
     public init(name: String, description: String, parameters: [ParameterDefinition]) {
@@ -14,15 +14,15 @@ public struct ToolDefinition: Sendable {
     }
 }
 
-/// Describes a single parameter for a ``ToolDefinition``.
+/// ``ToolDefinition`` の単一パラメータの定義
 public struct ParameterDefinition: Sendable {
-    /// The parameter name.
+    /// パラメータ名。
     public let name: String
-    /// The JSON Schema type of the parameter.
+    /// パラメータの JSON Schema 型。
     public let type: ParameterType
-    /// A human-readable description of the parameter.
+    /// パラメータの人間可読な説明文。
     public let description: String
-    /// Whether the parameter is required.
+    /// パラメータが必須かどうか。
     public let isRequired: Bool
 
     public init(name: String, type: ParameterType, description: String, isRequired: Bool) {
@@ -32,14 +32,14 @@ public struct ParameterDefinition: Sendable {
         self.isRequired = isRequired
     }
 
-    /// Creates a required parameter definition.
+    /// 必須パラメータ定義を作成します。
     public static func required(
         _ name: String, type: ParameterType, description: String
     ) -> Self {
         .init(name: name, type: type, description: description, isRequired: true)
     }
 
-    /// Creates an optional parameter definition.
+    /// オプションパラメータ定義を作成します。
     public static func optional(
         _ name: String, type: ParameterType, description: String
     ) -> Self {
@@ -47,7 +47,7 @@ public struct ParameterDefinition: Sendable {
     }
 }
 
-/// JSON Schema types supported by tool parameters.
+/// ツールパラメータがサポートする JSON Schema 型
 public indirect enum ParameterType: Sendable {
     case string
     case integer

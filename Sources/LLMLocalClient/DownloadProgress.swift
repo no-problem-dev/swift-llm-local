@@ -1,29 +1,29 @@
 import Foundation
 
-/// Download progress information.
+/// ダウンロード進捗情報
 ///
-/// Reports the current state of a model download, including byte-level
-/// progress and the name of the file currently being downloaded.
+/// モデルダウンロードの現在の状態を報告します。
+/// バイト単位の進捗と現在ダウンロード中のファイル名を含みます。
 public struct DownloadProgress: Sendable {
-    /// Progress fraction (0.0 - 1.0).
+    /// 進捗率（0.0〜1.0）。
     public let fraction: Double
 
-    /// Downloaded bytes so far.
+    /// ダウンロード済みバイト数。
     public let completedBytes: Int64
 
-    /// Total bytes to download.
+    /// ダウンロード総バイト数。
     public let totalBytes: Int64
 
-    /// Currently downloading file name (nil if unknown).
+    /// 現在ダウンロード中のファイル名（不明な場合は nil）。
     public let currentFile: String?
 
-    /// Creates a new download progress value.
+    /// 新しいダウンロード進捗値を生成します。
     ///
     /// - Parameters:
-    ///   - fraction: Progress fraction (0.0 - 1.0).
-    ///   - completedBytes: Downloaded bytes so far.
-    ///   - totalBytes: Total bytes to download.
-    ///   - currentFile: Currently downloading file name (nil if unknown).
+    ///   - fraction: 進捗率（0.0〜1.0）。
+    ///   - completedBytes: ダウンロード済みバイト数。
+    ///   - totalBytes: ダウンロード総バイト数。
+    ///   - currentFile: 現在ダウンロード中のファイル名（不明な場合は nil）。
     public init(
         fraction: Double,
         completedBytes: Int64,

@@ -2,14 +2,14 @@ import LLMLocalClient
 import LLMLocalMLX
 import LLMLocalModels
 
-/// A facade that integrates a backend and model manager for convenient LLM operations.
+/// バックエンドとモデルマネージャーを統合し、便利なLLM操作を提供するファサード
 ///
-/// `LLMLocalService` provides a high-level API for text generation. It automatically
-/// handles model loading when needed and tracks generation statistics. Optionally,
-/// a ``MemoryMonitor`` can be provided to enable automatic model unloading on
-/// memory pressure.
+/// `LLMLocalService` はテキスト生成のための高レベルAPIを提供します。
+/// 必要に応じてモデルの読み込みを自動的に処理し、生成統計を追跡します。
+/// オプションで ``MemoryMonitor`` を提供して、メモリ圧迫時の自動モデルアンロードを
+/// 有効にできます。
 ///
-/// ## Usage
+/// ## 使用例
 ///
 /// ```swift
 /// let monitor = MemoryMonitor()
@@ -35,21 +35,18 @@ public actor LLMLocalService {
     private let memoryMonitor: MemoryMonitor?
     private let modelSwitcher: ModelSwitcher?
 
-    /// Statistics from the most recent completed generation, or `nil` if
-    /// no generation has completed yet.
+    /// 最新の完了した生成の統計情報。まだ生成が完了していない場合は `nil`。
     private(set) public var lastGenerationStats: GenerationStats?
 
-    /// Creates a new service with the specified backend, model manager,
-    /// and optional memory monitor and model switcher.
+    /// 指定されたバックエンド、モデルマネージャー、およびオプションのメモリモニターと
+    /// モデルスイッチャーで新しいサービスを作成します。
     ///
     /// - Parameters:
-    ///   - backend: The inference backend to use for model loading and text generation.
-    ///   - modelManager: The model manager for cache queries.
-    ///   - memoryMonitor: An optional memory monitor for automatic model unloading
-    ///     on memory pressure. Defaults to `nil`.
-    ///   - modelSwitcher: An optional model switcher for LRU-based multi-model
-    ///     management. When provided, model loading is delegated to the switcher
-    ///     instead of directly calling the backend. Defaults to `nil`.
+    ///   - backend: モデルの読み込みとテキスト生成に使用する推論バックエンド。
+    ///   - modelManager: キャッシュ照会用のモデルマネージャー。
+    ///   - memoryMonitor: メモリ圧迫時の自動モデルアンロード用のオプションメモリモニター。デフォルトは `nil`。
+    ///   - modelSwitcher: LRUベースのマルチモデル管理用のオプションモデルスイッチャー。
+    ///     指定された場合、バックエンドへの直接呼び出しの代わりにスイッチャーにモデル読み込みを委譲します。デフォルトは `nil`。
     public init(
         backend: any LLMLocalBackend,
         modelManager: ModelManager,
@@ -62,17 +59,17 @@ public actor LLMLocalService {
         self.modelSwitcher = modelSwitcher
     }
 
-    /// Generates text from the given prompt using the specified model.
+    /// 指定されたモデルを使用してプロンプトからテキストを生成します。
     ///
-    /// If the model is not currently loaded in the backend, it will be loaded
-    /// automatically before generation begins. Generation statistics are tracked
-    /// and available via ``lastGenerationStats`` after the stream completes.
+    /// モデルがバックエンドに現在読み込まれていない場合、生成開始前に自動的に
+    /// 読み込まれます。生成統計は追跡され、ストリーム完了後に
+    /// ``lastGenerationStats`` で参照できます。
     ///
     /// - Parameters:
-    ///   - model: The model specification to use for generation.
-    ///   - prompt: The input prompt to generate from.
-    ///   - config: Configuration parameters controlling the generation. Defaults to ``GenerationConfig/default``.
-    /// - Returns: An asynchronous stream of generated token strings.
+    ///   - model: 生成に使用するモデル仕様。
+    ///   - prompt: 生成元の入力プロンプト。
+    ///   - config: 生成を制御する設定パラメータ。デフォルトは ``GenerationConfig/default``。
+    /// - Returns: 生成されたトークン文字列の非同期ストリーム。
     public func generate(
         model: ModelSpec,
         prompt: String,
@@ -128,19 +125,19 @@ public actor LLMLocalService {
         }
     }
 
-    /// Generates a response with tool calling support using the specified model.
+    /// 指定されたモデルを使用してツール呼び出しサポート付きのレスポンスを生成します。
     ///
-    /// If the model is not currently loaded in the backend, it will be loaded
-    /// automatically before generation begins. Generation statistics are tracked
-    /// and available via ``lastGenerationStats`` after the stream completes.
-    /// Only text chunks are counted toward the token count.
+    /// モデルがバックエンドに現在読み込まれていない場合、生成開始前に自動的に
+    /// 読み込まれます。生成統計は追跡され、ストリーム完了後に
+    /// ``lastGenerationStats`` で参照できます。
+    /// テキストチャンクのみがトークン数にカウントされます。
     ///
     /// - Parameters:
-    ///   - model: The model specification to use for generation.
-    ///   - prompt: The input prompt to generate from.
-    ///   - tools: The tool definitions available to the model.
-    ///   - config: Configuration parameters controlling the generation. Defaults to ``GenerationConfig/default``.
-    /// - Returns: An asynchronous stream of ``GenerationOutput`` values.
+    ///   - model: 生成に使用するモデル仕様。
+    ///   - prompt: 生成元の入力プロンプト。
+    ///   - tools: モデルが使用可能なツール定義。
+    ///   - config: 生成を制御する設定パラメータ。デフォルトは ``GenerationConfig/default``。
+    /// - Returns: ``GenerationOutput`` 値の非同期ストリーム。
     public func generateWithTools(
         model: ModelSpec,
         prompt: String,
@@ -203,46 +200,46 @@ public actor LLMLocalService {
 
     // MARK: - System Prompt
 
-    /// The current system prompt, or `nil` if none is set.
+    /// 現在のシステムプロンプト。設定されていない場合は `nil`。
     public var systemPrompt: String? {
         get async { await backend.systemPrompt }
     }
 
-    /// Sets the system prompt for subsequent generations.
+    /// 以降の生成に使用するシステムプロンプトを設定します。
     ///
-    /// The prompt is forwarded to the backend and applied to the active
-    /// chat session immediately.
+    /// プロンプトはバックエンドに転送され、アクティブなチャットセッションに
+    /// 即座に適用されます。
     ///
-    /// - Parameter prompt: The system prompt string, or `nil` to clear it.
+    /// - Parameter prompt: システムプロンプト文字列、またはクリアする場合は `nil`。
     public func setSystemPrompt(_ prompt: String?) async {
         await backend.setSystemPrompt(prompt)
     }
 
-    /// Checks whether the specified model is cached (has been downloaded).
+    /// 指定されたモデルがキャッシュされている（ダウンロード済み）かを確認します。
     ///
-    /// - Parameter spec: The model specification to check.
-    /// - Returns: `true` if the model is registered in the cache.
+    /// - Parameter spec: 確認するモデル仕様。
+    /// - Returns: モデルがキャッシュに登録されている場合は `true`。
     public func isModelCached(_ spec: ModelSpec) async -> Bool {
         await modelManager.isCached(spec)
     }
 
-    /// Preloads the specified model into the backend.
+    /// 指定されたモデルをバックエンドにプリロードします。
     ///
-    /// This is useful for warming up the model before the user requests generation,
-    /// reducing perceived latency.
+    /// ユーザーが生成を要求する前にモデルをウォームアップし、
+    /// 体感レイテンシを低減するのに有用です。
     ///
-    /// - Parameter spec: The model specification to preload.
-    /// - Throws: An error if the model cannot be loaded.
+    /// - Parameter spec: プリロードするモデル仕様。
+    /// - Throws: モデルの読み込みに失敗した場合。
     public func prefetch(_ spec: ModelSpec) async throws {
         try await backend.loadModel(spec)
     }
 
-    /// Preloads the specified model, reporting download progress.
+    /// 指定されたモデルをプリロードし、ダウンロード進捗を報告します。
     ///
     /// - Parameters:
-    ///   - spec: The model specification to preload.
-    ///   - onProgress: A closure called with download progress updates.
-    /// - Throws: An error if the model cannot be loaded.
+    ///   - spec: プリロードするモデル仕様。
+    ///   - onProgress: ダウンロード進捗の更新時に呼び出されるクロージャ。
+    /// - Throws: モデルの読み込みに失敗した場合。
     public func prefetch(
         _ spec: ModelSpec,
         onProgress: @Sendable @escaping (DownloadProgress) -> Void
@@ -252,11 +249,10 @@ public actor LLMLocalService {
 
     // MARK: - Memory Monitoring
 
-    /// Starts memory monitoring. When a memory warning is received,
-    /// the currently loaded model will be automatically unloaded.
+    /// メモリ監視を開始します。メモリ警告を受信すると、
+    /// 現在読み込まれているモデルが自動的にアンロードされます。
     ///
-    /// If no ``MemoryMonitor`` was provided at initialization, this method
-    /// does nothing.
+    /// 初期化時に ``MemoryMonitor`` が提供されていない場合、このメソッドは何も行いません。
     public func startMemoryMonitoring() async {
         guard let monitor = memoryMonitor else { return }
         let backend = self.backend
@@ -265,22 +261,20 @@ public actor LLMLocalService {
         }
     }
 
-    /// Stops memory monitoring.
+    /// メモリ監視を停止します。
     ///
-    /// If no ``MemoryMonitor`` was provided at initialization, this method
-    /// does nothing.
+    /// 初期化時に ``MemoryMonitor`` が提供されていない場合、このメソッドは何も行いません。
     public func stopMemoryMonitoring() async {
         await memoryMonitor?.stopMonitoring()
     }
 
-    /// Returns the recommended context length based on device memory.
+    /// デバイスメモリに基づく推奨コンテキスト長を返します。
     ///
-    /// The recommendation is based on the device's total physical memory:
-    /// - 8GB or less: 2048
-    /// - 12GB or more: 4096
+    /// 推奨値はデバイスの物理メモリ総量に基づきます:
+    /// - 8GB以下: 2048
+    /// - 12GB以上: 4096
     ///
-    /// - Returns: The recommended context length, or `nil` if no memory
-    ///   monitor is configured.
+    /// - Returns: 推奨コンテキスト長。メモリモニターが設定されていない場合は `nil`。
     public func recommendedContextLength() async -> Int? {
         guard let monitor = memoryMonitor else { return nil }
         return await monitor.recommendedContextLength()

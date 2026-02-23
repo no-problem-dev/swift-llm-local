@@ -1,23 +1,23 @@
 import Foundation
 
-/// Information about a cached model, including its location and metadata.
+/// キャッシュされたモデルの情報（所在とメタデータを含む）
 public struct CachedModelInfo: Sendable, Codable {
-    /// The unique identifier of the cached model.
+    /// キャッシュされたモデルの一意識別子。
     public let modelId: String
 
-    /// Human-readable display name.
+    /// 人間可読な表示名。
     public let displayName: String
 
-    /// Size of the cached model in bytes.
+    /// キャッシュされたモデルのサイズ（バイト単位）。
     public let sizeInBytes: Int64
 
-    /// When the model was downloaded.
+    /// モデルがダウンロードされた日時。
     public let downloadedAt: Date
 
-    /// Path to the local cache directory for this model.
+    /// このモデルのローカルキャッシュディレクトリへのパス。
     public let localPath: URL
 
-    /// Creates a new cached model info.
+    /// 新しいキャッシュモデル情報を作成します。
     public init(
         modelId: String,
         displayName: String,

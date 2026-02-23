@@ -1,73 +1,71 @@
 import Foundation
 import LLMLocalClient
 
-/// Internal entry tracking a loaded model.
+/// 読み込み済みモデルを追跡する内部エントリ。
 struct LoadedModelEntry: Sendable {
     let spec: ModelSpec
     var lastAccessed: Date
 }
 
-/// Manages loaded models with LRU eviction strategy.
+/// LRUエビクション戦略で読み込み済みモデルを管理するアクター
 ///
-/// Tracks which models are loaded and their last access time.
-/// When the maximum capacity is reached, the least recently used
-/// model is evicted before loading a new one.
+/// どのモデルが読み込まれているか、最後にアクセスされた時間を追跡します。
+/// 最大容量に達した場合、最も最近使用されていないモデルが
+/// 新しいモデルの読み込み前にエビクトされます。
 ///
-/// ## Usage
+/// ## 使用例
 ///
 /// ```swift
 /// let switcher = ModelSwitcher(backend: mlxBackend, maxLoadedModels: 2)
 /// try await switcher.ensureLoaded(ModelPresets.gemma2B)
 /// ```
 ///
-/// With `maxLoadedModels: 1` (the default), the behavior is identical
-/// to the current system where only one model can be loaded at a time.
-/// The backend's `loadModel` handles the actual model loading, while
-/// the switcher manages LRU tracking and eviction decisions.
+/// `maxLoadedModels: 1`（デフォルト）の場合、一度に1つのモデルのみ読み込み可能な
+/// 現在のシステムと同じ動作になります。バックエンドの `loadModel` が実際のモデル読み込みを
+/// 処理し、スイッチャーは LRU 追跡とエビクション判定を管理します。
 public actor ModelSwitcher {
 
-    /// Maximum number of models that can be loaded simultaneously.
+    /// 同時に読み込み可能なモデルの最大数。
     public nonisolated let maxLoadedModels: Int
 
-    /// Internal tracking of loaded models with access timestamps.
+    /// アクセスタイムスタンプ付きの読み込み済みモデルの内部追跡。
     private var loadedModels: [String: LoadedModelEntry] = [:]
 
-    /// The backend used for loading/unloading models.
+    /// モデルの読み込み・アンロードに使用するバックエンド。
     private let backend: any LLMLocalBackend
 
-    /// Creates a new model switcher.
+    /// 新しいモデルスイッチャーを作成します。
     ///
     /// - Parameters:
-    ///   - backend: The inference backend to use for model loading and unloading.
-    ///   - maxLoadedModels: Maximum number of models that can be loaded simultaneously.
-    ///     Defaults to `1`.
+    ///   - backend: モデルの読み込みとアンロードに使用する推論バックエンド。
+    ///   - maxLoadedModels: 同時に読み込み可能なモデルの最大数。デフォルトは `1`。
     public init(backend: any LLMLocalBackend, maxLoadedModels: Int = 1) {
         self.backend = backend
         self.maxLoadedModels = maxLoadedModels
     }
 
-    /// Ensures the specified model is loaded, evicting LRU if at capacity.
+    /// 指定されたモデルが読み込まれていることを保証し、容量超過時は LRU をエビクトします。
     ///
-    /// If the model is already loaded, its access time is updated without
-    /// reloading. If the cache is at capacity, the least recently used model
-    /// is evicted before loading the new one.
+    /// モデルが既に読み込まれている場合、再読み込みせずにアクセス時間を更新します。
+    /// キャッシュが容量に達している場合、最も最近使用されていないモデルが
+    /// 新しいモデルの読み込み前にエビクトされます。
     ///
-    /// - Parameter spec: The model specification to load.
-    /// - Throws: An error if the backend cannot load the model.
+    /// - Parameter spec: 読み込むモデル仕様。
+    /// - Throws: バックエンドがモデルを読み込めない場合。
     public func ensureLoaded(_ spec: ModelSpec) async throws {
         try await ensureLoaded(spec, progressHandler: { _ in })
     }
 
-    /// Ensures the specified model is loaded, reporting download progress.
+    /// 指定されたモデルが読み込まれていることを保証し、ダウンロード進捗を報告します。
     ///
-    /// If the model is already loaded, its access time is updated without
-    /// reloading. If the cache is at capacity, the least recently used model
-    /// is evicted before loading the new one.
+    /// モデルが既に読み込まれている場合、再読み込みせずにアクセス時間を更新します。
+    /// キャッシュが容量に達している場合、最も最近使用されていないモデルが
+    /// 新しいモデルの読み込み前にエビクトされます。
     ///
     /// - Parameters:
-    ///   - spec: The model specification to load.
-    ///   - progressHandler: A closure called with download progress updates.
-    /// - Throws: An error if the backend cannot load the model.
+    ///   - spec: 読み込むモデル仕様。
+    ///   - progressHandler: ダウンロード進捗の更新時に呼び出されるクロージャ。
+    /// - Throws: バックエンドがモデルを読み込めない場合。
     public func ensureLoaded(
         _ spec: ModelSpec,
         progressHandler: @Sendable @escaping (DownloadProgress) -> Void
@@ -93,29 +91,29 @@ public actor ModelSwitcher {
         )
     }
 
-    /// Returns the currently loaded model specs, sorted by most recently accessed first.
+    /// 現在読み込まれているモデル仕様を最近アクセスされた順に返します。
     ///
-    /// - Returns: An array of model specs ordered by access time (most recent first).
+    /// - Returns: アクセス時間順（最新が先頭）のモデル仕様配列。
     public func loadedModelSpecs() -> [ModelSpec] {
         loadedModels.values
             .sorted { $0.lastAccessed > $1.lastAccessed }
             .map(\.spec)
     }
 
-    /// Returns how many models are currently loaded.
+    /// 現在読み込まれているモデル数を返します。
     ///
-    /// - Returns: The count of currently tracked models.
+    /// - Returns: 現在追跡中のモデル数。
     public func loadedCount() -> Int {
         loadedModels.count
     }
 
-    /// Unloads a specific model.
+    /// 特定のモデルをアンロードします。
     ///
-    /// If the model is currently the active model in the backend,
-    /// the backend is also asked to unload. If the model is not loaded,
-    /// this method does nothing.
+    /// モデルが現在バックエンドのアクティブモデルである場合、
+    /// バックエンドにもアンロードを要求します。モデルが読み込まれていない場合、
+    /// このメソッドは何も行いません。
     ///
-    /// - Parameter spec: The model specification to unload.
+    /// - Parameter spec: アンロードするモデル仕様。
     public func unload(_ spec: ModelSpec) async {
         guard loadedModels.removeValue(forKey: spec.id) != nil else {
             return
@@ -127,29 +125,29 @@ public actor ModelSwitcher {
         }
     }
 
-    /// Unloads all models.
+    /// すべてのモデルをアンロードします。
     ///
-    /// Clears all tracked models and asks the backend to unload
-    /// any currently loaded model.
+    /// 追跡中のすべてのモデルをクリアし、バックエンドに
+    /// 現在読み込まれているモデルのアンロードを要求します。
     public func unloadAll() async {
         loadedModels.removeAll()
         await backend.unloadModel()
     }
 
-    /// Whether the specified model is currently loaded.
+    /// 指定されたモデルが現在読み込まれているかどうか。
     ///
-    /// - Parameter spec: The model specification to check.
-    /// - Returns: `true` if the model is currently tracked as loaded.
+    /// - Parameter spec: 確認するモデル仕様。
+    /// - Returns: モデルが現在読み込み済みとして追跡されている場合は `true`。
     public func isLoaded(_ spec: ModelSpec) -> Bool {
         loadedModels[spec.id] != nil
     }
 
     // MARK: - Private
 
-    /// Evicts the least recently used model from the cache.
+    /// 最も最近使用されていないモデルをキャッシュからエビクトします。
     ///
-    /// Removes the LRU entry from tracking and asks the backend to unload
-    /// the currently loaded model so the next model can be loaded cleanly.
+    /// LRU エントリを追跡から削除し、次のモデルをクリーンに読み込めるよう
+    /// バックエンドに現在読み込まれているモデルのアンロードを要求します。
     private func evictLRU() async {
         guard let lruEntry = loadedModels.values.min(by: { $0.lastAccessed < $1.lastAccessed }) else {
             return

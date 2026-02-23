@@ -1,55 +1,54 @@
 import Foundation
 import LLMLocalClient
 
-/// Manages model cache metadata and provides cache query/cleanup operations.
+/// モデルキャッシュのメタデータ管理とキャッシュ操作を提供するアクター
 ///
-/// `ModelManager` tracks which models have been downloaded and cached locally,
-/// storing metadata in a `registry.json` file within the cache directory.
-/// The actual model weights are managed by the MLX backend via the Hugging Face
-/// Hub cache; this actor only manages the metadata registry.
+/// `ModelManager` はローカルにダウンロード・キャッシュされたモデルを追跡し、
+/// キャッシュディレクトリ内の `registry.json` ファイルにメタデータを保存します。
+/// 実際のモデル重みは MLX バックエンドが Hugging Face Hub キャッシュ経由で管理し、
+/// このアクターはメタデータレジストリのみを管理します。
 ///
-/// ## Phase 1 Scope
+/// ## Phase 1 スコープ
 ///
-/// - List cached models
-/// - Check if a model is cached
-/// - Calculate total cache size
-/// - Delete specific model cache metadata
-/// - Clear all cache metadata
-/// - Register a model (stub for download; actual HF download is MLXBackend's responsibility)
+/// - キャッシュ済みモデルの一覧表示
+/// - モデルのキャッシュ有無確認
+/// - 合計キャッシュサイズの計算
+/// - 特定モデルのキャッシュメタデータ削除
+/// - 全キャッシュメタデータのクリア
+/// - モデルの登録（ダウンロードスタブ。実際の HF ダウンロードは MLXBackend が担当）
 public actor ModelManager {
 
-    /// The directory where the registry file and adapter files are stored.
+    /// レジストリファイルとアダプターファイルを保存するディレクトリ。
     private let cacheDirectory: URL
 
-    /// In-memory cache of model metadata, keyed by model ID.
+    /// モデルIDをキーとするモデルメタデータのインメモリキャッシュ。
     private var cachedMetadata: [String: CachedModelInfo] = [:]
 
-    /// Internal helper for persisting the registry to disk.
+    /// レジストリをディスクに永続化する内部ヘルパー。
     private let cache: ModelCache
 
-    /// Delegate that performs the actual download work.
+    /// 実際のダウンロード処理を行うデリゲート。
     private let downloadDelegate: any DownloadProgressDelegate
 
-    /// The background downloader instance for resumable downloads.
+    /// レジューム可能なダウンロード用のバックグラウンドダウンローダーインスタンス。
     private let _backgroundDownloader: BackgroundDownloader
 
-    /// The background downloader for managing resumable background downloads.
+    /// レジューム可能なバックグラウンドモデルダウンロードを管理するダウンローダー。
     ///
-    /// Use this to start, pause, resume, or cancel background model downloads
-    /// with resume capability.
+    /// バックグラウンドモデルダウンロードの開始・一時停止・再開・キャンセルに使用します。
     public var backgroundDownloader: BackgroundDownloader {
         _backgroundDownloader
     }
 
-    /// Creates a new model manager.
+    /// 新しいモデルマネージャーを作成します。
     ///
     /// - Parameters:
-    ///   - cacheDirectory: The directory for storing registry and adapter files.
-    ///     Defaults to `~/Library/Application Support/LLMLocal/models`.
-    ///   - downloadDelegate: An optional delegate for performing downloads.
-    ///     When `nil`, a stub delegate is used that simulates an instant download.
-    ///   - backgroundDownloader: An optional background downloader instance.
-    ///     When `nil`, a default ``BackgroundDownloader`` is created using the cache directory.
+    ///   - cacheDirectory: レジストリとアダプターファイルを保存するディレクトリ。
+    ///     デフォルトは `~/Library/Application Support/LLMLocal/models`。
+    ///   - downloadDelegate: ダウンロードを実行するオプションのデリゲート。
+    ///     `nil` の場合、即座のダウンロードをシミュレートするスタブデリゲートが使用されます。
+    ///   - backgroundDownloader: オプションのバックグラウンドダウンローダーインスタンス。
+    ///     `nil` の場合、キャッシュディレクトリを使用してデフォルトの ``BackgroundDownloader`` が作成されます。
     public init(
         cacheDirectory: URL? = nil,
         downloadDelegate: (any DownloadProgressDelegate)? = nil,
@@ -71,61 +70,59 @@ public actor ModelManager {
 
     // MARK: - Public API
 
-    /// Returns a list of all cached models.
+    /// すべてのキャッシュ済みモデルの一覧を返します。
     ///
-    /// - Returns: An array of ``CachedModelInfo`` for every registered model.
+    /// - Returns: 登録済みの全モデルの ``CachedModelInfo`` 配列。
     public func cachedModels() -> [CachedModelInfo] {
         Array(cachedMetadata.values)
     }
 
-    /// Checks whether the given model specification has a cached entry.
+    /// 指定されたモデル仕様がキャッシュに登録されているかを確認します。
     ///
-    /// - Parameter spec: The model specification to check.
-    /// - Returns: `true` if the model is registered in the cache.
+    /// - Parameter spec: 確認するモデル仕様。
+    /// - Returns: モデルがキャッシュに登録されている場合は `true`。
     public func isCached(_ spec: ModelSpec) -> Bool {
         cachedMetadata[spec.id] != nil
     }
 
-    /// Returns the total size of all cached models in bytes.
+    /// すべてのキャッシュ済みモデルの合計サイズをバイト単位で返します。
     ///
-    /// - Returns: The sum of `sizeInBytes` for all registered models.
-    /// - Throws: Currently does not throw, but the signature allows for future
-    ///   filesystem-based size calculation.
+    /// - Returns: 全登録モデルの `sizeInBytes` の合計。
+    /// - Throws: 現在はスローしませんが、将来のファイルシステムベースのサイズ計算に対応するシグネチャです。
     public func totalCacheSize() throws -> Int64 {
         cachedMetadata.values.reduce(0) { $0 + $1.sizeInBytes }
     }
 
-    /// Removes the cache metadata entry for a specific model.
+    /// 特定モデルのキャッシュメタデータエントリを削除します。
     ///
-    /// If the model is not cached, this method does nothing.
+    /// モデルがキャッシュされていない場合、このメソッドは何も行いません。
     ///
-    /// - Parameter spec: The model specification to remove.
-    /// - Throws: An error if the registry cannot be persisted.
+    /// - Parameter spec: 削除するモデル仕様。
+    /// - Throws: レジストリの永続化に失敗した場合。
     public func deleteCache(for spec: ModelSpec) throws {
         cachedMetadata.removeValue(forKey: spec.id)
         try cache.save(cachedMetadata)
     }
 
-    /// Removes all cached model metadata.
+    /// すべてのキャッシュ済みモデルメタデータを削除します。
     ///
-    /// - Throws: An error if the registry cannot be persisted.
+    /// - Throws: レジストリの永続化に失敗した場合。
     public func clearAllCache() throws {
         cachedMetadata.removeAll()
         try cache.save(cachedMetadata)
     }
 
-    /// Registers a model in the cache metadata.
+    /// モデルをキャッシュメタデータに登録します。
     ///
-    /// This is a Phase 1 stub. In Phase 2, the actual download will be handled
-    /// by the MLX backend. For now, this method creates a metadata entry with
-    /// the given size and the current timestamp.
+    /// Phase 1 のスタブです。Phase 2 では実際のダウンロードは MLX バックエンドが処理します。
+    /// 現在は指定されたサイズと現在のタイムスタンプでメタデータエントリを作成します。
     ///
-    /// If a model with the same ID is already registered, it will be overwritten.
+    /// 同じIDのモデルが既に登録されている場合は上書きされます。
     ///
     /// - Parameters:
-    ///   - spec: The model specification to register.
-    ///   - sizeInBytes: The size of the model in bytes.
-    /// - Throws: An error if the registry cannot be persisted.
+    ///   - spec: 登録するモデル仕様。
+    ///   - sizeInBytes: モデルのサイズ（バイト単位）。
+    /// - Throws: レジストリの永続化に失敗した場合。
     public func registerModel(_ spec: ModelSpec, sizeInBytes: Int64) throws {
         let info = CachedModelInfo(
             modelId: spec.id,
@@ -140,18 +137,17 @@ public actor ModelManager {
 
     // MARK: - Download with Progress
 
-    /// Downloads a model with progress reporting.
+    /// 進捗報告付きでモデルをダウンロードします。
     ///
-    /// Returns an `AsyncThrowingStream` that yields ``DownloadProgress`` updates
-    /// as the download progresses. The stream completes when the download
-    /// finishes and the model is registered in the cache.
+    /// ダウンロードの進行に応じて ``DownloadProgress`` の更新を生成する
+    /// `AsyncThrowingStream` を返します。ダウンロードが完了しモデルがキャッシュに
+    /// 登録されるとストリームが完了します。
     ///
-    /// In Phase 2, this wraps the HuggingFace Hub download with progress tracking.
-    /// For now, it simulates progress by yielding start (0.0) and completion (1.0)
-    /// after registering the model.
+    /// Phase 2 では HuggingFace Hub ダウンロードを進捗追跡付きでラップします。
+    /// 現在はモデル登録後に開始（0.0）と完了（1.0）を生成して進捗をシミュレートします。
     ///
-    /// - Parameter spec: The model specification to download.
-    /// - Returns: An ``AsyncThrowingStream`` of ``DownloadProgress`` values.
+    /// - Parameter spec: ダウンロードするモデル仕様。
+    /// - Returns: ``DownloadProgress`` 値の ``AsyncThrowingStream``。
     public func downloadWithProgress(
         _ spec: ModelSpec
     ) -> AsyncThrowingStream<DownloadProgress, Error> {

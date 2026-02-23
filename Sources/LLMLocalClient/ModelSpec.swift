@@ -1,33 +1,33 @@
 import Foundation
 
-/// Describes a model configuration including its source, optional adapter, and metadata.
+/// モデルのソース・オプションアダプター・メタデータを含むモデル設定
 public struct ModelSpec: Sendable, Hashable, Codable {
-    /// Unique identifier for this model specification.
+    /// このモデル仕様の一意識別子。
     public let id: String
 
-    /// Where the base model weights are located.
+    /// ベースモデルの重みの所在。
     public let base: ModelSource
 
-    /// Optional LoRA/QLoRA adapter to apply on top of the base model.
+    /// ベースモデルに適用するオプションの LoRA/QLoRA アダプター。
     public let adapter: AdapterSource?
 
-    /// Maximum context length in tokens.
+    /// トークン単位の最大コンテキスト長。
     public let contextLength: Int
 
-    /// Human-readable display name.
+    /// 人間可読な表示名。
     public let displayName: String
 
-    /// Human-readable description of the model.
+    /// モデルの人間可読な説明文。
     public let description: String
 
-    /// Creates a new model specification.
+    /// 新しいモデル仕様を作成します。
     /// - Parameters:
-    ///   - id: Unique identifier for this model specification.
-    ///   - base: Where the base model weights are located.
-    ///   - adapter: Optional LoRA/QLoRA adapter. Defaults to `nil`.
-    ///   - contextLength: Maximum context length in tokens.
-    ///   - displayName: Human-readable display name.
-    ///   - description: Human-readable description of the model.
+    ///   - id: このモデル仕様の一意識別子。
+    ///   - base: ベースモデルの重みの所在。
+    ///   - adapter: オプションの LoRA/QLoRA アダプター。デフォルトは `nil`。
+    ///   - contextLength: トークン単位の最大コンテキスト長。
+    ///   - displayName: 人間可読な表示名。
+    ///   - description: モデルの人間可読な説明文。
     public init(
         id: String,
         base: ModelSource,

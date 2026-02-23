@@ -1,17 +1,17 @@
-/// Statistics about a completed text generation.
+/// テキスト生成完了後の統計情報
 public struct GenerationStats: Sendable {
-    /// Number of tokens generated.
+    /// 生成されたトークン数。
     public let tokenCount: Int
-    /// Generation throughput in tokens per second.
+    /// 生成スループット（トークン/秒）。
     public let tokensPerSecond: Double
-    /// Total wall-clock duration of the generation.
+    /// 生成の実時間（ウォールクロック）。
     public let duration: Duration
 
-    /// Creates a new generation statistics record.
+    /// 新しい生成統計レコードを作成します。
     /// - Parameters:
-    ///   - tokenCount: Number of tokens generated.
-    ///   - tokensPerSecond: Generation throughput in tokens per second.
-    ///   - duration: Total wall-clock duration of the generation.
+    ///   - tokenCount: 生成されたトークン数。
+    ///   - tokensPerSecond: 生成スループット（トークン/秒）。
+    ///   - duration: 生成の実時間（ウォールクロック）。
     public init(tokenCount: Int, tokensPerSecond: Double, duration: Duration) {
         self.tokenCount = tokenCount
         self.tokensPerSecond = tokensPerSecond

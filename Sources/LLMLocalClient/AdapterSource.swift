@@ -1,19 +1,19 @@
 import Foundation
 
-/// Specifies where a LoRA/QLoRA adapter is located.
+/// LoRA/QLoRA アダプターの所在を指定する列挙型
 public enum AdapterSource: Sendable, Hashable, Codable {
-    /// An adapter distributed as a GitHub release asset.
+    /// GitHub リリースアセットとして配布されるアダプター。
     /// - Parameters:
-    ///   - repo: The GitHub repository (e.g. "owner/repo").
-    ///   - tag: The release tag (e.g. "v1.0").
-    ///   - asset: The asset filename (e.g. "adapter.safetensors").
+    ///   - repo: GitHub リポジトリ（例: "owner/repo"）。
+    ///   - tag: リリースタグ（例: "v1.0"）。
+    ///   - asset: アセットファイル名（例: "adapter.safetensors"）。
     case gitHubRelease(repo: String, tag: String, asset: String)
 
-    /// An adapter hosted on the Hugging Face Hub.
-    /// - Parameter id: The Hugging Face model/adapter identifier.
+    /// Hugging Face Hub でホストされているアダプター。
+    /// - Parameter id: Hugging Face モデル/アダプター識別子。
     case huggingFace(id: String)
 
-    /// An adapter stored on the local filesystem.
-    /// - Parameter path: The file URL pointing to the adapter directory.
+    /// ローカルファイルシステムに保存されたアダプター。
+    /// - Parameter path: アダプターディレクトリを指すファイルURL。
     case local(path: URL)
 }

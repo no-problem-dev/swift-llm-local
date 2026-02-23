@@ -1,43 +1,43 @@
-/// Errors that can occur during local LLM operations.
+/// ローカルLLM操作で発生しうるエラー
 public enum LLMLocalError: Error, Sendable, Equatable {
-    /// Model download failed.
+    /// モデルのダウンロードに失敗。
     /// - Parameters:
-    ///   - modelId: Identifier of the model that failed to download.
-    ///   - reason: Human-readable description of the failure.
+    ///   - modelId: ダウンロードに失敗したモデルの識別子。
+    ///   - reason: 失敗の人間可読な説明。
     case downloadFailed(modelId: String, reason: String)
 
-    /// Model loading failed.
+    /// モデルの読み込みに失敗。
     /// - Parameters:
-    ///   - modelId: Identifier of the model that failed to load.
-    ///   - reason: Human-readable description of the failure.
+    ///   - modelId: 読み込みに失敗したモデルの識別子。
+    ///   - reason: 失敗の人間可読な説明。
     case loadFailed(modelId: String, reason: String)
 
-    /// Insufficient device memory to load the model.
+    /// モデルの読み込みに必要なデバイスメモリが不足。
     /// - Parameters:
-    ///   - required: Number of bytes required.
-    ///   - available: Number of bytes available.
+    ///   - required: 必要なバイト数。
+    ///   - available: 利用可能なバイト数。
     case insufficientMemory(required: Int, available: Int)
 
-    /// Insufficient storage to download the model.
+    /// モデルのダウンロードに必要なストレージが不足。
     /// - Parameters:
-    ///   - required: Number of bytes required.
-    ///   - available: Number of bytes available.
+    ///   - required: 必要なバイト数。
+    ///   - available: 利用可能なバイト数。
     case insufficientStorage(required: Int64, available: Int64)
 
-    /// No model is currently loaded.
+    /// モデルが読み込まれていない。
     case modelNotLoaded
 
-    /// A model load operation is already in progress.
+    /// モデルの読み込み操作が既に進行中。
     case loadInProgress
 
-    /// The operation was cancelled.
+    /// 操作がキャンセルされた。
     case cancelled
 
-    /// LoRA/QLoRA adapter merge failed.
-    /// - Parameter reason: Human-readable description of the failure.
+    /// LoRA/QLoRA アダプターのマージに失敗。
+    /// - Parameter reason: 失敗の人間可読な説明。
     case adapterMergeFailed(reason: String)
 
-    /// The model format is not supported.
-    /// - Parameter format: Description of the unsupported format.
+    /// サポートされていないモデル形式。
+    /// - Parameter format: サポートされていない形式の説明。
     case unsupportedModelFormat(String)
 }

@@ -1,76 +1,75 @@
-/// Abstraction for a local LLM inference backend.
+/// ローカルLLM推論バックエンドの抽象化プロトコル
 ///
-/// Conforming types provide the ability to load models, generate text, and manage model lifecycle.
-/// All conforming types must be `Sendable` to support concurrent access.
+/// 準拠する型は、モデルの読み込み・テキスト生成・モデルライフサイクル管理の機能を提供します。
+/// すべての準拠型は並行アクセスをサポートするため `Sendable` である必要があります。
 public protocol LLMLocalBackend: Sendable {
-    /// Loads the specified model into memory for inference.
-    /// - Parameter spec: The model specification describing which model to load.
-    /// - Throws: An error if the model cannot be loaded.
+    /// 指定されたモデルをメモリに読み込み、推論可能な状態にします。
+    /// - Parameter spec: 読み込むモデルを記述するモデル仕様。
+    /// - Throws: モデルの読み込みに失敗した場合にエラーをスローします。
     func loadModel(_ spec: ModelSpec) async throws
 
-    /// Loads the specified model into memory, reporting download progress.
+    /// 指定されたモデルをメモリに読み込み、ダウンロード進捗を報告します。
     ///
     /// - Parameters:
-    ///   - spec: The model specification describing which model to load.
-    ///   - progressHandler: A closure called with download progress updates.
-    /// - Throws: An error if the model cannot be loaded.
+    ///   - spec: 読み込むモデルを記述するモデル仕様。
+    ///   - progressHandler: ダウンロード進捗の更新時に呼び出されるクロージャ。
+    /// - Throws: モデルの読み込みに失敗した場合にエラーをスローします。
     func loadModel(
         _ spec: ModelSpec,
         progressHandler: @Sendable @escaping (DownloadProgress) -> Void
     ) async throws
 
-    /// Generates text from the given prompt, streaming tokens as they are produced.
+    /// 指定されたプロンプトからテキストを生成し、トークンをストリーミングで返します。
     /// - Parameters:
-    ///   - prompt: The input prompt to generate from.
-    ///   - config: Configuration parameters controlling the generation.
-    /// - Returns: An asynchronous stream of generated token strings.
+    ///   - prompt: 生成元の入力プロンプト。
+    ///   - config: 生成を制御する設定パラメータ。
+    /// - Returns: 生成されたトークン文字列の非同期ストリーム。
     func generate(prompt: String, config: GenerationConfig) -> AsyncThrowingStream<String, Error>
 
-    /// Generates a response with tool calling support, streaming output chunks.
+    /// ツール呼び出しをサポートしたレスポンスを生成し、出力チャンクをストリーミングで返します。
     ///
-    /// Each element of the returned stream is either a text chunk or a tool call request
-    /// parsed by the underlying model.
+    /// 返されるストリームの各要素は、テキストチャンクまたはモデルが解析したツール呼び出しリクエストです。
     /// - Parameters:
-    ///   - prompt: The input prompt to generate from.
-    ///   - config: Configuration parameters controlling the generation.
-    ///   - tools: The tool definitions available to the model.
-    /// - Returns: An asynchronous stream of ``GenerationOutput`` values.
+    ///   - prompt: 生成元の入力プロンプト。
+    ///   - config: 生成を制御する設定パラメータ。
+    ///   - tools: モデルが使用可能なツール定義。
+    /// - Returns: ``GenerationOutput`` 値の非同期ストリーム。
     func generateWithTools(
         prompt: String,
         config: GenerationConfig,
         tools: [ToolDefinition]
     ) -> AsyncThrowingStream<GenerationOutput, Error>
 
-    /// Unloads the currently loaded model, freeing memory.
+    /// 現在読み込まれているモデルをアンロードし、メモリを解放します。
     func unloadModel() async
 
-    /// Whether a model is currently loaded and ready for inference.
+    /// モデルが現在読み込まれており推論可能かどうか。
     var isLoaded: Bool { get async }
 
-    /// The specification of the currently loaded model, or `nil` if no model is loaded.
+    /// 現在読み込まれているモデルの仕様。モデルが読み込まれていない場合は `nil`。
     var currentModel: ModelSpec? { get async }
 
-    /// The current system prompt, or `nil` if none is set.
+    /// 現在のシステムプロンプト。設定されていない場合は `nil`。
     var systemPrompt: String? { get async }
 
-    /// Sets the system prompt for subsequent generations.
+    /// 以降の生成に使用するシステムプロンプトを設定します。
     func setSystemPrompt(_ prompt: String?) async
 }
 
 // MARK: - System Prompt
 
 extension LLMLocalBackend {
-    /// Default implementation returns `nil`.
+    /// デフォルト実装は `nil` を返します。
     public var systemPrompt: String? { nil }
 
-    /// Default implementation is a no-op.
+    /// デフォルト実装は何も行いません。
     public func setSystemPrompt(_ prompt: String?) async {}
 }
 
 // MARK: - Default Implementation
 
 extension LLMLocalBackend {
-    /// Default implementation that ignores the progress handler and delegates to `loadModel(_:)`.
+    /// プログレスハンドラを無視し、`loadModel(_:)` に委譲するデフォルト実装。
     public func loadModel(
         _ spec: ModelSpec,
         progressHandler: @Sendable @escaping (DownloadProgress) -> Void
@@ -78,7 +77,7 @@ extension LLMLocalBackend {
         try await loadModel(spec)
     }
 
-    /// Default implementation that ignores tools and wraps each token as `.text`.
+    /// ツールを無視し、各トークンを `.text` としてラップするデフォルト実装。
     public func generateWithTools(
         prompt: String,
         config: GenerationConfig,

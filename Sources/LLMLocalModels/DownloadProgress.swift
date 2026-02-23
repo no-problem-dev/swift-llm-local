@@ -3,19 +3,18 @@ import LLMLocalClient
 
 // MARK: - DownloadProgressDelegate
 
-/// Protocol for injecting download behavior (for testing).
+/// ダウンロード動作を注入するプロトコル（テスト用）
 ///
-/// Implementations perform the actual download work, calling the progress handler
-/// with updates as the download proceeds. The returned value is the total size
-/// in bytes of the downloaded model.
+/// 実装は実際のダウンロード処理を行い、進行中にプログレスハンドラを呼び出します。
+/// 戻り値はダウンロードされたモデルの合計サイズ（バイト単位）です。
 public protocol DownloadProgressDelegate: Sendable {
-    /// Downloads the model described by `spec`, reporting progress via `progressHandler`.
+    /// `spec` で記述されたモデルをダウンロードし、`progressHandler` で進捗を報告します。
     ///
     /// - Parameters:
-    ///   - spec: The model specification to download.
-    ///   - progressHandler: A closure called with progress updates during the download.
-    /// - Returns: The total size of the downloaded model in bytes.
-    /// - Throws: Any error that occurs during the download.
+    ///   - spec: ダウンロードするモデル仕様。
+    ///   - progressHandler: ダウンロード中に進捗更新で呼び出されるクロージャ。
+    /// - Returns: ダウンロードされたモデルの合計サイズ（バイト単位）。
+    /// - Throws: ダウンロード中に発生したエラー。
     func download(
         _ spec: ModelSpec,
         progressHandler: @Sendable (DownloadProgress) -> Void
@@ -24,12 +23,12 @@ public protocol DownloadProgressDelegate: Sendable {
 
 // MARK: - StubDownloadDelegate
 
-/// Default stub delegate that simulates a completed download without network access.
+/// ネットワークアクセスなしで完了済みダウンロードをシミュレートするデフォルトスタブデリゲート
 ///
-/// This is the Phase 2 stub; real HuggingFace Hub download integration will
-/// replace this in a future phase.
+/// Phase 2 のスタブです。将来のフェーズで実際の HuggingFace Hub
+/// ダウンロード統合に置き換えられます。
 struct StubDownloadDelegate: DownloadProgressDelegate {
-    /// Fixed size returned by the stub download.
+    /// スタブダウンロードが返す固定サイズ。
     static let stubSize: Int64 = 1_000_000
 
     func download(

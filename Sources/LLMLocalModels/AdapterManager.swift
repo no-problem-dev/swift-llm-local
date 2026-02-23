@@ -3,37 +3,36 @@ import LLMLocalClient
 
 // MARK: - AdapterNetworkDelegate
 
-/// Protocol for downloading adapter files from remote sources.
+/// リモートソースからアダプターファイルをダウンロードするプロトコル
 ///
-/// Implementations handle the actual network operations for fetching
-/// adapter files from GitHub Releases or Hugging Face Hub.
-/// This protocol enables dependency injection for testing.
+/// GitHub Releases や Hugging Face Hub からのアダプターファイル取得に関する
+/// 実際のネットワーク操作を処理します。テスト用の依存性注入を可能にするプロトコルです。
 public protocol AdapterNetworkDelegate: Sendable {
-    /// Downloads an adapter from a GitHub Release.
+    /// GitHub Release からアダプターをダウンロードします。
     ///
     /// - Parameters:
-    ///   - repo: The GitHub repository (e.g. "owner/repo").
-    ///   - tag: The release tag (e.g. "v1.0").
-    ///   - asset: The asset filename (e.g. "adapter.safetensors").
-    ///   - destination: The local file URL to save the downloaded file.
+    ///   - repo: GitHub リポジトリ（例: "owner/repo"）。
+    ///   - tag: リリースタグ（例: "v1.0"）。
+    ///   - asset: アセットファイル名（例: "adapter.safetensors"）。
+    ///   - destination: ダウンロードファイルを保存するローカルファイルURL。
     func downloadGitHubRelease(
         repo: String, tag: String, asset: String, destination: URL
     ) async throws
 
-    /// Downloads an adapter from the Hugging Face Hub.
+    /// Hugging Face Hub からアダプターをダウンロードします。
     ///
     /// - Parameters:
-    ///   - id: The Hugging Face model/adapter identifier (e.g. "user/adapter").
-    ///   - destination: The local file URL to save the downloaded file.
+    ///   - id: Hugging Face のモデル/アダプター識別子（例: "user/adapter"）。
+    ///   - destination: ダウンロードファイルを保存するローカルファイルURL。
     func downloadHuggingFace(id: String, destination: URL) async throws
 }
 
 // MARK: - StubAdapterNetworkDelegate
 
-/// Stub delegate for Phase 2 -- creates placeholder files without network access.
+/// Phase 2 用スタブデリゲート — ネットワークアクセスなしでプレースホルダーファイルを作成します。
 ///
-/// This is used as the default delegate when no real network delegate is provided.
-/// In Phase 3, this will be replaced with actual download implementations.
+/// 実際のネットワークデリゲートが提供されない場合のデフォルトとして使用されます。
+/// Phase 3 で実際のダウンロード実装に置き換えられます。
 struct StubAdapterNetworkDelegate: AdapterNetworkDelegate {
     func downloadGitHubRelease(
         repo: String, tag: String, asset: String, destination: URL
@@ -56,34 +55,34 @@ struct StubAdapterNetworkDelegate: AdapterNetworkDelegate {
 
 // MARK: - AdapterInfo
 
-/// Information about a cached adapter.
+/// キャッシュされたアダプターの情報
 ///
-/// Tracks the version, source, download time, and local file path
-/// for an adapter that has been downloaded and cached locally.
+/// ローカルにダウンロード・キャッシュされたアダプターのバージョン、ソース、
+/// ダウンロード日時、ローカルファイルパスを追跡します。
 public struct AdapterInfo: Sendable, Codable {
-    /// Unique cache key derived from the adapter source.
+    /// アダプターソースから導出された一意のキャッシュキー。
     public let key: String
 
-    /// Version identifier (e.g. release tag or HuggingFace model ID).
+    /// バージョン識別子（例: リリースタグまたは HuggingFace モデルID）。
     public let version: String
 
-    /// The original source specification.
+    /// 元のソース指定。
     public let source: AdapterSource
 
-    /// When the adapter was downloaded.
+    /// アダプターがダウンロードされた日時。
     public let downloadedAt: Date
 
-    /// Path to the locally cached adapter file.
+    /// ローカルにキャッシュされたアダプターファイルのパス。
     public let localPath: URL
 
-    /// Creates a new adapter info.
+    /// 新しいアダプター情報を作成します。
     ///
     /// - Parameters:
-    ///   - key: Unique cache key.
-    ///   - version: Version identifier.
-    ///   - source: The original adapter source.
-    ///   - downloadedAt: When the adapter was downloaded.
-    ///   - localPath: Path to the locally cached file.
+    ///   - key: 一意のキャッシュキー。
+    ///   - version: バージョン識別子。
+    ///   - source: 元のアダプターソース。
+    ///   - downloadedAt: アダプターがダウンロードされた日時。
+    ///   - localPath: ローカルにキャッシュされたファイルのパス。
     public init(
         key: String,
         version: String,
@@ -101,25 +100,25 @@ public struct AdapterInfo: Sendable, Codable {
 
 // MARK: - AdapterCache
 
-/// Internal helper for reading and writing the adapter registry JSON file.
+/// アダプターレジストリJSONファイルの読み書きを行う内部ヘルパー
 ///
-/// The registry is a simple JSON file mapping cache keys to ``AdapterInfo``.
-/// This type is not an actor itself; it is used exclusively within
-/// ``AdapterManager``'s actor-isolated context.
+/// レジストリはキャッシュキーを ``AdapterInfo`` にマッピングするシンプルなJSONファイルです。
+/// この型自体はアクターではなく、``AdapterManager`` のアクター分離コンテキスト内で
+/// 排他的に使用されます。
 struct AdapterCache: Sendable {
 
-    /// The directory where the registry file is stored.
+    /// レジストリファイルが保存されるディレクトリ。
     let directory: URL
 
-    /// The path to the adapter registry JSON file.
+    /// アダプターレジストリJSONファイルのパス。
     var registryPath: URL {
         directory.appendingPathComponent("adapter-registry.json")
     }
 
-    /// Reads the registry from disk.
+    /// ディスクからレジストリを読み込みます。
     ///
-    /// - Returns: A dictionary mapping cache keys to ``AdapterInfo``.
-    ///   Returns an empty dictionary if the file does not exist or cannot be decoded.
+    /// - Returns: キャッシュキーを ``AdapterInfo`` にマッピングする辞書。
+    ///   ファイルが存在しないかデコードできない場合は空の辞書を返します。
     func load() -> [String: AdapterInfo] {
         guard FileManager.default.fileExists(atPath: registryPath.path) else {
             return [:]
@@ -132,10 +131,10 @@ struct AdapterCache: Sendable {
         }
     }
 
-    /// Writes the registry to disk, creating the directory if needed.
+    /// レジストリをディスクに書き込みます。必要に応じてディレクトリを作成します。
     ///
-    /// - Parameter registry: The dictionary of cache keys to ``AdapterInfo`` to persist.
-    /// - Throws: An error if the file cannot be written.
+    /// - Parameter registry: 永続化するキャッシュキーから ``AdapterInfo`` への辞書。
+    /// - Throws: ファイルの書き込みに失敗した場合のエラー。
     func save(_ registry: [String: AdapterInfo]) throws {
         try FileManager.default.createDirectory(
             at: directory,
@@ -150,49 +149,48 @@ struct AdapterCache: Sendable {
 
 // MARK: - AdapterManager
 
-/// Manages LoRA adapter downloads, versioning, and local storage.
+/// LoRA アダプターのダウンロード・バージョン管理・ローカルストレージを管理するアクター
 ///
-/// `AdapterManager` handles downloading adapters from various sources
-/// (GitHub Releases, HuggingFace, local paths) and managing their
-/// local cache with version tracking.
+/// `AdapterManager` は各種ソース（GitHub Releases、HuggingFace、ローカルパス）
+/// からのアダプターダウンロードと、バージョン追跡によるローカルキャッシュ管理を行います。
 ///
 /// ## Usage
 ///
 /// ```swift
 /// let manager = AdapterManager()
 ///
-/// // Resolve an adapter source to a local file URL
+/// // アダプターソースをローカルファイルURLに解決
 /// let localURL = try await manager.resolve(
 ///     .gitHubRelease(repo: "owner/repo", tag: "v1.0", asset: "adapter.safetensors")
 /// )
 ///
-/// // Check if a newer version is available
+/// // 新しいバージョンが利用可能か確認
 /// let needsUpdate = await manager.isUpdateAvailable(
 ///     for: source, latestTag: "v2.0"
 /// )
 /// ```
 public actor AdapterManager {
 
-    /// The directory where adapter files are stored.
+    /// アダプターファイルが保存されるディレクトリ。
     private let adapterDirectory: URL
 
-    /// In-memory registry of downloaded adapters, keyed by a unique key
-    /// derived from the AdapterSource.
+    /// ダウンロード済みアダプターのインメモリレジストリ。
+    /// AdapterSource から導出された一意のキーをキーとします。
     private var adapterRegistry: [String: AdapterInfo] = [:]
 
-    /// Persistence helper for the adapter registry.
+    /// アダプターレジストリの永続化ヘルパー。
     private let cache: AdapterCache
 
-    /// Network delegate for downloading adapters (injectable for testing).
+    /// アダプターダウンロード用のネットワークデリゲート（テスト用に注入可能）。
     private let networkDelegate: any AdapterNetworkDelegate
 
-    /// Creates a new adapter manager.
+    /// 新しいアダプターマネージャーを作成します。
     ///
     /// - Parameters:
-    ///   - adapterDirectory: The directory for storing adapter files and registry.
-    ///     Defaults to `~/Library/Application Support/LLMLocal/adapters`.
-    ///   - networkDelegate: An optional delegate for performing downloads.
-    ///     When `nil`, a stub delegate is used that creates placeholder files.
+    ///   - adapterDirectory: アダプターファイルとレジストリを保存するディレクトリ。
+    ///     デフォルトは `~/Library/Application Support/LLMLocal/adapters`。
+    ///   - networkDelegate: ダウンロードを実行するオプションのデリゲート。
+    ///     `nil` の場合、プレースホルダーファイルを作成するスタブデリゲートが使用されます。
     public init(
         adapterDirectory: URL? = nil,
         networkDelegate: (any AdapterNetworkDelegate)? = nil
@@ -212,15 +210,15 @@ public actor AdapterManager {
 
     // MARK: - Public API
 
-    /// Resolves an AdapterSource to a local file URL.
+    /// AdapterSource をローカルファイルURLに解決します。
     ///
-    /// Downloads the adapter if not already cached. For local sources,
-    /// validates the file exists and returns the path directly.
+    /// まだキャッシュされていない場合はアダプターをダウンロードします。
+    /// ローカルソースの場合はファイルの存在を検証し、パスを直接返します。
     ///
-    /// - Parameter source: The adapter source to resolve.
-    /// - Returns: A local file URL pointing to the adapter.
-    /// - Throws: ``LLMLocalError/adapterMergeFailed(reason:)`` if a local adapter
-    ///   is not found, or a download error if the remote fetch fails.
+    /// - Parameter source: 解決するアダプターソース。
+    /// - Returns: アダプターを指すローカルファイルURL。
+    /// - Throws: ローカルアダプターが見つからない場合は ``LLMLocalError/adapterMergeFailed(reason:)``、
+    ///   リモート取得に失敗した場合はダウンロードエラー。
     public func resolve(_ source: AdapterSource) async throws -> URL {
         switch source {
         case .local(let path):
@@ -275,51 +273,51 @@ public actor AdapterManager {
         }
     }
 
-    /// Returns all cached adapters.
+    /// すべてのキャッシュ済みアダプターを返します。
     ///
-    /// - Returns: An array of ``AdapterInfo`` for every cached adapter.
+    /// - Returns: キャッシュされた全アダプターの ``AdapterInfo`` 配列。
     public func cachedAdapters() -> [AdapterInfo] {
         Array(adapterRegistry.values)
     }
 
-    /// Checks if an adapter is cached.
+    /// アダプターがキャッシュされているか確認します。
     ///
-    /// - Parameter source: The adapter source to check.
-    /// - Returns: `true` if the adapter has been downloaded and cached.
+    /// - Parameter source: 確認するアダプターソース。
+    /// - Returns: アダプターがダウンロード・キャッシュ済みの場合は `true`。
     public func isCached(_ source: AdapterSource) -> Bool {
         let key = Self.cacheKey(for: source)
         return adapterRegistry[key] != nil
     }
 
-    /// Deletes a cached adapter's registry entry.
+    /// キャッシュされたアダプターのレジストリエントリを削除します。
     ///
-    /// If the adapter is not cached, this method does nothing.
+    /// アダプターがキャッシュされていない場合、このメソッドは何もしません。
     ///
-    /// - Parameter source: The adapter source to remove.
-    /// - Throws: An error if the registry cannot be persisted.
+    /// - Parameter source: 削除するアダプターソース。
+    /// - Throws: レジストリの永続化に失敗した場合のエラー。
     public func deleteAdapter(for source: AdapterSource) throws {
         let key = Self.cacheKey(for: source)
         adapterRegistry.removeValue(forKey: key)
         try cache.save(adapterRegistry)
     }
 
-    /// Removes all cached adapter registry entries.
+    /// すべてのキャッシュ済みアダプターレジストリエントリを削除します。
     ///
-    /// - Throws: An error if the registry cannot be persisted.
+    /// - Throws: レジストリの永続化に失敗した場合のエラー。
     public func clearAll() throws {
         adapterRegistry.removeAll()
         try cache.save(adapterRegistry)
     }
 
-    /// Checks if a newer version is available for a cached adapter.
+    /// キャッシュされたアダプターの新しいバージョンが利用可能か確認します。
     ///
-    /// Returns `true` if the adapter is not cached or if the cached version
-    /// differs from the specified latest tag.
+    /// アダプターがキャッシュされていないか、キャッシュされたバージョンが
+    /// 指定された最新タグと異なる場合に `true` を返します。
     ///
     /// - Parameters:
-    ///   - source: The adapter source to check.
-    ///   - latestTag: The latest known version tag to compare against.
-    /// - Returns: `true` if an update is available.
+    ///   - source: 確認するアダプターソース。
+    ///   - latestTag: 比較対象の最新バージョンタグ。
+    /// - Returns: アップデートが利用可能な場合は `true`。
     public func isUpdateAvailable(
         for source: AdapterSource, latestTag: String
     ) -> Bool {
@@ -330,16 +328,16 @@ public actor AdapterManager {
 
     // MARK: - Internal Helpers
 
-    /// Generates a unique cache key for an adapter source.
+    /// アダプターソースの一意のキャッシュキーを生成します。
     ///
-    /// The key format varies by source type:
+    /// キーのフォーマットはソースタイプにより異なります:
     /// - GitHub Release: `gh--{owner}--{repo}--{tag}--{asset}`
-    /// - HuggingFace: `hf--{id with / replaced by --}`
+    /// - HuggingFace: `hf--{/ を -- に置換した id}`
     /// - Local: `local--{filename}`
     ///
-    /// - Parameter source: The adapter source.
-    /// - Returns: A unique string key suitable for use as a dictionary key
-    ///   and filesystem-safe directory/file name.
+    /// - Parameter source: アダプターソース。
+    /// - Returns: 辞書キーおよびファイルシステム安全なディレクトリ/ファイル名として
+    ///   使用可能な一意の文字列キー。
     static func cacheKey(for source: AdapterSource) -> String {
         switch source {
         case .gitHubRelease(let repo, let tag, let asset):

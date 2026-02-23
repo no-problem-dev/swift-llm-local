@@ -4,17 +4,17 @@ import MLX
 import MLXLLM
 @preconcurrency import MLXLMCommon
 
-/// MLX-based backend for local LLM inference.
+/// MLXベースのローカルLLM推論バックエンド
 ///
-/// This actor wraps the mlx-swift-lm APIs to provide a conformance
-/// to ``LLMLocalBackend``. It manages model loading, text generation,
-/// GPU cache configuration, and optional LoRA adapter merging.
+/// このアクターは mlx-swift-lm API をラップし、``LLMLocalBackend`` への準拠を提供します。
+/// モデルの読み込み、テキスト生成、GPUキャッシュ設定、
+/// およびオプションのLoRAアダプターマージを管理します。
 ///
-/// ## Adapter Support
+/// ## アダプターサポート
 ///
-/// When a ``ModelSpec`` includes an ``AdapterSource``, the backend resolves
-/// the adapter to a local URL via an ``AdapterResolving`` instance and passes
-/// the adapter path to the MLX model loading pipeline.
+/// ``ModelSpec`` が ``AdapterSource`` を含む場合、バックエンドは
+/// ``AdapterResolving`` インスタンスを介してアダプターをローカルURLに解決し、
+/// アダプターパスをMLXモデル読み込みパイプラインに渡します。
 ///
 /// ```swift
 /// let backend = MLXBackend(adapterResolver: adapterManager)
@@ -28,41 +28,41 @@ public actor MLXBackend: LLMLocalBackend {
     private var loadedSpec: ModelSpec?
     private let gpuCacheLimit: Int
 
-    /// Optional resolver for LoRA/QLoRA adapters.
+    /// LoRA/QLoRA アダプターのオプションリゾルバー。
     private let adapterResolver: (any AdapterResolving)?
 
-    /// The most recently resolved adapter URL, captured during loadModel.
-    /// Exposed for testing to verify that adapter resolution produces
-    /// the expected URL and passes it to the model loading pipeline.
+    /// loadModel 中にキャプチャされた直近の解決済みアダプターURL。
+    /// アダプター解決が期待されるURLを生成し、モデル読み込みパイプラインに
+    /// 渡されることを検証するためにテスト用に公開されています。
     private(set) var lastResolvedAdapterURL: URL?
 
-    /// The system prompt applied to new and existing chat sessions.
+    /// 新規および既存のチャットセッションに適用されるシステムプロンプト。
     private var _systemPrompt: String?
 
-    /// Tracks whether a model load is currently in progress, for exclusive control.
+    /// モデルの読み込みが現在進行中かを追跡します（排他制御用）。
     private var isLoading: Bool = false
 
     // MARK: - Test Accessors
 
-    /// Exposes the GPU cache limit for testing purposes.
+    /// テスト目的でGPUキャッシュ制限を公開します。
     var gpuCacheLimitValue: Int { gpuCacheLimit }
 
-    /// Exposes the loading state for testing purposes.
+    /// テスト目的でロード状態を公開します。
     var isLoadingValue: Bool { isLoading }
 
-    /// Whether an adapter resolver has been configured.
+    /// アダプターリゾルバーが設定されているかどうか。
     var hasAdapterResolver: Bool { adapterResolver != nil }
 
     // MARK: - Initialization
 
-    /// Creates a new MLXBackend with the specified GPU cache limit and optional adapter resolver.
+    /// 指定されたGPUキャッシュ制限とオプションのアダプターリゾルバーで新しい MLXBackend を作成します。
     ///
     /// - Parameters:
-    ///   - gpuCacheLimit: Maximum GPU cache size in bytes.
-    ///     Defaults to 20 MB (20 * 1024 * 1024).
-    ///   - adapterResolver: An optional ``AdapterResolving`` instance for resolving
-    ///     LoRA/QLoRA adapter sources to local file URLs. When `nil`, loading a model
-    ///     with an adapter will throw ``LLMLocalError/adapterMergeFailed(reason:)``.
+    ///   - gpuCacheLimit: GPUキャッシュの最大サイズ（バイト単位）。
+    ///     デフォルトは 20 MB（20 * 1024 * 1024）。
+    ///   - adapterResolver: LoRA/QLoRA アダプターソースをローカルファイルURLに解決する
+    ///     オプションの ``AdapterResolving`` インスタンス。`nil` の場合、アダプター付き
+    ///     モデルの読み込みは ``LLMLocalError/adapterMergeFailed(reason:)`` をスローします。
     public init(
         gpuCacheLimit: Int = 20 * 1024 * 1024,
         adapterResolver: (any AdapterResolving)? = nil
@@ -84,7 +84,7 @@ public actor MLXBackend: LLMLocalBackend {
         try await performLoad(spec, progressHandler: progressHandler)
     }
 
-    /// Shared implementation for model loading with optional progress reporting.
+    /// オプションの進捗報告付きモデル読み込みの共通実装。
     private func performLoad(
         _ spec: ModelSpec,
         progressHandler: (@Sendable (DownloadProgress) -> Void)?
@@ -219,13 +219,13 @@ public actor MLXBackend: LLMLocalBackend {
 
     // MARK: - Internal Helpers
 
-    /// Resolves an adapter source to a local URL if an adapter is specified.
+    /// アダプターが指定されている場合、アダプターソースをローカルURLに解決します。
     ///
-    /// Returns `nil` when the spec has no adapter. Throws when the spec has
-    /// an adapter but no resolver is configured, or when resolution fails.
+    /// spec にアダプターがない場合は `nil` を返します。spec にアダプターがあるが
+    /// リゾルバーが設定されていない場合、または解決に失敗した場合はスローします。
     ///
-    /// Extracted as a separate method for testability -- this can be called
-    /// without requiring GPU/Metal access.
+    /// テスト容易性のために別メソッドとして抽出されています。
+    /// GPU/Metal アクセスなしで呼び出すことができます。
     func resolveAdapter(for spec: ModelSpec) async throws -> URL? {
         guard let adapterSource = spec.adapter else { return nil }
 
@@ -248,8 +248,8 @@ public actor MLXBackend: LLMLocalBackend {
 
     // MARK: - Private Helpers
 
-    /// Performs the actual generation work within the actor's isolation context.
-    /// This avoids sending the non-Sendable `ChatSession` across isolation boundaries.
+    /// アクターの分離コンテキスト内で実際の生成処理を実行します。
+    /// Sendable でない `ChatSession` が分離境界を越えて送信されることを回避します。
     private func performGenerate(
         prompt: String,
         config: GenerationConfig,
@@ -275,7 +275,7 @@ public actor MLXBackend: LLMLocalBackend {
         }
     }
 
-    /// Performs generation with tool calling within the actor's isolation context.
+    /// アクターの分離コンテキスト内でツール呼び出し付き生成処理を実行します。
     private func performGenerateWithTools(
         prompt: String,
         config: GenerationConfig,

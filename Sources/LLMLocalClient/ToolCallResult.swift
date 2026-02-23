@@ -1,8 +1,8 @@
-/// A tool invocation request produced by the language model.
+/// 言語モデルが生成したツール呼び出しリクエスト
 public struct ToolCallRequest: Sendable, Equatable {
-    /// The name of the tool the model wants to call.
+    /// モデルが呼び出したいツールの名前。
     public let name: String
-    /// The arguments as a JSON-encoded string.
+    /// JSON エンコードされた引数文字列。
     public let argumentsJSON: String
 
     public init(name: String, argumentsJSON: String) {
@@ -11,10 +11,10 @@ public struct ToolCallRequest: Sendable, Equatable {
     }
 }
 
-/// The output of a single generation step, which can be either text or a tool call.
+/// 単一の生成ステップの出力（テキストまたはツール呼び出し）
 public enum GenerationOutput: Sendable {
-    /// A chunk of generated text.
+    /// 生成されたテキストチャンク。
     case text(String)
-    /// A tool invocation request from the model.
+    /// モデルからのツール呼び出しリクエスト。
     case toolCall(ToolCallRequest)
 }

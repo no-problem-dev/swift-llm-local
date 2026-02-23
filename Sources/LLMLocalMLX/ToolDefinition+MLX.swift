@@ -3,7 +3,7 @@ import LLMLocalClient
 import MLXLMCommon
 
 extension ToolDefinition {
-    /// Converts this tool definition to an MLX-compatible ``ToolSpec`` dictionary.
+    /// このツール定義を MLX 互換の ``ToolSpec`` ディクショナリに変換します。
     var toolSpec: [String: any Sendable] {
         var properties: [String: any Sendable] = [:]
         var requiredParams: [String] = []
@@ -31,7 +31,7 @@ extension ToolDefinition {
 }
 
 extension ParameterType {
-    /// Converts this parameter type to a JSON Schema dictionary.
+    /// このパラメータ型を JSON Schema ディクショナリに変換します。
     func jsonSchema(description: String) -> [String: any Sendable] {
         switch self {
         case .string:
@@ -53,7 +53,7 @@ extension ParameterType {
 }
 
 extension ToolCallRequest {
-    /// Creates a ``ToolCallRequest`` from an MLX ``ToolCall``.
+    /// MLX の ``ToolCall`` から ``ToolCallRequest`` を作成します。
     init(from toolCall: ToolCall) {
         let jsonObject = toolCall.function.arguments.mapValues { $0.anyValue }
         let jsonData = (try? JSONSerialization.data(withJSONObject: jsonObject)) ?? Data()
