@@ -9,7 +9,7 @@ actor MockBackend: LLMLocalBackend {
     var shouldThrow: LLMLocalError?
     var mockTokens: [String] = ["Hello", " ", "World"]
     var mockToolOutputs: [GenerationOutput]?
-    var lastToolDefinitions: [ToolDefinition]?
+    var lastToolSet: ToolSet?
     private var _isLoaded = false
     private var _currentModel: ModelSpec?
 
@@ -48,7 +48,7 @@ actor MockBackend: LLMLocalBackend {
     nonisolated func generateWithTools(
         prompt: String,
         config: GenerationConfig,
-        tools: [ToolDefinition]
+        tools: ToolSet
     ) -> AsyncThrowingStream<GenerationOutput, Error> {
         AsyncThrowingStream { continuation in
             Task {
@@ -60,11 +60,11 @@ actor MockBackend: LLMLocalBackend {
     }
 
     private func performGenerateWithTools(
-        tools: [ToolDefinition],
+        tools: ToolSet,
         continuation: AsyncThrowingStream<GenerationOutput, Error>.Continuation
     ) {
         generateWithToolsCalled = true
-        lastToolDefinitions = tools
+        lastToolSet = tools
         if let error = shouldThrow {
             continuation.finish(throwing: error)
             return

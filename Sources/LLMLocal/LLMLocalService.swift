@@ -138,13 +138,13 @@ public actor LLMLocalService {
     /// - Parameters:
     ///   - model: The model specification to use for generation.
     ///   - prompt: The input prompt to generate from.
-    ///   - tools: The tool definitions available to the model.
+    ///   - tools: The set of tools available to the model.
     ///   - config: Configuration parameters controlling the generation. Defaults to ``GenerationConfig/default``.
     /// - Returns: An asynchronous stream of ``GenerationOutput`` values.
     public func generateWithTools(
         model: ModelSpec,
         prompt: String,
-        tools: [ToolDefinition],
+        tools: ToolSet,
         config: GenerationConfig = .default
     ) -> AsyncThrowingStream<GenerationOutput, Error> {
         let backend = self.backend

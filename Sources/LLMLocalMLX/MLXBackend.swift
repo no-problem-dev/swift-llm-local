@@ -183,7 +183,7 @@ public actor MLXBackend: LLMLocalBackend {
     public nonisolated func generateWithTools(
         prompt: String,
         config: GenerationConfig,
-        tools: [ToolDefinition]
+        tools: ToolSet
     ) -> AsyncThrowingStream<GenerationOutput, Error> {
         AsyncThrowingStream { continuation in
             Task { [weak self] in
@@ -279,7 +279,7 @@ public actor MLXBackend: LLMLocalBackend {
     private func performGenerateWithTools(
         prompt: String,
         config: GenerationConfig,
-        tools: [ToolDefinition],
+        tools: ToolSet,
         continuation: AsyncThrowingStream<GenerationOutput, Error>.Continuation
     ) async {
         guard let session = chatSession else {
@@ -287,7 +287,7 @@ public actor MLXBackend: LLMLocalBackend {
             return
         }
 
-        session.tools = tools.map { $0.toolSpec }
+        session.tools = tools.mlxToolSpecs
         session.generateParameters = config.mlxParameters
 
         do {

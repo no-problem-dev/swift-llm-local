@@ -3,6 +3,26 @@ import Testing
 import LLMLocalClient
 @testable import LLMLocal
 
+/// A simple mock tool for testing purposes.
+private struct MockWeatherTool: Tool {
+    let toolName = "get_weather"
+    let toolDescription = "Get the current weather"
+
+    var inputSchema: JSONSchema {
+        .object(
+            properties: [
+                "location": .string(description: "The city name"),
+                "unit": .string(description: "Temperature unit"),
+            ],
+            required: ["location"]
+        )
+    }
+
+    func execute(with argumentsData: Data) async throws -> ToolResult {
+        .text("Sunny, 25C")
+    }
+}
+
 @Suite("LLMLocalService - Tool Calling")
 struct LLMLocalServiceToolTests {
 
@@ -29,16 +49,9 @@ struct LLMLocalServiceToolTests {
         )
     }
 
-    private static let sampleTools: [ToolDefinition] = [
-        ToolDefinition(
-            name: "get_weather",
-            description: "Get the current weather",
-            parameters: [
-                .required("location", type: .string, description: "The city name"),
-                .optional("unit", type: .string, description: "Temperature unit"),
-            ]
-        )
-    ]
+    private static let sampleTools = ToolSet {
+        MockWeatherTool()
+    }
 
     // MARK: - Text-only response
 
@@ -130,9 +143,9 @@ struct LLMLocalServiceToolTests {
 
         let called = await backend.generateWithToolsCalled
         #expect(called == true)
-        let defs = await backend.lastToolDefinitions
-        #expect(defs?.count == 1)
-        #expect(defs?.first?.name == "get_weather")
+        let toolSet = await backend.lastToolSet
+        #expect(toolSet?.count == 1)
+        #expect(toolSet?.tools.first?.toolName == "get_weather")
     }
 
     // MARK: - Error propagation

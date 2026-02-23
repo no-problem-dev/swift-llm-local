@@ -33,12 +33,12 @@ public protocol LLMLocalBackend: Sendable {
     /// - Parameters:
     ///   - prompt: The input prompt to generate from.
     ///   - config: Configuration parameters controlling the generation.
-    ///   - tools: The tool definitions available to the model.
+    ///   - tools: The set of tools available to the model.
     /// - Returns: An asynchronous stream of ``GenerationOutput`` values.
     func generateWithTools(
         prompt: String,
         config: GenerationConfig,
-        tools: [ToolDefinition]
+        tools: ToolSet
     ) -> AsyncThrowingStream<GenerationOutput, Error>
 
     /// Unloads the currently loaded model, freeing memory.
@@ -82,7 +82,7 @@ extension LLMLocalBackend {
     public func generateWithTools(
         prompt: String,
         config: GenerationConfig,
-        tools: [ToolDefinition]
+        tools: ToolSet
     ) -> AsyncThrowingStream<GenerationOutput, Error> {
         let stream = generate(prompt: prompt, config: config)
         return AsyncThrowingStream { continuation in
