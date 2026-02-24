@@ -441,6 +441,8 @@ public actor MLXBackend: LLMLocalBackend {
                 toolResults.append((callId: callId, content: content))
             case .image, .audio, .video:
                 break
+            case .thinking:
+                break // Local LLM では thinking は無視
             }
         }
 
