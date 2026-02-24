@@ -198,6 +198,83 @@ public actor LLMLocalService {
         }
     }
 
+    /// 構造化メッセージ配列からレスポンスを生成します。
+    ///
+    /// チャットテンプレートは内部で1回だけ適用されます。
+    /// `MessageFormatter` 等で事前フォーマットした文字列を `generate()` に渡す場合と異なり、
+    /// 二重テンプレート適用を回避します。
+    ///
+    /// - Parameters:
+    ///   - model: 生成に使用するモデル仕様。
+    ///   - messages: 会話履歴のメッセージ配列。
+    ///   - systemPrompt: システムプロンプト（オプション）。
+    ///   - config: 生成を制御する設定パラメータ。デフォルトは ``GenerationConfig/default``。
+    ///   - tools: モデルが使用可能なツール定義。
+    /// - Returns: ``GenerationOutput`` 値の非同期ストリーム。
+    public func generateFromMessages(
+        model: ModelSpec,
+        messages: [LLMMessage],
+        systemPrompt: String?,
+        config: GenerationConfig = .default,
+        tools: [ToolDefinition] = []
+    ) -> AsyncThrowingStream<GenerationOutput, Error> {
+        let backend = self.backend
+        let modelSwitcher = self.modelSwitcher
+        let startTime = ContinuousClock.now
+
+        return AsyncThrowingStream { continuation in
+            Task { [weak self] in
+                do {
+                    // Load model: use switcher if available, otherwise direct backend
+                    if let switcher = modelSwitcher {
+                        try await switcher.ensureLoaded(model)
+                    } else {
+                        let currentModel = await backend.currentModel
+                        if currentModel != model {
+                            try await backend.loadModel(model)
+                        }
+                    }
+
+                    // Generate and track stats
+                    var tokenCount = 0
+                    let innerStream = backend.generateFromMessages(
+                        messages: messages,
+                        systemPrompt: systemPrompt,
+                        config: config,
+                        tools: tools
+                    )
+                    for try await output in innerStream {
+                        try Task.checkCancellation()
+                        if case .text = output {
+                            tokenCount += 1
+                        }
+                        continuation.yield(output)
+                    }
+
+                    // Record stats
+                    let duration = ContinuousClock.now - startTime
+                    let seconds = Double(duration.components.seconds)
+                        + Double(duration.components.attoseconds) / 1e18
+                    let tokensPerSecond = seconds > 0
+                        ? Double(tokenCount) / seconds : 0
+
+                    let stats = GenerationStats(
+                        tokenCount: tokenCount,
+                        tokensPerSecond: tokensPerSecond,
+                        duration: duration
+                    )
+                    await self?.updateStats(stats)
+
+                    continuation.finish()
+                } catch is CancellationError {
+                    continuation.finish(throwing: LLMLocalError.cancelled)
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+        }
+    }
+
     // MARK: - System Prompt
 
     /// 現在のシステムプロンプト。設定されていない場合は `nil`。
@@ -245,6 +322,15 @@ public actor LLMLocalService {
         onProgress: @Sendable @escaping (DownloadProgress) -> Void
     ) async throws {
         try await backend.loadModel(spec, progressHandler: onProgress)
+    }
+
+    // MARK: - Session Management
+
+    /// チャットセッションの会話履歴をリセットします。
+    ///
+    /// モデルは読み込まれたまま保持し、会話のみをクリアして新しい会話を開始します。
+    public func resetChatSession() async {
+        await backend.resetSession()
     }
 
     // MARK: - Memory Monitoring

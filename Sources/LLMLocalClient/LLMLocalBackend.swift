@@ -56,6 +56,30 @@ public protocol LLMLocalBackend: Sendable {
 
     /// 以降の生成に使用するシステムプロンプトを設定します。
     func setSystemPrompt(_ prompt: String?) async
+
+    /// チャットセッションの会話履歴をリセットします。
+    ///
+    /// モデルは読み込まれたまま保持し、会話のみをクリアします。
+    /// 新しい会話を開始する際に使用します。
+    func resetSession() async
+
+    /// 構造化メッセージ配列からレスポンスを生成します。
+    ///
+    /// チャットテンプレートは内部で1回だけ適用されます。
+    /// `MessageFormatter` 等で事前フォーマット + `ChatSession` の二重テンプレート適用を回避するための API です。
+    ///
+    /// - Parameters:
+    ///   - messages: 会話履歴のメッセージ配列。
+    ///   - systemPrompt: システムプロンプト（オプション）。
+    ///   - config: 生成を制御する設定パラメータ。
+    ///   - tools: モデルが使用可能なツール定義。
+    /// - Returns: ``GenerationOutput`` 値の非同期ストリーム。
+    func generateFromMessages(
+        messages: [LLMMessage],
+        systemPrompt: String?,
+        config: GenerationConfig,
+        tools: [ToolDefinition]
+    ) -> AsyncThrowingStream<GenerationOutput, Error>
 }
 
 // MARK: - System Prompt
@@ -66,6 +90,9 @@ extension LLMLocalBackend {
 
     /// デフォルト実装は何も行いません。
     public func setSystemPrompt(_ prompt: String?) async {}
+
+    /// デフォルト実装は何も行いません。
+    public func resetSession() async {}
 }
 
 // MARK: - Default Implementation
@@ -98,5 +125,16 @@ extension LLMLocalBackend {
                 }
             }
         }
+    }
+
+    /// メッセージをテキストに結合し `generateWithTools` に委譲するデフォルト実装。
+    public func generateFromMessages(
+        messages: [LLMMessage],
+        systemPrompt: String?,
+        config: GenerationConfig,
+        tools: [ToolDefinition]
+    ) -> AsyncThrowingStream<GenerationOutput, Error> {
+        let prompt = messages.map { $0.content }.joined(separator: "\n")
+        return generateWithTools(prompt: prompt, config: config, tools: tools)
     }
 }

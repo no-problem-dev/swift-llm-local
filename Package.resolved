@@ -1,5 +1,5 @@
 {
-  "originHash" : "35048faf2e3c104749fced7cc00d97384affaf2d30c59d05b2588b6baaa34497",
+  "originHash" : "feb165cc058d15a8a1d26a0590867fc1b517db14309bcc84a7a3a333cbd24a1e",
   "pins" : [
     {
       "identity" : "mlx-swift",
@@ -53,15 +53,6 @@
       "state" : {
         "revision" : "f731f03bf746481d4fda07f817c3774390c4d5b9",
         "version" : "2.3.2"
-      }
-    },
-    {
-      "identity" : "swift-llm-client",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/no-problem-dev/swift-llm-client.git",
-      "state" : {
-        "revision" : "b7d92b3d3fa68d291f63c30252c03ebca1ef67e5",
-        "version" : "1.1.0"
       }
     },
     {

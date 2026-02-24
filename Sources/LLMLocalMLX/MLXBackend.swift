@@ -26,6 +26,7 @@ public actor MLXBackend: LLMLocalBackend {
     // MARK: - Internal State
 
     private var chatSession: ChatSession?
+    private var modelContainer: ModelContainer?
     private var loadedSpec: ModelSpec?
     private let gpuCacheLimit: Int
 
@@ -150,6 +151,7 @@ public actor MLXBackend: LLMLocalBackend {
                 }
             }
 
+            self.modelContainer = modelContainer
             chatSession = ChatSession(modelContainer, instructions: _systemPrompt)
             loadedSpec = spec
         } catch let error as LLMLocalError {
@@ -204,6 +206,7 @@ public actor MLXBackend: LLMLocalBackend {
 
     public func unloadModel() async {
         chatSession = nil
+        modelContainer = nil
         loadedSpec = nil
     }
 
@@ -216,6 +219,34 @@ public actor MLXBackend: LLMLocalBackend {
     public func setSystemPrompt(_ prompt: String?) {
         _systemPrompt = prompt
         chatSession?.instructions = prompt
+    }
+
+    public func resetSession() {
+        guard let container = modelContainer else { return }
+        chatSession = ChatSession(container, instructions: _systemPrompt)
+    }
+
+    public nonisolated func generateFromMessages(
+        messages: [LLMMessage],
+        systemPrompt: String?,
+        config: GenerationConfig,
+        tools: [ToolDefinition]
+    ) -> AsyncThrowingStream<GenerationOutput, Error> {
+        AsyncThrowingStream { continuation in
+            Task { [weak self] in
+                guard let self else {
+                    continuation.finish(throwing: LLMLocalError.modelNotLoaded)
+                    return
+                }
+                await self.performGenerateFromMessages(
+                    messages: messages,
+                    systemPrompt: systemPrompt,
+                    config: config,
+                    tools: tools,
+                    continuation: continuation
+                )
+            }
+        }
     }
 
     // MARK: - Internal Helpers
@@ -311,5 +342,135 @@ public actor MLXBackend: LLMLocalBackend {
         } catch {
             continuation.finish(throwing: error)
         }
+    }
+
+    /// 構造化メッセージ配列からレスポンスを生成します。
+    ///
+    /// `ChatSession` を経由せず、トークナイザーの `applyChatTemplate` を直接使用して
+    /// チャットテンプレートを1回だけ適用します。
+    private func performGenerateFromMessages(
+        messages: [LLMMessage],
+        systemPrompt: String?,
+        config: GenerationConfig,
+        tools: [ToolDefinition],
+        continuation: AsyncThrowingStream<GenerationOutput, Error>.Continuation
+    ) async {
+        guard let container = modelContainer else {
+            continuation.finish(throwing: LLMLocalError.modelNotLoaded)
+            return
+        }
+
+        // Build MLX message array (let-binding for Sendable capture)
+        let mlxMessages: [[String: any Sendable]] = {
+            var msgs: [[String: any Sendable]] = []
+            if let systemPrompt, !systemPrompt.isEmpty {
+                msgs.append(["role": "system", "content": systemPrompt])
+            }
+            for msg in messages {
+                msgs.append(contentsOf: Self.convertToMLXFormat(msg))
+            }
+            return msgs
+        }()
+
+        let toolSpecs: [[String: any Sendable]]? = tools.isEmpty
+            ? nil : tools.map { $0.toolSpec }
+        let parameters = config.mlxParameters
+
+        do {
+            try await container.perform { context in
+                let tokens = try context.tokenizer.applyChatTemplate(
+                    messages: mlxMessages,
+                    tools: toolSpecs
+                )
+                let input = LMInput(tokens: MLXArray(tokens))
+
+                let stream = try MLXLMCommon.generate(
+                    input: input,
+                    parameters: parameters,
+                    context: context
+                )
+
+                for await generation in stream {
+                    guard !Task.isCancelled else { break }
+                    switch generation {
+                    case .chunk(let text):
+                        continuation.yield(.text(text))
+                    case .toolCall(let toolCall):
+                        continuation.yield(.toolCall(LLMTool.ToolCall(from: toolCall)))
+                    case .info:
+                        break
+                    }
+                }
+            }
+            continuation.finish()
+        } catch is CancellationError {
+            continuation.finish(throwing: LLMLocalError.cancelled)
+        } catch {
+            continuation.finish(throwing: error)
+        }
+    }
+
+    // MARK: - LLMMessage → MLX Format Conversion
+
+    /// `LLMMessage` を MLX 互換のメッセージディクショナリに変換します。
+    ///
+    /// 1つの `LLMMessage` が複数の MLX メッセージに変換される場合があります
+    /// （例: ツール結果は個別の "tool" ロールメッセージになります）。
+    private static func convertToMLXFormat(_ message: LLMMessage) -> [[String: any Sendable]] {
+        var result: [[String: any Sendable]] = []
+
+        var textContent = ""
+        var toolUses: [[String: any Sendable]] = []
+        var toolResults: [(callId: String, content: String)] = []
+
+        for content in message.contents {
+            switch content {
+            case .text(let text):
+                textContent += text
+            case .toolUse(let id, let name, let input):
+                let argsString = String(data: input, encoding: .utf8) ?? "{}"
+                toolUses.append([
+                    "id": id,
+                    "type": "function",
+                    "function": [
+                        "name": name,
+                        "arguments": argsString,
+                    ] as [String: any Sendable],
+                ])
+            case .toolResult(let callId, _, let content, _):
+                toolResults.append((callId: callId, content: content))
+            case .image, .audio, .video:
+                break
+            }
+        }
+
+        if message.role == .assistant {
+            if !toolUses.isEmpty {
+                var msg: [String: any Sendable] = [
+                    "role": "assistant",
+                    "tool_calls": toolUses,
+                ]
+                if !textContent.isEmpty {
+                    msg["content"] = textContent
+                }
+                result.append(msg)
+            } else if !textContent.isEmpty {
+                result.append(["role": "assistant", "content": textContent])
+            }
+        } else {
+            // User role
+            for tr in toolResults {
+                result.append([
+                    "role": "tool",
+                    "content": tr.content,
+                    "tool_call_id": tr.callId,
+                ])
+            }
+            if !textContent.isEmpty {
+                result.append(["role": "user", "content": textContent])
+            }
+        }
+
+        return result
     }
 }

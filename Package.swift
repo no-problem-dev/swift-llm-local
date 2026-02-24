@@ -17,7 +17,7 @@ let package = Package(
     ],
     dependencies: [
         // Canonical LLM types (ToolDefinition, ToolCall, JSONSchema)
-        .package(url: "https://github.com/no-problem-dev/swift-llm-client.git", from: "1.1.0"),
+        .package(path: "../swift-llm-client"),
         // MLX LLM inference
         .package(url: "https://github.com/ml-explore/mlx-swift-lm", from: "2.30.0"),
         // Documentation generation
