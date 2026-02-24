@@ -1,5 +1,6 @@
 import Foundation
 import LLMLocalClient
+import LLMTool
 import MLX
 import MLXLLM
 @preconcurrency import MLXLMCommon
@@ -299,7 +300,7 @@ public actor MLXBackend: LLMLocalBackend {
                 case .chunk(let text):
                     continuation.yield(.text(text))
                 case .toolCall(let toolCall):
-                    continuation.yield(.toolCall(ToolCallRequest(from: toolCall)))
+                    continuation.yield(.toolCall(LLMTool.ToolCall(from: toolCall)))
                 case .info:
                     break
                 }

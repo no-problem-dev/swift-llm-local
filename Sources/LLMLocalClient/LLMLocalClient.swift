@@ -1,4 +1,4 @@
-// LLMLocalClient - Protocol + shared types (no external dependencies)
+// LLMLocalClient - Protocol + shared types
 //
 // Public API:
 // - LLMLocalBackend (protocol)
@@ -9,3 +9,9 @@
 // - GenerationConfig (struct)
 // - GenerationStats (struct)
 // - LLMLocalError (enum)
+// - ToolDefinition (re-exported from LLMTool)
+// - ToolCall (re-exported from LLMTool)
+// - JSONSchema (re-exported from LLMClient)
+
+@_exported import LLMClient
+@_exported import LLMTool

@@ -108,7 +108,7 @@ final class ChatState {
 
                 // Consume stream
                 streamingContent = ""
-                var pendingToolCalls: [ToolCallRequest] = []
+                var pendingToolCalls: [ToolCall] = []
 
                 for try await output in stream {
                     switch output {
@@ -143,36 +143,37 @@ final class ChatState {
 
                 // Execute each tool call
                 var toolResultsPrompt = ""
-                for request in pendingToolCalls {
+                for call in pendingToolCalls {
+                    let argsJSON = String(data: call.arguments, encoding: .utf8) ?? "{}"
                     messages.append(ChatMessage(
                         role: .toolCall,
-                        content: request.argumentsJSON,
-                        toolName: request.name
+                        content: argsJSON,
+                        toolName: call.name
                     ))
 
                     isExecutingTool = true
-                    executingToolName = request.name
+                    executingToolName = call.name
 
                     let result: String
-                    if let tool = toolState.tool(named: request.name) {
+                    if let tool = toolState.tool(named: call.name) {
                         do {
-                            result = try await tool.execute(arguments: request.argumentsJSON)
+                            result = try await tool.execute(arguments: argsJSON)
                         } catch {
                             result = "Error: \(error.localizedDescription)"
                         }
                     } else {
-                        result = "Error: Unknown tool '\(request.name)'"
+                        result = "Error: Unknown tool '\(call.name)'"
                     }
 
                     messages.append(ChatMessage(
                         role: .toolResult,
                         content: result,
-                        toolName: request.name
+                        toolName: call.name
                     ))
 
                     toolResultsPrompt += """
                     <tool_response>
-                    {"name": "\(request.name)", "content": "\(result.replacingOccurrences(of: "\"", with: "\\\""))"}
+                    {"name": "\(call.name)", "content": "\(result.replacingOccurrences(of: "\"", with: "\\\""))"}
                     </tool_response>
 
                     """

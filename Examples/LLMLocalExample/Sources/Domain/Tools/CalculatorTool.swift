@@ -8,9 +8,12 @@ struct CalculatorTool: LocalTool {
     let definition = ToolDefinition(
         name: "calculator",
         description: "Evaluate a mathematical expression. Supports +, -, *, / and parentheses.",
-        parameters: [
-            .required("expression", type: .string, description: "The mathematical expression to evaluate, e.g. '(2+3)*4'")
-        ]
+        inputSchema: .object(
+            properties: [
+                "expression": .string(description: "The mathematical expression to evaluate, e.g. '(2+3)*4'"),
+            ],
+            required: ["expression"]
+        )
     )
 
     func execute(arguments: String) async throws -> String {

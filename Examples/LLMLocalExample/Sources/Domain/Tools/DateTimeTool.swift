@@ -8,10 +8,12 @@ struct DateTimeTool: LocalTool {
     let definition = ToolDefinition(
         name: "date_time",
         description: "Get the current date and time. Useful when the user asks about today's date or current time.",
-        parameters: [
-            .optional("format", type: .string, description: "Output format: 'iso8601', 'readable', 'date_only', 'time_only'. Defaults to 'readable'."),
-            .optional("timezone", type: .string, description: "Timezone identifier, e.g. 'Asia/Tokyo', 'UTC'. Defaults to the device timezone.")
-        ]
+        inputSchema: .object(
+            properties: [
+                "format": .string(description: "Output format: 'iso8601', 'readable', 'date_only', 'time_only'. Defaults to 'readable'."),
+                "timezone": .string(description: "Timezone identifier, e.g. 'Asia/Tokyo', 'UTC'. Defaults to the device timezone."),
+            ]
+        )
     )
 
     func execute(arguments: String) async throws -> String {

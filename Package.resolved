@@ -1,5 +1,5 @@
 {
-  "originHash" : "7f26b2cad2a7afcab614406d573b1f73e7f1674982297f626377de59d4a3fcd4",
+  "originHash" : "35048faf2e3c104749fced7cc00d97384affaf2d30c59d05b2588b6baaa34497",
   "pins" : [
     {
       "identity" : "mlx-swift",
@@ -56,12 +56,30 @@
       }
     },
     {
+      "identity" : "swift-llm-client",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/no-problem-dev/swift-llm-client.git",
+      "state" : {
+        "revision" : "b7d92b3d3fa68d291f63c30252c03ebca1ef67e5",
+        "version" : "1.1.0"
+      }
+    },
+    {
       "identity" : "swift-numerics",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-numerics",
       "state" : {
         "revision" : "0c0290ff6b24942dadb83a929ffaaa1481df04a2",
         "version" : "1.1.1"
+      }
+    },
+    {
+      "identity" : "swift-syntax",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-syntax.git",
+      "state" : {
+        "revision" : "4799286537280063c85a32f09884cfbca301b1a1",
+        "version" : "602.0.0"
       }
     },
     {

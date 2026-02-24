@@ -33,10 +33,13 @@ struct LLMLocalServiceToolTests {
         ToolDefinition(
             name: "get_weather",
             description: "Get the current weather",
-            parameters: [
-                .required("location", type: .string, description: "The city name"),
-                .optional("unit", type: .string, description: "Temperature unit"),
-            ]
+            inputSchema: .object(
+                properties: [
+                    "location": .string(description: "The city name"),
+                    "unit": .string(description: "Temperature unit"),
+                ],
+                required: ["location"]
+            )
         )
     ]
 
@@ -76,9 +79,10 @@ struct LLMLocalServiceToolTests {
         let dir = try Self.makeTempDir()
         defer { Self.removeTempDir(dir) }
         let backend = MockBackend()
-        let toolCall = ToolCallRequest(
+        let toolCall = ToolCall(
+            id: "test-id",
             name: "get_weather",
-            argumentsJSON: "{\"location\":\"Tokyo\"}"
+            arguments: Data("{\"location\":\"Tokyo\"}".utf8)
         )
         await backend.setMockToolOutputs([
             .text("Let me check"),
@@ -103,12 +107,12 @@ struct LLMLocalServiceToolTests {
             return
         }
         #expect(text == "Let me check")
-        guard case .toolCall(let request) = outputs[1] else {
+        guard case .toolCall(let call) = outputs[1] else {
             Issue.record("Expected .toolCall")
             return
         }
-        #expect(request.name == "get_weather")
-        #expect(request.argumentsJSON == "{\"location\":\"Tokyo\"}")
+        #expect(call.name == "get_weather")
+        #expect(String(data: call.arguments, encoding: .utf8) == "{\"location\":\"Tokyo\"}")
     }
 
     // MARK: - Tool definitions passed to backend
@@ -163,9 +167,10 @@ struct LLMLocalServiceToolTests {
         let dir = try Self.makeTempDir()
         defer { Self.removeTempDir(dir) }
         let backend = MockBackend()
-        let toolCall = ToolCallRequest(
+        let toolCall = ToolCall(
+            id: "test-id",
             name: "get_weather",
-            argumentsJSON: "{}"
+            arguments: Data("{}".utf8)
         )
         await backend.setMockToolOutputs([
             .text("a"),

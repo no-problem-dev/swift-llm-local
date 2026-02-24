@@ -16,16 +16,21 @@ let package = Package(
         .library(name: "LLMLocalMLX", targets: ["LLMLocalMLX"]),
     ],
     dependencies: [
+        // Canonical LLM types (ToolDefinition, ToolCall, JSONSchema)
+        .package(url: "https://github.com/no-problem-dev/swift-llm-client.git", from: "1.1.0"),
         // MLX LLM inference
         .package(url: "https://github.com/ml-explore/mlx-swift-lm", from: "2.30.0"),
         // Documentation generation
         .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.4.0"),
     ],
     targets: [
-        // MARK: - Layer 0: Protocol + shared types (no external dependencies)
+        // MARK: - Layer 0: Protocol + shared types
         .target(
             name: "LLMLocalClient",
-            dependencies: []
+            dependencies: [
+                .product(name: "LLMClient", package: "swift-llm-client"),
+                .product(name: "LLMTool", package: "swift-llm-client"),
+            ]
         ),
 
         // MARK: - Layer 1: Model management

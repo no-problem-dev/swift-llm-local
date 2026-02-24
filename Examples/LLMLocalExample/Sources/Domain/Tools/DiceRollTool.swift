@@ -8,9 +8,12 @@ struct DiceRollTool: LocalTool {
     let definition = ToolDefinition(
         name: "dice_roll",
         description: "Roll dice using standard notation. For example '2d6' rolls two six-sided dice.",
-        parameters: [
-            .required("notation", type: .string, description: "Dice notation in NdS format, e.g. '1d6', '2d20', '3d8'")
-        ]
+        inputSchema: .object(
+            properties: [
+                "notation": .string(description: "Dice notation in NdS format, e.g. '1d6', '2d20', '3d8'"),
+            ],
+            required: ["notation"]
+        )
     )
 
     func execute(arguments: String) async throws -> String {
