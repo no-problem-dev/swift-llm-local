@@ -12,7 +12,8 @@ private func sampleSpec(
     adapter: AdapterSource? = nil,
     contextLength: Int = 4096,
     displayName: String = "Test Model",
-    description: String = "A test model for unit tests"
+    description: String = "A test model for unit tests",
+    estimatedMemoryBytes: UInt64 = 4_500_000_000
 ) -> ModelSpec {
     ModelSpec(
         id: id,
@@ -20,7 +21,8 @@ private func sampleSpec(
         adapter: adapter,
         contextLength: contextLength,
         displayName: displayName,
-        description: description
+        description: description,
+        estimatedMemoryBytes: estimatedMemoryBytes
     )
 }
 

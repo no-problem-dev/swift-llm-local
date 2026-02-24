@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import LLMLocalClient
 @testable import LLMLocalMLX
 
 // MARK: - Mock Memory Provider
@@ -285,5 +286,108 @@ struct MemoryMonitorNotificationTests {
 
         // Cleanup
         await monitor.stopMonitoring()
+    }
+}
+
+// MARK: - Total Memory Tests
+
+@Suite("MemoryMonitor totalMemory")
+struct MemoryMonitorTotalMemoryTests {
+
+    @Test("totalMemory returns provider value")
+    func totalMemoryReturnsProviderValue() async {
+        // Arrange
+        let expectedTotal: UInt64 = 16 * 1024 * 1024 * 1024
+        let provider = MockMemoryProvider(
+            totalMemory: expectedTotal,
+            availableMemory: 8 * 1024 * 1024 * 1024
+        )
+        let monitor = MemoryMonitor(memoryProvider: provider)
+
+        // Act
+        let total = await monitor.totalMemory()
+
+        // Assert
+        #expect(total == expectedTotal)
+    }
+}
+
+// MARK: - Model Compatibility Tests
+
+@Suite("MemoryMonitor isModelCompatible")
+struct MemoryMonitorModelCompatibilityTests {
+
+    @Test("isModelCompatible returns true when model fits in 80 percent")
+    func isModelCompatibleReturnsTrueWhenModelFits() async {
+        // Arrange: 16 GB device, 80% = 12.8 GB
+        let provider = MockMemoryProvider(
+            totalMemory: 16 * 1024 * 1024 * 1024,
+            availableMemory: 8 * 1024 * 1024 * 1024
+        )
+        let monitor = MemoryMonitor(memoryProvider: provider)
+
+        let spec = ModelSpec(
+            id: "small-model",
+            base: .huggingFace(id: "mlx-community/small-model"),
+            contextLength: 4096,
+            displayName: "Small Model",
+            description: "A small model",
+            estimatedMemoryBytes: 4_500_000_000
+        )
+
+        // Act
+        let compatible = await monitor.isModelCompatible(spec)
+
+        // Assert
+        #expect(compatible == true)
+    }
+
+    @Test("isModelCompatible returns false when model exceeds 80 percent")
+    func isModelCompatibleReturnsFalseWhenModelExceeds() async {
+        // Arrange: 8 GB device, 80% = 6.4 GB
+        let provider = MockMemoryProvider(
+            totalMemory: 8 * 1024 * 1024 * 1024,
+            availableMemory: 4 * 1024 * 1024 * 1024
+        )
+        let monitor = MemoryMonitor(memoryProvider: provider)
+
+        let spec = ModelSpec(
+            id: "large-model",
+            base: .huggingFace(id: "mlx-community/large-model"),
+            contextLength: 4096,
+            displayName: "Large Model",
+            description: "A large model",
+            estimatedMemoryBytes: 15_000_000_000
+        )
+
+        // Act
+        let compatible = await monitor.isModelCompatible(spec)
+
+        // Assert
+        #expect(compatible == false)
+    }
+}
+
+// MARK: - Max Allowed Model Memory Tests
+
+@Suite("MemoryMonitor maxAllowedModelMemory")
+struct MemoryMonitorMaxAllowedModelMemoryTests {
+
+    @Test("maxAllowedModelMemory returns 80 percent of total")
+    func maxAllowedModelMemoryReturns80Percent() async {
+        // Arrange
+        let totalMem: UInt64 = 16 * 1024 * 1024 * 1024
+        let provider = MockMemoryProvider(
+            totalMemory: totalMem,
+            availableMemory: 8 * 1024 * 1024 * 1024
+        )
+        let monitor = MemoryMonitor(memoryProvider: provider)
+
+        // Act
+        let maxMemory = await monitor.maxAllowedModelMemory()
+
+        // Assert
+        let expected = UInt64(Double(totalMem) * 0.8)
+        #expect(maxMemory == expected)
     }
 }

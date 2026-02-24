@@ -1,4 +1,5 @@
 import Foundation
+import LLMLocalClient
 
 /// メモリ情報を提供するプロトコル
 ///
@@ -130,11 +131,36 @@ public actor MemoryMonitor {
         }
     }
 
+    /// デバイスの物理メモリ総量をバイト単位で返します。
+    ///
+    /// - Returns: デバイスの物理メモリ総量のバイト数。
+    public func totalMemory() -> UInt64 {
+        memoryProvider.totalMemoryBytes()
+    }
+
     /// 現在利用可能なメモリをバイト単位で返します。
     ///
     /// - Returns: プロセスが現在利用可能なメモリのバイト数。
     public func availableMemory() -> UInt64 {
         memoryProvider.availableMemoryBytes()
+    }
+
+    /// 指定されたモデルがこのデバイスで実行可能かを判定します。
+    ///
+    /// 判定基準: モデルの推定メモリ使用量 ≤ デバイス総メモリ × 0.8
+    ///
+    /// - Parameter spec: 確認するモデル仕様。
+    /// - Returns: モデルが実行可能な場合は `true`。
+    public func isModelCompatible(_ spec: ModelSpec) -> Bool {
+        Double(spec.estimatedMemoryBytes) <= Double(memoryProvider.totalMemoryBytes()) * 0.8
+    }
+
+    /// デバイスで実行可能なモデルの最大メモリ量をバイト単位で返します。
+    ///
+    /// デバイス総メモリの 80% を上限とします。
+    /// - Returns: 最大許容メモリ量のバイト数。
+    public func maxAllowedModelMemory() -> UInt64 {
+        UInt64(Double(memoryProvider.totalMemoryBytes()) * 0.8)
     }
 
     /// メモリ警告の監視を開始します。

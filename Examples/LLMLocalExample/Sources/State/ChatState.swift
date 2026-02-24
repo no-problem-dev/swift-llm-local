@@ -6,15 +6,27 @@ import LLMLocal
 final class ChatState {
     private let service: LLMLocalService
 
+    /// 生成の状態を表す enum（boolean フラグの代替）
+    enum GenerationPhase: Equatable {
+        /// 何もしていない
+        case idle
+        /// モデルをロード中
+        case loadingModel
+        /// テキスト生成中
+        case generating
+        /// ツール実行中
+        case executingTool(name: String)
+    }
+
     var messages: [ChatMessage] = []
     var inputText: String = ""
-    var isGenerating: Bool = false
-    var isLoadingModel: Bool = false
-    var isExecutingTool: Bool = false
-    var executingToolName: String?
+    var phase: GenerationPhase = .idle
     var streamingContent: String = ""
     var error: String?
     var lastStats: GenerationStats?
+
+    /// 生成中かどうか（idle 以外）
+    var isActive: Bool { phase != .idle }
 
     private var generationTask: Task<Void, Never>?
 
@@ -30,8 +42,7 @@ final class ChatState {
 
         messages.append(ChatMessage(role: .user, content: prompt))
 
-        isGenerating = true
-        isLoadingModel = true
+        phase = .loadingModel
         streamingContent = ""
 
         let enabledTools = toolState.enabledTools
@@ -49,10 +60,7 @@ final class ChatState {
                     toolState: toolState
                 )
             }
-            isGenerating = false
-            isLoadingModel = false
-            isExecutingTool = false
-            executingToolName = nil
+            phase = .idle
         }
     }
 
@@ -65,7 +73,7 @@ final class ChatState {
                 prompt: prompt,
                 config: config
             )
-            isLoadingModel = false
+            phase = .generating
             for try await token in stream {
                 streamingContent += token
             }
@@ -103,7 +111,7 @@ final class ChatState {
                     config: config
                 )
                 if turn == 0 {
-                    isLoadingModel = false
+                    phase = .generating
                 }
 
                 // Consume stream
@@ -151,8 +159,7 @@ final class ChatState {
                         toolName: call.name
                     ))
 
-                    isExecutingTool = true
-                    executingToolName = call.name
+                    phase = .executingTool(name: call.name)
 
                     let result: String
                     if let tool = toolState.tool(named: call.name) {
@@ -179,8 +186,7 @@ final class ChatState {
                     """
                 }
 
-                isExecutingTool = false
-                executingToolName = nil
+                phase = .generating
 
                 // Continue loop with tool results as next prompt
                 currentPrompt = toolResultsPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -225,10 +231,7 @@ final class ChatState {
             ))
             streamingContent = ""
         }
-        isGenerating = false
-        isLoadingModel = false
-        isExecutingTool = false
-        executingToolName = nil
+        phase = .idle
     }
 
     func startMemoryMonitoring() async {

@@ -75,7 +75,7 @@ struct Phase3IntegrationTests {
         let backend = MLXBackend()
         let switcher = ModelSwitcher(backend: backend, maxLoadedModels: 1)
 
-        let model1 = ModelPresets.gemma2B
+        let model1 = ModelPresets.gemma2_2B
 
         // Act: Load first model
         try await switcher.ensureLoaded(model1)
@@ -105,7 +105,7 @@ struct Phase3IntegrationTests {
         // Act
         var tokens: [String] = []
         let stream = await service.generate(
-            model: ModelPresets.gemma2B,
+            model: ModelPresets.gemma2_2B,
             prompt: "Hello",
             config: config
         )
@@ -116,7 +116,7 @@ struct Phase3IntegrationTests {
         // Assert
         #expect(!tokens.isEmpty, "Should produce tokens")
         let loadedSpecs = await switcher.loadedModelSpecs()
-        #expect(loadedSpecs.contains(ModelPresets.gemma2B))
+        #expect(loadedSpecs.contains(ModelPresets.gemma2_2B))
     }
 
     // MARK: - Test 5: Phase 1-2 Regression Check
@@ -138,7 +138,7 @@ struct Phase3IntegrationTests {
         // Act
         var tokens: [String] = []
         let stream = await service.generate(
-            model: ModelPresets.gemma2B,
+            model: ModelPresets.gemma2_2B,
             prompt: "What is Swift?",
             config: config
         )

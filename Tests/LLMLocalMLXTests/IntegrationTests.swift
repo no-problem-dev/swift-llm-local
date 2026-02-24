@@ -35,7 +35,7 @@ struct IntegrationTests {
         // Generate tokens
         var receivedTokens: [String] = []
         let stream = await service.generate(
-            model: ModelPresets.gemma2B,
+            model: ModelPresets.gemma2_2B,
             prompt: prompt,
             config: config
         )
@@ -74,7 +74,8 @@ struct IntegrationTests {
             adapter: nil,
             contextLength: 2048,
             displayName: "Invalid Model",
-            description: "This model does not exist"
+            description: "This model does not exist",
+            estimatedMemoryBytes: 4_500_000_000
         )
 
         let config = GenerationConfig(maxTokens: 10)
@@ -117,7 +118,7 @@ struct IntegrationTests {
         let task = Task {
             var tokenCount = 0
             let stream = await service.generate(
-                model: ModelPresets.gemma2B,
+                model: ModelPresets.gemma2_2B,
                 prompt: prompt,
                 config: config
             )
@@ -168,7 +169,7 @@ struct IntegrationTests {
         // First generation
         var firstTokens: [String] = []
         let stream1 = await service.generate(
-            model: ModelPresets.gemma2B,
+            model: ModelPresets.gemma2_2B,
             prompt: prompt1,
             config: config
         )
@@ -182,7 +183,7 @@ struct IntegrationTests {
         // Second generation (without unloading)
         var secondTokens: [String] = []
         let stream2 = await service.generate(
-            model: ModelPresets.gemma2B,
+            model: ModelPresets.gemma2_2B,
             prompt: prompt2,
             config: config
         )
@@ -214,7 +215,7 @@ struct IntegrationTests {
         // Generate
         var tokenCount = 0
         let stream = await service.generate(
-            model: ModelPresets.gemma2B,
+            model: ModelPresets.gemma2_2B,
             prompt: prompt,
             config: config
         )

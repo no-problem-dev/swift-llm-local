@@ -31,7 +31,8 @@ struct LLMLocalServiceTests {
             base: .huggingFace(id: "mlx-community/\(id)"),
             contextLength: 4096,
             displayName: displayName,
-            description: "Test model"
+            description: "Test model",
+            estimatedMemoryBytes: 4_500_000_000
         )
     }
 

@@ -1,4 +1,5 @@
 import Foundation
+import LLMClient
 import LLMLocalClient
 import LLMTool
 import MLX
@@ -168,8 +169,8 @@ public actor MLXBackend: LLMLocalBackend {
         prompt: String,
         config: GenerationConfig
     ) -> AsyncThrowingStream<String, Error> {
-        AsyncThrowingStream { continuation in
-            Task { [weak self] in
+        makeCancellableStream { [weak self] continuation in
+            Task {
                 guard let self else {
                     continuation.finish(throwing: LLMLocalError.modelNotLoaded)
                     return
@@ -188,8 +189,8 @@ public actor MLXBackend: LLMLocalBackend {
         config: GenerationConfig,
         tools: [ToolDefinition]
     ) -> AsyncThrowingStream<GenerationOutput, Error> {
-        AsyncThrowingStream { continuation in
-            Task { [weak self] in
+        makeCancellableStream { [weak self] continuation in
+            Task {
                 guard let self else {
                     continuation.finish(throwing: LLMLocalError.modelNotLoaded)
                     return
@@ -232,8 +233,8 @@ public actor MLXBackend: LLMLocalBackend {
         config: GenerationConfig,
         tools: [ToolDefinition]
     ) -> AsyncThrowingStream<GenerationOutput, Error> {
-        AsyncThrowingStream { continuation in
-            Task { [weak self] in
+        makeCancellableStream { [weak self] continuation in
+            Task {
                 guard let self else {
                     continuation.finish(throwing: LLMLocalError.modelNotLoaded)
                     return

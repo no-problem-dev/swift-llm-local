@@ -13,7 +13,8 @@ struct ReExportTests {
             base: .huggingFace(id: "test/model"),
             contextLength: 4096,
             displayName: "Test",
-            description: "Test model"
+            description: "Test model",
+            estimatedMemoryBytes: 4_500_000_000
         )
         #expect(spec.id == "test")
 
@@ -53,7 +54,7 @@ struct ReExportTests {
         #expect(serviceType == LLMLocalService.self)
 
         // ModelPresets
-        let preset = ModelPresets.gemma2B
+        let preset = ModelPresets.gemma2_2B
         #expect(!preset.id.isEmpty)
     }
 }

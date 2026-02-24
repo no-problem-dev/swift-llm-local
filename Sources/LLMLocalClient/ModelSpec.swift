@@ -20,6 +20,12 @@ public struct ModelSpec: Sendable, Hashable, Codable {
     /// モデルの人間可読な説明文。
     public let description: String
 
+    /// モデルの推定メモリ使用量（バイト単位）。
+    ///
+    /// 量子化後の推論時に必要なおおよそのメモリ量を示します。
+    /// KV キャッシュやランタイムオーバーヘッドを含む概算値です。
+    public let estimatedMemoryBytes: UInt64
+
     /// 新しいモデル仕様を作成します。
     /// - Parameters:
     ///   - id: このモデル仕様の一意識別子。
@@ -28,13 +34,15 @@ public struct ModelSpec: Sendable, Hashable, Codable {
     ///   - contextLength: トークン単位の最大コンテキスト長。
     ///   - displayName: 人間可読な表示名。
     ///   - description: モデルの人間可読な説明文。
+    ///   - estimatedMemoryBytes: 推定メモリ使用量（バイト単位）。
     public init(
         id: String,
         base: ModelSource,
         adapter: AdapterSource? = nil,
         contextLength: Int,
         displayName: String,
-        description: String
+        description: String,
+        estimatedMemoryBytes: UInt64
     ) {
         self.id = id
         self.base = base
@@ -42,5 +50,15 @@ public struct ModelSpec: Sendable, Hashable, Codable {
         self.contextLength = contextLength
         self.displayName = displayName
         self.description = description
+        self.estimatedMemoryBytes = estimatedMemoryBytes
+    }
+}
+
+extension ModelSpec {
+    /// 推定メモリ使用量を人間可読な文字列で返します（例: "2.3 GB"）。
+    public var formattedMemorySize: String {
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .memory
+        return formatter.string(fromByteCount: Int64(estimatedMemoryBytes))
     }
 }

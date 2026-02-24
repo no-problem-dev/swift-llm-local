@@ -61,7 +61,8 @@ private func adapterSpec(
     adapter: AdapterSource? = .local(path: URL(filePath: "/tmp/adapters/lora")),
     contextLength: Int = 4096,
     displayName: String = "Adapter Test Model",
-    description: String = "A test model with adapter"
+    description: String = "A test model with adapter",
+    estimatedMemoryBytes: UInt64 = 4_500_000_000
 ) -> ModelSpec {
     ModelSpec(
         id: id,
@@ -69,7 +70,8 @@ private func adapterSpec(
         adapter: adapter,
         contextLength: contextLength,
         displayName: displayName,
-        description: description
+        description: description,
+        estimatedMemoryBytes: estimatedMemoryBytes
     )
 }
 

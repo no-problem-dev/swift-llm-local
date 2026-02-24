@@ -27,7 +27,7 @@ struct ChatView: View {
                 }
                 InputBar(
                     text: Bindable(chatState).inputText,
-                    isGenerating: chatState.isGenerating || !isModelReady,
+                    isGenerating: chatState.isActive || !isModelReady,
                     onSend: sendMessage,
                     onCancel: { chatState.cancelGeneration() }
                 )
@@ -52,7 +52,7 @@ struct ChatView: View {
                     Button("クリア", systemImage: "trash") {
                         chatState.clearMessages()
                     }
-                    .disabled(chatState.messages.isEmpty && !chatState.isGenerating)
+                    .disabled(chatState.messages.isEmpty && !chatState.isActive)
                 }
             }
         }
@@ -64,7 +64,7 @@ struct ChatView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: spacing.sm) {
-                    if chatState.messages.isEmpty && !chatState.isGenerating {
+                    if chatState.messages.isEmpty && !chatState.isActive {
                         emptyState
                     }
                     ForEach(chatState.messages) { message in
@@ -97,10 +97,11 @@ struct ChatView: View {
 
     @ViewBuilder
     private var streamingBubble: some View {
-        if chatState.isGenerating {
+        if chatState.isActive {
             HStack {
                 VStack(alignment: .leading, spacing: spacing.xs) {
-                    if chatState.isLoadingModel {
+                    switch chatState.phase {
+                    case .loadingModel:
                         HStack(spacing: spacing.xs) {
                             ProgressView()
                                 .controlSize(.small)
@@ -108,26 +109,20 @@ struct ChatView: View {
                                 .typography(.bodyMedium)
                                 .foregroundStyle(colors.onSurfaceVariant)
                         }
-                    } else if chatState.isExecutingTool {
+                    case .executingTool(let name):
                         HStack(spacing: spacing.xs) {
                             ProgressView()
                                 .controlSize(.small)
-                            if let name = chatState.executingToolName {
-                                Text("ツール実行中: \(name)")
-                                    .typography(.bodyMedium)
-                                    .foregroundStyle(colors.onSurfaceVariant)
-                            } else {
-                                Text("ツール実行中...")
-                                    .typography(.bodyMedium)
-                                    .foregroundStyle(colors.onSurfaceVariant)
-                            }
+                            Text("ツール実行中: \(name)")
+                                .typography(.bodyMedium)
+                                .foregroundStyle(colors.onSurfaceVariant)
                         }
-                    } else if !chatState.streamingContent.isEmpty {
+                    case .generating where !chatState.streamingContent.isEmpty:
                         StreamingResponseView(
                             content: chatState.streamingContent,
                             isStreaming: true
                         )
-                    } else {
+                    default:
                         HStack(spacing: spacing.xs) {
                             ProgressView()
                                 .controlSize(.small)

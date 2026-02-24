@@ -63,7 +63,8 @@ private func makeSpec(
         base: .huggingFace(id: "mlx-community/\(id)"),
         contextLength: 4096,
         displayName: displayName,
-        description: "Test model for ModelSwitcher"
+        description: "Test model for ModelSwitcher",
+        estimatedMemoryBytes: 4_500_000_000
     )
 }
 

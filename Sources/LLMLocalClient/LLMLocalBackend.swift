@@ -1,3 +1,4 @@
+import LLMClient
 import LLMTool
 
 /// ローカルLLM推論バックエンドの抽象化プロトコル
@@ -113,10 +114,11 @@ extension LLMLocalBackend {
         tools: [ToolDefinition]
     ) -> AsyncThrowingStream<GenerationOutput, Error> {
         let stream = generate(prompt: prompt, config: config)
-        return AsyncThrowingStream { continuation in
+        return makeCancellableStream { continuation in
             Task {
                 do {
                     for try await token in stream {
+                        try Task.checkCancellation()
                         continuation.yield(.text(token))
                     }
                     continuation.finish()

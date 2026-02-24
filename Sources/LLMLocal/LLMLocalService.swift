@@ -1,3 +1,4 @@
+import LLMClient
 import LLMLocalClient
 import LLMLocalMLX
 import LLMLocalModels
@@ -21,7 +22,7 @@ import LLMLocalModels
 /// await service.startMemoryMonitoring()
 ///
 /// let stream = await service.generate(
-///     model: ModelPresets.gemma2B,
+///     model: ModelPresets.gemma2_2B,
 ///     prompt: "What is Swift?"
 /// )
 /// for try await token in stream {
@@ -79,8 +80,8 @@ public actor LLMLocalService {
         let modelSwitcher = self.modelSwitcher
         let startTime = ContinuousClock.now
 
-        return AsyncThrowingStream { continuation in
-            Task { [weak self] in
+        return makeCancellableStream { [weak self] continuation in
+            Task {
                 do {
                     // Load model: use switcher if available, otherwise direct backend
                     if let switcher = modelSwitcher {
@@ -148,8 +149,8 @@ public actor LLMLocalService {
         let modelSwitcher = self.modelSwitcher
         let startTime = ContinuousClock.now
 
-        return AsyncThrowingStream { continuation in
-            Task { [weak self] in
+        return makeCancellableStream { [weak self] continuation in
+            Task {
                 do {
                     // Load model: use switcher if available, otherwise direct backend
                     if let switcher = modelSwitcher {
@@ -222,8 +223,8 @@ public actor LLMLocalService {
         let modelSwitcher = self.modelSwitcher
         let startTime = ContinuousClock.now
 
-        return AsyncThrowingStream { continuation in
-            Task { [weak self] in
+        return makeCancellableStream { [weak self] continuation in
+            Task {
                 do {
                     // Load model: use switcher if available, otherwise direct backend
                     if let switcher = modelSwitcher {
@@ -364,6 +365,42 @@ public actor LLMLocalService {
     public func recommendedContextLength() async -> Int? {
         guard let monitor = memoryMonitor else { return nil }
         return await monitor.recommendedContextLength()
+    }
+
+    /// デバイスの物理メモリ総量をバイト単位で返します。
+    ///
+    /// - Returns: 総メモリ量。メモリモニターが設定されていない場合は `nil`。
+    public func totalMemory() async -> UInt64? {
+        guard let monitor = memoryMonitor else { return nil }
+        return await monitor.totalMemory()
+    }
+
+    /// 現在利用可能なメモリをバイト単位で返します。
+    ///
+    /// - Returns: 利用可能メモリ量。メモリモニターが設定されていない場合は `nil`。
+    public func availableMemory() async -> UInt64? {
+        guard let monitor = memoryMonitor else { return nil }
+        return await monitor.availableMemory()
+    }
+
+    /// 指定されたモデルがこのデバイスで実行可能かを判定します。
+    ///
+    /// 判定基準: モデルの推定メモリ使用量 ≤ デバイス総メモリ × 0.8
+    ///
+    /// - Parameter spec: 確認するモデル仕様。
+    /// - Returns: 実行可能な場合は `true`。メモリモニターが未設定の場合は `nil`。
+    public func isModelCompatible(_ spec: ModelSpec) async -> Bool? {
+        guard let monitor = memoryMonitor else { return nil }
+        return await monitor.isModelCompatible(spec)
+    }
+
+    /// デバイスで実行可能なモデルの最大メモリ量をバイト単位で返します。
+    ///
+    /// デバイス総メモリの 80% を上限とします。
+    /// - Returns: 最大許容メモリ量。メモリモニターが未設定の場合は `nil`。
+    public func maxAllowedModelMemory() async -> UInt64? {
+        guard let monitor = memoryMonitor else { return nil }
+        return await monitor.maxAllowedModelMemory()
     }
 
     // MARK: - Private

@@ -17,7 +17,7 @@ struct LoadedModelEntry: Sendable {
 ///
 /// ```swift
 /// let switcher = ModelSwitcher(backend: mlxBackend, maxLoadedModels: 2)
-/// try await switcher.ensureLoaded(ModelPresets.gemma2B)
+/// try await switcher.ensureLoaded(ModelPresets.gemma2_2B)
 /// ```
 ///
 /// `maxLoadedModels: 1`（デフォルト）の場合、一度に1つのモデルのみ読み込み可能な

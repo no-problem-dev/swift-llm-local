@@ -25,7 +25,8 @@ struct LLMLocalServiceToolTests {
             base: .huggingFace(id: "mlx-community/test-model-2b"),
             contextLength: 4096,
             displayName: "Test Model 2B",
-            description: "Test model"
+            description: "Test model",
+            estimatedMemoryBytes: 4_500_000_000
         )
     }
 

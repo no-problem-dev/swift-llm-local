@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-@testable import LLMLocalClient
+import LLMLocalClient
 
 // MARK: - ModelSource Tests
 
@@ -154,7 +154,8 @@ struct ModelSpecTests {
         adapter: AdapterSource? = nil,
         contextLength: Int = 4096,
         displayName: String = "Llama 3.2 1B",
-        description: String = "Lightweight model for on-device inference"
+        description: String = "Lightweight model for on-device inference",
+        estimatedMemoryBytes: UInt64 = 4_500_000_000
     ) -> ModelSpec {
         ModelSpec(
             id: id,
@@ -162,7 +163,8 @@ struct ModelSpecTests {
             adapter: adapter,
             contextLength: contextLength,
             displayName: displayName,
-            description: description
+            description: description,
+            estimatedMemoryBytes: estimatedMemoryBytes
         )
     }
 
@@ -177,7 +179,8 @@ struct ModelSpecTests {
             adapter: adapter,
             contextLength: 2048,
             displayName: "Test Model",
-            description: "A test model"
+            description: "A test model",
+            estimatedMemoryBytes: 4_500_000_000
         )
 
         #expect(spec.id == "test-model")
@@ -186,6 +189,7 @@ struct ModelSpecTests {
         #expect(spec.contextLength == 2048)
         #expect(spec.displayName == "Test Model")
         #expect(spec.description == "A test model")
+        #expect(spec.estimatedMemoryBytes == 4_500_000_000)
     }
 
     @Test("initializes with nil adapter by default")
@@ -195,7 +199,8 @@ struct ModelSpecTests {
             base: .huggingFace(id: "mlx-community/test"),
             contextLength: 2048,
             displayName: "Test Model",
-            description: "A test model"
+            description: "A test model",
+            estimatedMemoryBytes: 4_500_000_000
         )
 
         #expect(spec.adapter == nil)
@@ -271,7 +276,8 @@ struct ModelSpecTests {
             adapter: .gitHubRelease(repo: "owner/repo", tag: "v1.0", asset: "adapter.safetensors"),
             contextLength: 4096,
             displayName: "Llama 3.2 1B",
-            description: "Lightweight model"
+            description: "Lightweight model",
+            estimatedMemoryBytes: 4_500_000_000
         )
 
         let encoder = JSONEncoder()
@@ -286,6 +292,7 @@ struct ModelSpecTests {
         #expect(decoded.contextLength == 4096)
         #expect(decoded.displayName == "Llama 3.2 1B")
         #expect(decoded.description == "Lightweight model")
+        #expect(decoded.estimatedMemoryBytes == 4_500_000_000)
     }
 
     @Test("Codable round-trip preserves nil adapter")
@@ -318,6 +325,41 @@ struct ModelSpecTests {
         let decoded = try JSONDecoder().decode(ModelSpec.self, from: data)
 
         #expect(original == decoded)
+    }
+
+    // MARK: - estimatedMemoryBytes
+
+    @Test("Codable round-trip preserves estimatedMemoryBytes")
+    func codableRoundTripPreservesEstimatedMemoryBytes() throws {
+        let original = Self.sampleSpec(estimatedMemoryBytes: 7_000_000_000)
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(ModelSpec.self, from: data)
+
+        #expect(original == decoded)
+        #expect(decoded.estimatedMemoryBytes == 7_000_000_000)
+    }
+
+    // MARK: - formattedMemorySize
+
+    @Test("formattedMemorySize returns human readable string")
+    func formattedMemorySizeReturnsString() {
+        let spec = Self.sampleSpec(estimatedMemoryBytes: 4_500_000_000)
+        let formatted = spec.formattedMemorySize
+        #expect(formatted.contains("GB"))
+    }
+
+    // MARK: - sizeTier
+
+    @Test("sizeTier returns tiny for sub-1GB model")
+    func sizeTierReturnsTiny() {
+        let spec = Self.sampleSpec(estimatedMemoryBytes: 500_000_000)
+        #expect(spec.sizeTier == .tiny)
+    }
+
+    @Test("sizeTier returns medium for 5GB model")
+    func sizeTierReturnsMedium() {
+        let spec = Self.sampleSpec(estimatedMemoryBytes: 5_000_000_000)
+        #expect(spec.sizeTier == .medium)
     }
 
     // MARK: - Sendable
@@ -388,7 +430,8 @@ struct LLMLocalBackendTests {
             base: .huggingFace(id: "mlx-community/test"),
             contextLength: 2048,
             displayName: "Test",
-            description: "Test model"
+            description: "Test model",
+            estimatedMemoryBytes: 4_500_000_000
         )
 
         try await backend.loadModel(spec)
@@ -406,7 +449,8 @@ struct LLMLocalBackendTests {
             base: .huggingFace(id: "mlx-community/test"),
             contextLength: 2048,
             displayName: "Test",
-            description: "Test model"
+            description: "Test model",
+            estimatedMemoryBytes: 4_500_000_000
         )
 
         try await backend.loadModel(spec)
