@@ -38,15 +38,15 @@ struct MockAdapterNetworkDelegate: AdapterNetworkDelegate, Sendable {
     }
 }
 
-@Suite("AdapterManager")
-struct AdapterManagerTests {
+@Suite("AdapterRegistry")
+struct AdapterRegistryTests {
 
     // MARK: - Test Helpers
 
     /// Creates a temporary directory for test isolation.
     private static func makeTempDir() throws -> URL {
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("AdapterManagerTests-\(UUID().uuidString)")
+            .appendingPathComponent("AdapterRegistryTests-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }
@@ -69,7 +69,7 @@ struct AdapterManagerTests {
             )
 
             // Act
-            let key = AdapterManager.cacheKey(for: source)
+            let key = AdapterRegistry.cacheKey(for: source)
 
             // Assert
             #expect(key == "gh--owner--repo--v1.0--adapter.safetensors")
@@ -81,7 +81,7 @@ struct AdapterManagerTests {
             let source = AdapterSource.huggingFace(id: "user/adapter-model")
 
             // Act
-            let key = AdapterManager.cacheKey(for: source)
+            let key = AdapterRegistry.cacheKey(for: source)
 
             // Assert
             #expect(key == "hf--user--adapter-model")
@@ -95,7 +95,7 @@ struct AdapterManagerTests {
             )
 
             // Act
-            let key = AdapterManager.cacheKey(for: source)
+            let key = AdapterRegistry.cacheKey(for: source)
 
             // Assert
             #expect(key == "local--my-adapter")
@@ -110,18 +110,18 @@ struct AdapterManagerTests {
         @Test("returns local path directly when file exists")
         func returnsLocalPathDirectly() async throws {
             // Arrange
-            let dir = try AdapterManagerTests.makeTempDir()
-            defer { AdapterManagerTests.removeTempDir(dir) }
+            let dir = try AdapterRegistryTests.makeTempDir()
+            defer { AdapterRegistryTests.removeTempDir(dir) }
             let localFile = dir.appendingPathComponent("local-adapter.safetensors")
             try Data("local-adapter-data".utf8).write(to: localFile)
             let source = AdapterSource.local(path: localFile)
-            let manager = AdapterManager(
+            let registry = AdapterRegistry(
                 adapterDirectory: dir,
                 networkDelegate: MockAdapterNetworkDelegate()
             )
 
             // Act
-            let result = try await manager.resolve(source)
+            let result = try await registry.resolve(source)
 
             // Assert
             #expect(result == localFile)
@@ -130,59 +130,59 @@ struct AdapterManagerTests {
         @Test("throws when local adapter file not found")
         func throwsWhenLocalNotFound() async throws {
             // Arrange
-            let dir = try AdapterManagerTests.makeTempDir()
-            defer { AdapterManagerTests.removeTempDir(dir) }
+            let dir = try AdapterRegistryTests.makeTempDir()
+            defer { AdapterRegistryTests.removeTempDir(dir) }
             let nonExistentFile = dir.appendingPathComponent("non-existent.safetensors")
             let source = AdapterSource.local(path: nonExistentFile)
-            let manager = AdapterManager(
+            let registry = AdapterRegistry(
                 adapterDirectory: dir,
                 networkDelegate: MockAdapterNetworkDelegate()
             )
 
             // Act & Assert
             await #expect(throws: LLMLocalError.self) {
-                try await manager.resolve(source)
+                try await registry.resolve(source)
             }
         }
 
         @Test("downloads and caches GitHub Release adapter")
         func downloadsAndCachesGitHubRelease() async throws {
             // Arrange
-            let dir = try AdapterManagerTests.makeTempDir()
-            defer { AdapterManagerTests.removeTempDir(dir) }
+            let dir = try AdapterRegistryTests.makeTempDir()
+            defer { AdapterRegistryTests.removeTempDir(dir) }
             let source = AdapterSource.gitHubRelease(
                 repo: "owner/repo", tag: "v1.0", asset: "adapter.safetensors"
             )
-            let manager = AdapterManager(
+            let registry = AdapterRegistry(
                 adapterDirectory: dir,
                 networkDelegate: MockAdapterNetworkDelegate()
             )
 
             // Act
-            let result = try await manager.resolve(source)
+            let result = try await registry.resolve(source)
 
             // Assert
             #expect(FileManager.default.fileExists(atPath: result.path()))
-            let isCached = await manager.isCached(source)
+            let isCached = await registry.isCached(source)
             #expect(isCached == true)
         }
 
         @Test("returns cached path on second resolve without re-download")
         func returnsCachedOnSecondResolve() async throws {
             // Arrange
-            let dir = try AdapterManagerTests.makeTempDir()
-            defer { AdapterManagerTests.removeTempDir(dir) }
+            let dir = try AdapterRegistryTests.makeTempDir()
+            defer { AdapterRegistryTests.removeTempDir(dir) }
             let source = AdapterSource.gitHubRelease(
                 repo: "owner/repo", tag: "v1.0", asset: "adapter.safetensors"
             )
-            let manager = AdapterManager(
+            let registry = AdapterRegistry(
                 adapterDirectory: dir,
                 networkDelegate: MockAdapterNetworkDelegate()
             )
 
             // Act
-            let firstResult = try await manager.resolve(source)
-            let secondResult = try await manager.resolve(source)
+            let firstResult = try await registry.resolve(source)
+            let secondResult = try await registry.resolve(source)
 
             // Assert
             #expect(firstResult == secondResult)
@@ -191,39 +191,39 @@ struct AdapterManagerTests {
         @Test("downloads and caches HuggingFace adapter")
         func downloadsAndCachesHuggingFace() async throws {
             // Arrange
-            let dir = try AdapterManagerTests.makeTempDir()
-            defer { AdapterManagerTests.removeTempDir(dir) }
+            let dir = try AdapterRegistryTests.makeTempDir()
+            defer { AdapterRegistryTests.removeTempDir(dir) }
             let source = AdapterSource.huggingFace(id: "user/adapter-model")
-            let manager = AdapterManager(
+            let registry = AdapterRegistry(
                 adapterDirectory: dir,
                 networkDelegate: MockAdapterNetworkDelegate()
             )
 
             // Act
-            let result = try await manager.resolve(source)
+            let result = try await registry.resolve(source)
 
             // Assert
             #expect(FileManager.default.fileExists(atPath: result.path()))
-            let isCached = await manager.isCached(source)
+            let isCached = await registry.isCached(source)
             #expect(isCached == true)
         }
 
         @Test("throws when GitHub Release download fails")
         func throwsWhenGitHubDownloadFails() async throws {
             // Arrange
-            let dir = try AdapterManagerTests.makeTempDir()
-            defer { AdapterManagerTests.removeTempDir(dir) }
+            let dir = try AdapterRegistryTests.makeTempDir()
+            defer { AdapterRegistryTests.removeTempDir(dir) }
             let source = AdapterSource.gitHubRelease(
                 repo: "owner/repo", tag: "v1.0", asset: "adapter.safetensors"
             )
-            let manager = AdapterManager(
+            let registry = AdapterRegistry(
                 adapterDirectory: dir,
                 networkDelegate: MockAdapterNetworkDelegate(shouldThrow: true)
             )
 
             // Act & Assert
             await #expect(throws: LLMLocalError.self) {
-                try await manager.resolve(source)
+                try await registry.resolve(source)
             }
         }
     }
@@ -236,18 +236,18 @@ struct AdapterManagerTests {
         @Test("returns true when adapter is not cached")
         func returnsTrueWhenNotCached() async throws {
             // Arrange
-            let dir = try AdapterManagerTests.makeTempDir()
-            defer { AdapterManagerTests.removeTempDir(dir) }
+            let dir = try AdapterRegistryTests.makeTempDir()
+            defer { AdapterRegistryTests.removeTempDir(dir) }
             let source = AdapterSource.gitHubRelease(
                 repo: "owner/repo", tag: "v1.0", asset: "adapter.safetensors"
             )
-            let manager = AdapterManager(
+            let registry = AdapterRegistry(
                 adapterDirectory: dir,
                 networkDelegate: MockAdapterNetworkDelegate()
             )
 
             // Act
-            let result = await manager.isUpdateAvailable(for: source, latestTag: "v2.0")
+            let result = await registry.isUpdateAvailable(for: source, latestTag: "v2.0")
 
             // Assert
             #expect(result == true)
@@ -256,20 +256,20 @@ struct AdapterManagerTests {
         @Test("returns false when version matches")
         func returnsFalseWhenVersionMatches() async throws {
             // Arrange
-            let dir = try AdapterManagerTests.makeTempDir()
-            defer { AdapterManagerTests.removeTempDir(dir) }
+            let dir = try AdapterRegistryTests.makeTempDir()
+            defer { AdapterRegistryTests.removeTempDir(dir) }
             let source = AdapterSource.gitHubRelease(
                 repo: "owner/repo", tag: "v1.0", asset: "adapter.safetensors"
             )
-            let manager = AdapterManager(
+            let registry = AdapterRegistry(
                 adapterDirectory: dir,
                 networkDelegate: MockAdapterNetworkDelegate()
             )
             // Cache the adapter first
-            _ = try await manager.resolve(source)
+            _ = try await registry.resolve(source)
 
             // Act
-            let result = await manager.isUpdateAvailable(for: source, latestTag: "v1.0")
+            let result = await registry.isUpdateAvailable(for: source, latestTag: "v1.0")
 
             // Assert
             #expect(result == false)
@@ -278,20 +278,20 @@ struct AdapterManagerTests {
         @Test("returns true when version differs")
         func returnsTrueWhenVersionDiffers() async throws {
             // Arrange
-            let dir = try AdapterManagerTests.makeTempDir()
-            defer { AdapterManagerTests.removeTempDir(dir) }
+            let dir = try AdapterRegistryTests.makeTempDir()
+            defer { AdapterRegistryTests.removeTempDir(dir) }
             let source = AdapterSource.gitHubRelease(
                 repo: "owner/repo", tag: "v1.0", asset: "adapter.safetensors"
             )
-            let manager = AdapterManager(
+            let registry = AdapterRegistry(
                 adapterDirectory: dir,
                 networkDelegate: MockAdapterNetworkDelegate()
             )
             // Cache the adapter with v1.0
-            _ = try await manager.resolve(source)
+            _ = try await registry.resolve(source)
 
             // Act
-            let result = await manager.isUpdateAvailable(for: source, latestTag: "v2.0")
+            let result = await registry.isUpdateAvailable(for: source, latestTag: "v2.0")
 
             // Assert
             #expect(result == true)
@@ -306,15 +306,15 @@ struct AdapterManagerTests {
         @Test("returns empty list initially")
         func returnsEmptyListInitially() async throws {
             // Arrange
-            let dir = try AdapterManagerTests.makeTempDir()
-            defer { AdapterManagerTests.removeTempDir(dir) }
-            let manager = AdapterManager(
+            let dir = try AdapterRegistryTests.makeTempDir()
+            defer { AdapterRegistryTests.removeTempDir(dir) }
+            let registry = AdapterRegistry(
                 adapterDirectory: dir,
                 networkDelegate: MockAdapterNetworkDelegate()
             )
 
             // Act
-            let adapters = await manager.cachedAdapters()
+            let adapters = await registry.cachedAdapters()
 
             // Assert
             #expect(adapters.isEmpty)
@@ -323,9 +323,9 @@ struct AdapterManagerTests {
         @Test("returns all cached adapters")
         func returnsAllCachedAdapters() async throws {
             // Arrange
-            let dir = try AdapterManagerTests.makeTempDir()
-            defer { AdapterManagerTests.removeTempDir(dir) }
-            let manager = AdapterManager(
+            let dir = try AdapterRegistryTests.makeTempDir()
+            defer { AdapterRegistryTests.removeTempDir(dir) }
+            let registry = AdapterRegistry(
                 adapterDirectory: dir,
                 networkDelegate: MockAdapterNetworkDelegate()
             )
@@ -333,17 +333,17 @@ struct AdapterManagerTests {
                 repo: "owner/repo", tag: "v1.0", asset: "adapter1.safetensors"
             )
             let source2 = AdapterSource.huggingFace(id: "user/adapter-model")
-            _ = try await manager.resolve(source1)
-            _ = try await manager.resolve(source2)
+            _ = try await registry.resolve(source1)
+            _ = try await registry.resolve(source2)
 
             // Act
-            let adapters = await manager.cachedAdapters()
+            let adapters = await registry.cachedAdapters()
 
             // Assert
             #expect(adapters.count == 2)
             let keys = Set(adapters.map(\.key))
-            #expect(keys.contains(AdapterManager.cacheKey(for: source1)))
-            #expect(keys.contains(AdapterManager.cacheKey(for: source2)))
+            #expect(keys.contains(AdapterRegistry.cacheKey(for: source1)))
+            #expect(keys.contains(AdapterRegistry.cacheKey(for: source2)))
         }
     }
 
@@ -355,18 +355,18 @@ struct AdapterManagerTests {
         @Test("returns false for uncached adapter")
         func returnsFalseForUncached() async throws {
             // Arrange
-            let dir = try AdapterManagerTests.makeTempDir()
-            defer { AdapterManagerTests.removeTempDir(dir) }
+            let dir = try AdapterRegistryTests.makeTempDir()
+            defer { AdapterRegistryTests.removeTempDir(dir) }
             let source = AdapterSource.gitHubRelease(
                 repo: "owner/repo", tag: "v1.0", asset: "adapter.safetensors"
             )
-            let manager = AdapterManager(
+            let registry = AdapterRegistry(
                 adapterDirectory: dir,
                 networkDelegate: MockAdapterNetworkDelegate()
             )
 
             // Act
-            let result = await manager.isCached(source)
+            let result = await registry.isCached(source)
 
             // Assert
             #expect(result == false)
@@ -375,19 +375,19 @@ struct AdapterManagerTests {
         @Test("returns true for cached adapter")
         func returnsTrueForCached() async throws {
             // Arrange
-            let dir = try AdapterManagerTests.makeTempDir()
-            defer { AdapterManagerTests.removeTempDir(dir) }
+            let dir = try AdapterRegistryTests.makeTempDir()
+            defer { AdapterRegistryTests.removeTempDir(dir) }
             let source = AdapterSource.gitHubRelease(
                 repo: "owner/repo", tag: "v1.0", asset: "adapter.safetensors"
             )
-            let manager = AdapterManager(
+            let registry = AdapterRegistry(
                 adapterDirectory: dir,
                 networkDelegate: MockAdapterNetworkDelegate()
             )
-            _ = try await manager.resolve(source)
+            _ = try await registry.resolve(source)
 
             // Act
-            let result = await manager.isCached(source)
+            let result = await registry.isCached(source)
 
             // Assert
             #expect(result == true)
@@ -402,28 +402,28 @@ struct AdapterManagerTests {
         @Test("removes specific adapter from cache")
         func removesSpecificAdapter() async throws {
             // Arrange
-            let dir = try AdapterManagerTests.makeTempDir()
-            defer { AdapterManagerTests.removeTempDir(dir) }
+            let dir = try AdapterRegistryTests.makeTempDir()
+            defer { AdapterRegistryTests.removeTempDir(dir) }
             let source1 = AdapterSource.gitHubRelease(
                 repo: "owner/repo", tag: "v1.0", asset: "adapter1.safetensors"
             )
             let source2 = AdapterSource.huggingFace(id: "user/adapter-model")
-            let manager = AdapterManager(
+            let registry = AdapterRegistry(
                 adapterDirectory: dir,
                 networkDelegate: MockAdapterNetworkDelegate()
             )
-            _ = try await manager.resolve(source1)
-            _ = try await manager.resolve(source2)
+            _ = try await registry.resolve(source1)
+            _ = try await registry.resolve(source2)
 
             // Act
-            try await manager.deleteAdapter(for: source1)
+            try await registry.deleteAdapter(for: source1)
 
             // Assert
-            let isCached1 = await manager.isCached(source1)
-            let isCached2 = await manager.isCached(source2)
+            let isCached1 = await registry.isCached(source1)
+            let isCached2 = await registry.isCached(source2)
             #expect(isCached1 == false)
             #expect(isCached2 == true)
-            let adapters = await manager.cachedAdapters()
+            let adapters = await registry.cachedAdapters()
             #expect(adapters.count == 1)
         }
     }
@@ -436,9 +436,9 @@ struct AdapterManagerTests {
         @Test("removes all adapters from cache")
         func removesAllAdapters() async throws {
             // Arrange
-            let dir = try AdapterManagerTests.makeTempDir()
-            defer { AdapterManagerTests.removeTempDir(dir) }
-            let manager = AdapterManager(
+            let dir = try AdapterRegistryTests.makeTempDir()
+            defer { AdapterRegistryTests.removeTempDir(dir) }
+            let registry = AdapterRegistry(
                 adapterDirectory: dir,
                 networkDelegate: MockAdapterNetworkDelegate()
             )
@@ -446,14 +446,14 @@ struct AdapterManagerTests {
                 repo: "owner/repo", tag: "v1.0", asset: "adapter1.safetensors"
             )
             let source2 = AdapterSource.huggingFace(id: "user/adapter-model")
-            _ = try await manager.resolve(source1)
-            _ = try await manager.resolve(source2)
+            _ = try await registry.resolve(source1)
+            _ = try await registry.resolve(source2)
 
             // Act
-            try await manager.clearAll()
+            try await registry.clearAll()
 
             // Assert
-            let adapters = await manager.cachedAdapters()
+            let adapters = await registry.cachedAdapters()
             #expect(adapters.isEmpty)
         }
     }
@@ -466,33 +466,33 @@ struct AdapterManagerTests {
         @Test("persists registry to disk after resolve")
         func persistsRegistryToDisk() async throws {
             // Arrange
-            let dir = try AdapterManagerTests.makeTempDir()
-            defer { AdapterManagerTests.removeTempDir(dir) }
+            let dir = try AdapterRegistryTests.makeTempDir()
+            defer { AdapterRegistryTests.removeTempDir(dir) }
             let source = AdapterSource.gitHubRelease(
                 repo: "owner/repo", tag: "v1.0", asset: "adapter.safetensors"
             )
             let mockDelegate = MockAdapterNetworkDelegate()
 
-            // Act - resolve with one manager instance
-            let manager1 = AdapterManager(
+            // Act - resolve with one registry instance
+            let registry1 = AdapterRegistry(
                 adapterDirectory: dir, networkDelegate: mockDelegate
             )
-            _ = try await manager1.resolve(source)
+            _ = try await registry1.resolve(source)
 
-            // Assert - create new manager instance and verify data persists
-            let manager2 = AdapterManager(
+            // Assert - create new registry instance and verify data persists
+            let registry2 = AdapterRegistry(
                 adapterDirectory: dir, networkDelegate: mockDelegate
             )
-            let adapters = await manager2.cachedAdapters()
+            let adapters = await registry2.cachedAdapters()
             #expect(adapters.count == 1)
-            #expect(adapters[0].key == AdapterManager.cacheKey(for: source))
+            #expect(adapters[0].key == AdapterRegistry.cacheKey(for: source))
         }
 
         @Test("loads registry from disk on new instance")
         func loadsRegistryFromDisk() async throws {
             // Arrange
-            let dir = try AdapterManagerTests.makeTempDir()
-            defer { AdapterManagerTests.removeTempDir(dir) }
+            let dir = try AdapterRegistryTests.makeTempDir()
+            defer { AdapterRegistryTests.removeTempDir(dir) }
             let source1 = AdapterSource.gitHubRelease(
                 repo: "owner/repo", tag: "v1.0", asset: "adapter.safetensors"
             )
@@ -500,20 +500,20 @@ struct AdapterManagerTests {
             let mockDelegate = MockAdapterNetworkDelegate()
 
             // Act - resolve adapters with first instance
-            let manager1 = AdapterManager(
+            let registry1 = AdapterRegistry(
                 adapterDirectory: dir, networkDelegate: mockDelegate
             )
-            _ = try await manager1.resolve(source1)
-            _ = try await manager1.resolve(source2)
+            _ = try await registry1.resolve(source1)
+            _ = try await registry1.resolve(source2)
 
             // Assert - new instance should load both
-            let manager2 = AdapterManager(
+            let registry2 = AdapterRegistry(
                 adapterDirectory: dir, networkDelegate: mockDelegate
             )
-            let adapters = await manager2.cachedAdapters()
+            let adapters = await registry2.cachedAdapters()
             #expect(adapters.count == 2)
-            let isCached1 = await manager2.isCached(source1)
-            let isCached2 = await manager2.isCached(source2)
+            let isCached1 = await registry2.isCached(source1)
+            let isCached2 = await registry2.isCached(source2)
             #expect(isCached1 == true)
             #expect(isCached2 == true)
         }

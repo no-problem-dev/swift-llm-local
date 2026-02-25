@@ -1,5 +1,7 @@
 import Foundation
 import LLMLocalClient
+import PersistenceCore
+import PersistenceFileSystem
 
 // MARK: - AdapterNetworkDelegate
 
@@ -98,78 +100,29 @@ public struct AdapterInfo: Sendable, Codable {
     }
 }
 
-// MARK: - AdapterCache
-
-/// アダプターレジストリJSONファイルの読み書きを行う内部ヘルパー
-///
-/// レジストリはキャッシュキーを ``AdapterInfo`` にマッピングするシンプルなJSONファイルです。
-/// この型自体はアクターではなく、``AdapterManager`` のアクター分離コンテキスト内で
-/// 排他的に使用されます。
-struct AdapterCache: Sendable {
-
-    /// レジストリファイルが保存されるディレクトリ。
-    let directory: URL
-
-    /// アダプターレジストリJSONファイルのパス。
-    var registryPath: URL {
-        directory.appendingPathComponent("adapter-registry.json")
-    }
-
-    /// ディスクからレジストリを読み込みます。
-    ///
-    /// - Returns: キャッシュキーを ``AdapterInfo`` にマッピングする辞書。
-    ///   ファイルが存在しないかデコードできない場合は空の辞書を返します。
-    func load() -> [String: AdapterInfo] {
-        guard FileManager.default.fileExists(atPath: registryPath.path) else {
-            return [:]
-        }
-        do {
-            let data = try Data(contentsOf: registryPath)
-            return try JSONDecoder().decode([String: AdapterInfo].self, from: data)
-        } catch {
-            return [:]
-        }
-    }
-
-    /// レジストリをディスクに書き込みます。必要に応じてディレクトリを作成します。
-    ///
-    /// - Parameter registry: 永続化するキャッシュキーから ``AdapterInfo`` への辞書。
-    /// - Throws: ファイルの書き込みに失敗した場合のエラー。
-    func save(_ registry: [String: AdapterInfo]) throws {
-        try FileManager.default.createDirectory(
-            at: directory,
-            withIntermediateDirectories: true
-        )
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        let data = try encoder.encode(registry)
-        try data.write(to: registryPath, options: .atomic)
-    }
-}
-
-// MARK: - AdapterManager
+// MARK: - AdapterRegistry
 
 /// LoRA アダプターのダウンロード・バージョン管理・ローカルストレージを管理するアクター
 ///
-/// `AdapterManager` は各種ソース（GitHub Releases、HuggingFace、ローカルパス）
+/// `AdapterRegistry` は各種ソース（GitHub Releases、HuggingFace、ローカルパス）
 /// からのアダプターダウンロードと、バージョン追跡によるローカルキャッシュ管理を行います。
 ///
 /// ## Usage
 ///
 /// ```swift
-/// let manager = AdapterManager()
+/// let registry = AdapterRegistry()
 ///
 /// // アダプターソースをローカルファイルURLに解決
-/// let localURL = try await manager.resolve(
+/// let localURL = try await registry.resolve(
 ///     .gitHubRelease(repo: "owner/repo", tag: "v1.0", asset: "adapter.safetensors")
 /// )
 ///
 /// // 新しいバージョンが利用可能か確認
-/// let needsUpdate = await manager.isUpdateAvailable(
+/// let needsUpdate = await registry.isUpdateAvailable(
 ///     for: source, latestTag: "v2.0"
 /// )
 /// ```
-public actor AdapterManager {
+public actor AdapterRegistry {
 
     /// アダプターファイルが保存されるディレクトリ。
     private let adapterDirectory: URL
@@ -178,21 +131,24 @@ public actor AdapterManager {
     /// AdapterSource から導出された一意のキーをキーとします。
     private var adapterRegistry: [String: AdapterInfo] = [:]
 
-    /// アダプターレジストリの永続化ヘルパー。
-    private let cache: AdapterCache
+    /// アダプターレジストリを永続化するストア。
+    private let cache: any RegistryStore<AdapterInfo>
 
     /// アダプターダウンロード用のネットワークデリゲート（テスト用に注入可能）。
     private let networkDelegate: any AdapterNetworkDelegate
 
-    /// 新しいアダプターマネージャーを作成します。
+    /// 新しいアダプターレジストリを作成します。
     ///
     /// - Parameters:
     ///   - adapterDirectory: アダプターファイルとレジストリを保存するディレクトリ。
     ///     デフォルトは `~/Library/Application Support/LLMLocal/adapters`。
+    ///   - registryStore: レジストリの永続化ストア。
+    ///     `nil` の場合、アダプターディレクトリの `adapter-registry.json` を使用します。
     ///   - networkDelegate: ダウンロードを実行するオプションのデリゲート。
     ///     `nil` の場合、プレースホルダーファイルを作成するスタブデリゲートが使用されます。
     public init(
         adapterDirectory: URL? = nil,
+        registryStore: (any RegistryStore<AdapterInfo>)? = nil,
         networkDelegate: (any AdapterNetworkDelegate)? = nil
     ) {
         let dir = adapterDirectory
@@ -203,7 +159,11 @@ public actor AdapterManager {
             .first!
             .appendingPathComponent("LLMLocal/adapters")
         self.adapterDirectory = dir
-        self.cache = AdapterCache(directory: dir)
+        self.cache = registryStore
+            ?? FileSystemRegistryStore<AdapterInfo>(
+                directory: dir,
+                filename: "adapter-registry.json"
+            )
         self.adapterRegistry = cache.load()
         self.networkDelegate = networkDelegate ?? StubAdapterNetworkDelegate()
     }

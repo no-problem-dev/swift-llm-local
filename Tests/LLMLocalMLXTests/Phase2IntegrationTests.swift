@@ -18,7 +18,7 @@ import LLMLocalModels
 /// - Adapter resolution: adapter resolver flow with MLXBackend
 /// - Phase 1 regression: basic generation still works after Phase 2 changes
 /// - Memory tier: MemoryMonitor provides correct tier and context length
-/// - Adapter caching: AdapterManager resolve + cache flow
+/// - Adapter caching: AdapterRegistry resolve + cache flow
 @Suite("Phase 2 Integration Tests", .disabled("Requires Metal GPU and model download"))
 struct Phase2IntegrationTests {
 
@@ -27,12 +27,12 @@ struct Phase2IntegrationTests {
     @Test("DownloadProgress stream progresses from 0.0 to 1.0")
     func downloadProgressStreamProgresses() async throws {
         // Arrange
-        let modelManager = ModelManager()
+        let modelRegistry = ModelRegistry()
         let spec = ModelPresets.gemma2_2B
 
         // Act
         var progressValues: [Double] = []
-        let stream = await modelManager.downloadWithProgress(spec)
+        let stream = await modelRegistry.downloadWithProgress(spec)
         for try await progress in stream {
             progressValues.append(progress.fraction)
         }
@@ -57,11 +57,11 @@ struct Phase2IntegrationTests {
     func memoryWarningTriggersUnload() async throws {
         // Arrange
         let backend = MLXBackend()
-        let modelManager = ModelManager()
+        let modelRegistry = ModelRegistry()
         let monitor = MemoryMonitor()
         let service = LLMLocalService(
             backend: backend,
-            modelManager: modelManager,
+            modelRegistry: modelRegistry,
             memoryMonitor: monitor
         )
 
@@ -98,7 +98,7 @@ struct Phase2IntegrationTests {
         // For now, verify that loading without adapter works fine
         // and that lastResolvedAdapterURL is nil when no adapter is specified.
         //
-        // Note: AdapterManager (Layer 1) does not explicitly conform to
+        // Note: AdapterRegistry (Layer 1) does not explicitly conform to
         // AdapterResolving (Layer 0). In integration tests we test them
         // independently.
         let backend = MLXBackend()
@@ -122,8 +122,8 @@ struct Phase2IntegrationTests {
     func phase1RegressionBasicGeneration() async throws {
         // Arrange
         let backend = MLXBackend()
-        let modelManager = ModelManager()
-        let service = LLMLocalService(backend: backend, modelManager: modelManager)
+        let modelRegistry = ModelRegistry()
+        let service = LLMLocalService(backend: backend, modelRegistry: modelRegistry)
         let config = GenerationConfig(maxTokens: 20)
 
         // Act
@@ -169,25 +169,25 @@ struct Phase2IntegrationTests {
         }
     }
 
-    // MARK: - Test 6: AdapterManager caching flow
+    // MARK: - Test 6: AdapterRegistry caching flow
 
-    @Test("AdapterManager resolves and caches adapter")
-    func adapterManagerResolvesAndCaches() async throws {
+    @Test("AdapterRegistry resolves and caches adapter")
+    func adapterRegistryResolvesAndCaches() async throws {
         // Arrange
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("Phase2IT-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
-        let manager = AdapterManager(adapterDirectory: tempDir)
+        let registry = AdapterRegistry(adapterDirectory: tempDir)
         let source = AdapterSource.local(path: URL(fileURLWithPath: "/nonexistent"))
 
         // Act & Assert: local non-existent should throw
         await #expect(throws: LLMLocalError.self) {
-            try await manager.resolve(source)
+            try await registry.resolve(source)
         }
 
         // Verify not cached
-        let isCached = await manager.isCached(source)
+        let isCached = await registry.isCached(source)
         #expect(isCached == false, "Non-existent adapter should not be cached")
     }
 }

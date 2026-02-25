@@ -25,8 +25,8 @@ struct IntegrationTests {
     func fullFlowGeneratesTokensAndStats() async throws {
         // Setup
         let backend = MLXBackend()
-        let modelManager = ModelManager()
-        let service = LLMLocalService(backend: backend, modelManager: modelManager)
+        let modelRegistry = ModelRegistry()
+        let service = LLMLocalService(backend: backend, modelRegistry: modelRegistry)
 
         // Use a short prompt and limit tokens to minimize execution time
         let config = GenerationConfig(maxTokens: 50, temperature: 0.7, topP: 0.9)
@@ -64,8 +64,8 @@ struct IntegrationTests {
     func invalidModelIdThrowsLoadFailed() async throws {
         // Setup
         let backend = MLXBackend()
-        let modelManager = ModelManager()
-        let service = LLMLocalService(backend: backend, modelManager: modelManager)
+        let modelRegistry = ModelRegistry()
+        let service = LLMLocalService(backend: backend, modelRegistry: modelRegistry)
 
         // Create a model spec with invalid HuggingFace ID
         let invalidModel = ModelSpec(
@@ -107,8 +107,8 @@ struct IntegrationTests {
     func cancellationFinishesCleanly() async throws {
         // Setup
         let backend = MLXBackend()
-        let modelManager = ModelManager()
-        let service = LLMLocalService(backend: backend, modelManager: modelManager)
+        let modelRegistry = ModelRegistry()
+        let service = LLMLocalService(backend: backend, modelRegistry: modelRegistry)
 
         // Use a longer generation to ensure we can cancel mid-stream
         let config = GenerationConfig(maxTokens: 200, temperature: 0.7, topP: 0.9)
@@ -159,8 +159,8 @@ struct IntegrationTests {
     func reGenerationWorksWithoutReloading() async throws {
         // Setup
         let backend = MLXBackend()
-        let modelManager = ModelManager()
-        let service = LLMLocalService(backend: backend, modelManager: modelManager)
+        let modelRegistry = ModelRegistry()
+        let service = LLMLocalService(backend: backend, modelRegistry: modelRegistry)
 
         let config = GenerationConfig(maxTokens: 20)
         let prompt1 = "What is Swift?"
@@ -206,8 +206,8 @@ struct IntegrationTests {
     func generationStatsAreValid() async throws {
         // Setup
         let backend = MLXBackend()
-        let modelManager = ModelManager()
-        let service = LLMLocalService(backend: backend, modelManager: modelManager)
+        let modelRegistry = ModelRegistry()
+        let service = LLMLocalService(backend: backend, modelRegistry: modelRegistry)
 
         let config = GenerationConfig(maxTokens: 30)
         let prompt = "Explain generics in Swift."

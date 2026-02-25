@@ -3,8 +3,8 @@ import Testing
 import LLMLocalClient
 @testable import LLMLocalModels
 
-@Suite("ModelManager")
-struct ModelManagerTests {
+@Suite("ModelRegistry")
+struct ModelRegistryTests {
 
     // MARK: - Test Helpers
 
@@ -44,9 +44,9 @@ struct ModelManagerTests {
         @Test("returns empty list when no models are cached")
         func returnsEmptyListWhenNoModelsCached() async throws {
             // Arrange
-            let dir = try ModelManagerTests.makeTempDir()
-            defer { ModelManagerTests.removeTempDir(dir) }
-            let manager = ModelManager(cacheDirectory: dir)
+            let dir = try ModelRegistryTests.makeTempDir()
+            defer { ModelRegistryTests.removeTempDir(dir) }
+            let manager = ModelRegistry(cacheDirectory: dir)
 
             // Act
             let models = await manager.cachedModels()
@@ -58,10 +58,10 @@ struct ModelManagerTests {
         @Test("returns cached models after registration")
         func returnsCachedModelsAfterRegistration() async throws {
             // Arrange
-            let dir = try ModelManagerTests.makeTempDir()
-            defer { ModelManagerTests.removeTempDir(dir) }
-            let manager = ModelManager(cacheDirectory: dir)
-            let spec = ModelManagerTests.sampleSpec()
+            let dir = try ModelRegistryTests.makeTempDir()
+            defer { ModelRegistryTests.removeTempDir(dir) }
+            let manager = ModelRegistry(cacheDirectory: dir)
+            let spec = ModelRegistryTests.sampleSpec()
 
             // Act
             try await manager.registerModel(spec, sizeInBytes: 500_000)
@@ -77,11 +77,11 @@ struct ModelManagerTests {
         @Test("returns multiple cached models")
         func returnsMultipleCachedModels() async throws {
             // Arrange
-            let dir = try ModelManagerTests.makeTempDir()
-            defer { ModelManagerTests.removeTempDir(dir) }
-            let manager = ModelManager(cacheDirectory: dir)
-            let spec1 = ModelManagerTests.sampleSpec(id: "model-a", displayName: "Model A")
-            let spec2 = ModelManagerTests.sampleSpec(id: "model-b", displayName: "Model B")
+            let dir = try ModelRegistryTests.makeTempDir()
+            defer { ModelRegistryTests.removeTempDir(dir) }
+            let manager = ModelRegistry(cacheDirectory: dir)
+            let spec1 = ModelRegistryTests.sampleSpec(id: "model-a", displayName: "Model A")
+            let spec2 = ModelRegistryTests.sampleSpec(id: "model-b", displayName: "Model B")
 
             // Act
             try await manager.registerModel(spec1, sizeInBytes: 100)
@@ -104,10 +104,10 @@ struct ModelManagerTests {
         @Test("returns false when model is not cached")
         func returnsFalseWhenModelNotCached() async throws {
             // Arrange
-            let dir = try ModelManagerTests.makeTempDir()
-            defer { ModelManagerTests.removeTempDir(dir) }
-            let manager = ModelManager(cacheDirectory: dir)
-            let spec = ModelManagerTests.sampleSpec()
+            let dir = try ModelRegistryTests.makeTempDir()
+            defer { ModelRegistryTests.removeTempDir(dir) }
+            let manager = ModelRegistry(cacheDirectory: dir)
+            let spec = ModelRegistryTests.sampleSpec()
 
             // Act
             let result = await manager.isCached(spec)
@@ -119,10 +119,10 @@ struct ModelManagerTests {
         @Test("returns true when model is cached")
         func returnsTrueWhenModelIsCached() async throws {
             // Arrange
-            let dir = try ModelManagerTests.makeTempDir()
-            defer { ModelManagerTests.removeTempDir(dir) }
-            let manager = ModelManager(cacheDirectory: dir)
-            let spec = ModelManagerTests.sampleSpec()
+            let dir = try ModelRegistryTests.makeTempDir()
+            defer { ModelRegistryTests.removeTempDir(dir) }
+            let manager = ModelRegistry(cacheDirectory: dir)
+            let spec = ModelRegistryTests.sampleSpec()
             try await manager.registerModel(spec, sizeInBytes: 1000)
 
             // Act
@@ -135,11 +135,11 @@ struct ModelManagerTests {
         @Test("returns false for different model after registering another")
         func returnsFalseForDifferentModel() async throws {
             // Arrange
-            let dir = try ModelManagerTests.makeTempDir()
-            defer { ModelManagerTests.removeTempDir(dir) }
-            let manager = ModelManager(cacheDirectory: dir)
-            let spec1 = ModelManagerTests.sampleSpec(id: "model-a")
-            let spec2 = ModelManagerTests.sampleSpec(id: "model-b")
+            let dir = try ModelRegistryTests.makeTempDir()
+            defer { ModelRegistryTests.removeTempDir(dir) }
+            let manager = ModelRegistry(cacheDirectory: dir)
+            let spec1 = ModelRegistryTests.sampleSpec(id: "model-a")
+            let spec2 = ModelRegistryTests.sampleSpec(id: "model-b")
             try await manager.registerModel(spec1, sizeInBytes: 1000)
 
             // Act
@@ -158,9 +158,9 @@ struct ModelManagerTests {
         @Test("returns zero when no models are cached")
         func returnsZeroWhenEmpty() async throws {
             // Arrange
-            let dir = try ModelManagerTests.makeTempDir()
-            defer { ModelManagerTests.removeTempDir(dir) }
-            let manager = ModelManager(cacheDirectory: dir)
+            let dir = try ModelRegistryTests.makeTempDir()
+            defer { ModelRegistryTests.removeTempDir(dir) }
+            let manager = ModelRegistry(cacheDirectory: dir)
 
             // Act
             let size = try await manager.totalCacheSize()
@@ -172,11 +172,11 @@ struct ModelManagerTests {
         @Test("returns sum of all cached model sizes")
         func returnsSumOfCachedSizes() async throws {
             // Arrange
-            let dir = try ModelManagerTests.makeTempDir()
-            defer { ModelManagerTests.removeTempDir(dir) }
-            let manager = ModelManager(cacheDirectory: dir)
-            let spec1 = ModelManagerTests.sampleSpec(id: "model-a")
-            let spec2 = ModelManagerTests.sampleSpec(id: "model-b")
+            let dir = try ModelRegistryTests.makeTempDir()
+            defer { ModelRegistryTests.removeTempDir(dir) }
+            let manager = ModelRegistry(cacheDirectory: dir)
+            let spec1 = ModelRegistryTests.sampleSpec(id: "model-a")
+            let spec2 = ModelRegistryTests.sampleSpec(id: "model-b")
             try await manager.registerModel(spec1, sizeInBytes: 1_000_000)
             try await manager.registerModel(spec2, sizeInBytes: 2_500_000)
 
@@ -190,10 +190,10 @@ struct ModelManagerTests {
         @Test("returns single model size when only one model cached")
         func returnsSingleModelSize() async throws {
             // Arrange
-            let dir = try ModelManagerTests.makeTempDir()
-            defer { ModelManagerTests.removeTempDir(dir) }
-            let manager = ModelManager(cacheDirectory: dir)
-            let spec = ModelManagerTests.sampleSpec()
+            let dir = try ModelRegistryTests.makeTempDir()
+            defer { ModelRegistryTests.removeTempDir(dir) }
+            let manager = ModelRegistry(cacheDirectory: dir)
+            let spec = ModelRegistryTests.sampleSpec()
             try await manager.registerModel(spec, sizeInBytes: 750_000)
 
             // Act
@@ -212,10 +212,10 @@ struct ModelManagerTests {
         @Test("removes a specific model from cache")
         func removesSpecificModel() async throws {
             // Arrange
-            let dir = try ModelManagerTests.makeTempDir()
-            defer { ModelManagerTests.removeTempDir(dir) }
-            let manager = ModelManager(cacheDirectory: dir)
-            let spec = ModelManagerTests.sampleSpec()
+            let dir = try ModelRegistryTests.makeTempDir()
+            defer { ModelRegistryTests.removeTempDir(dir) }
+            let manager = ModelRegistry(cacheDirectory: dir)
+            let spec = ModelRegistryTests.sampleSpec()
             try await manager.registerModel(spec, sizeInBytes: 1000)
 
             // Act
@@ -231,11 +231,11 @@ struct ModelManagerTests {
         @Test("does not affect other cached models")
         func doesNotAffectOtherModels() async throws {
             // Arrange
-            let dir = try ModelManagerTests.makeTempDir()
-            defer { ModelManagerTests.removeTempDir(dir) }
-            let manager = ModelManager(cacheDirectory: dir)
-            let spec1 = ModelManagerTests.sampleSpec(id: "model-a", displayName: "Model A")
-            let spec2 = ModelManagerTests.sampleSpec(id: "model-b", displayName: "Model B")
+            let dir = try ModelRegistryTests.makeTempDir()
+            defer { ModelRegistryTests.removeTempDir(dir) }
+            let manager = ModelRegistry(cacheDirectory: dir)
+            let spec1 = ModelRegistryTests.sampleSpec(id: "model-a", displayName: "Model A")
+            let spec2 = ModelRegistryTests.sampleSpec(id: "model-b", displayName: "Model B")
             try await manager.registerModel(spec1, sizeInBytes: 1000)
             try await manager.registerModel(spec2, sizeInBytes: 2000)
 
@@ -255,11 +255,11 @@ struct ModelManagerTests {
         @Test("updates total cache size after deletion")
         func updatesTotalCacheSizeAfterDeletion() async throws {
             // Arrange
-            let dir = try ModelManagerTests.makeTempDir()
-            defer { ModelManagerTests.removeTempDir(dir) }
-            let manager = ModelManager(cacheDirectory: dir)
-            let spec1 = ModelManagerTests.sampleSpec(id: "model-a")
-            let spec2 = ModelManagerTests.sampleSpec(id: "model-b")
+            let dir = try ModelRegistryTests.makeTempDir()
+            defer { ModelRegistryTests.removeTempDir(dir) }
+            let manager = ModelRegistry(cacheDirectory: dir)
+            let spec1 = ModelRegistryTests.sampleSpec(id: "model-a")
+            let spec2 = ModelRegistryTests.sampleSpec(id: "model-b")
             try await manager.registerModel(spec1, sizeInBytes: 1_000_000)
             try await manager.registerModel(spec2, sizeInBytes: 2_000_000)
 
@@ -274,10 +274,10 @@ struct ModelManagerTests {
         @Test("succeeds silently when model is not cached")
         func succeedsSilentlyWhenNotCached() async throws {
             // Arrange
-            let dir = try ModelManagerTests.makeTempDir()
-            defer { ModelManagerTests.removeTempDir(dir) }
-            let manager = ModelManager(cacheDirectory: dir)
-            let spec = ModelManagerTests.sampleSpec()
+            let dir = try ModelRegistryTests.makeTempDir()
+            defer { ModelRegistryTests.removeTempDir(dir) }
+            let manager = ModelRegistry(cacheDirectory: dir)
+            let spec = ModelRegistryTests.sampleSpec()
 
             // Act & Assert - should not throw
             try await manager.deleteCache(for: spec)
@@ -292,11 +292,11 @@ struct ModelManagerTests {
         @Test("removes all cached models")
         func removesAllCachedModels() async throws {
             // Arrange
-            let dir = try ModelManagerTests.makeTempDir()
-            defer { ModelManagerTests.removeTempDir(dir) }
-            let manager = ModelManager(cacheDirectory: dir)
-            let spec1 = ModelManagerTests.sampleSpec(id: "model-a")
-            let spec2 = ModelManagerTests.sampleSpec(id: "model-b")
+            let dir = try ModelRegistryTests.makeTempDir()
+            defer { ModelRegistryTests.removeTempDir(dir) }
+            let manager = ModelRegistry(cacheDirectory: dir)
+            let spec1 = ModelRegistryTests.sampleSpec(id: "model-a")
+            let spec2 = ModelRegistryTests.sampleSpec(id: "model-b")
             try await manager.registerModel(spec1, sizeInBytes: 1000)
             try await manager.registerModel(spec2, sizeInBytes: 2000)
 
@@ -313,9 +313,9 @@ struct ModelManagerTests {
         @Test("succeeds when cache is already empty")
         func succeedsWhenCacheAlreadyEmpty() async throws {
             // Arrange
-            let dir = try ModelManagerTests.makeTempDir()
-            defer { ModelManagerTests.removeTempDir(dir) }
-            let manager = ModelManager(cacheDirectory: dir)
+            let dir = try ModelRegistryTests.makeTempDir()
+            defer { ModelRegistryTests.removeTempDir(dir) }
+            let manager = ModelRegistry(cacheDirectory: dir)
 
             // Act & Assert - should not throw
             try await manager.clearAllCache()
@@ -332,17 +332,17 @@ struct ModelManagerTests {
         @Test("persists registry to disk after registration")
         func persistsRegistryToDisk() async throws {
             // Arrange
-            let dir = try ModelManagerTests.makeTempDir()
-            defer { ModelManagerTests.removeTempDir(dir) }
-            let spec = ModelManagerTests.sampleSpec()
+            let dir = try ModelRegistryTests.makeTempDir()
+            defer { ModelRegistryTests.removeTempDir(dir) }
+            let spec = ModelRegistryTests.sampleSpec()
 
-            // Act - register with one manager instance
-            let manager1 = ModelManager(cacheDirectory: dir)
-            try await manager1.registerModel(spec, sizeInBytes: 1000)
+            // Act - register with one registry instance
+            let registry1 = ModelRegistry(cacheDirectory: dir)
+            try await registry1.registerModel(spec, sizeInBytes: 1000)
 
-            // Assert - create new manager instance and verify data persists
-            let manager2 = ModelManager(cacheDirectory: dir)
-            let models = await manager2.cachedModels()
+            // Assert - create new registry instance and verify data persists
+            let registry2 = ModelRegistry(cacheDirectory: dir)
+            let models = await registry2.cachedModels()
             #expect(models.count == 1)
             #expect(models[0].modelId == spec.id)
         }
@@ -350,38 +350,38 @@ struct ModelManagerTests {
         @Test("persists deletion to disk")
         func persistsDeletionToDisk() async throws {
             // Arrange
-            let dir = try ModelManagerTests.makeTempDir()
-            defer { ModelManagerTests.removeTempDir(dir) }
-            let spec = ModelManagerTests.sampleSpec()
-            let manager1 = ModelManager(cacheDirectory: dir)
-            try await manager1.registerModel(spec, sizeInBytes: 1000)
+            let dir = try ModelRegistryTests.makeTempDir()
+            defer { ModelRegistryTests.removeTempDir(dir) }
+            let spec = ModelRegistryTests.sampleSpec()
+            let registry1 = ModelRegistry(cacheDirectory: dir)
+            try await registry1.registerModel(spec, sizeInBytes: 1000)
 
             // Act
-            try await manager1.deleteCache(for: spec)
+            try await registry1.deleteCache(for: spec)
 
             // Assert - new instance should see empty registry
-            let manager2 = ModelManager(cacheDirectory: dir)
-            let models = await manager2.cachedModels()
+            let registry2 = ModelRegistry(cacheDirectory: dir)
+            let models = await registry2.cachedModels()
             #expect(models.isEmpty)
         }
 
         @Test("persists clearAllCache to disk")
         func persistsClearAllToDisk() async throws {
             // Arrange
-            let dir = try ModelManagerTests.makeTempDir()
-            defer { ModelManagerTests.removeTempDir(dir) }
-            let manager1 = ModelManager(cacheDirectory: dir)
-            let spec1 = ModelManagerTests.sampleSpec(id: "model-a")
-            let spec2 = ModelManagerTests.sampleSpec(id: "model-b")
-            try await manager1.registerModel(spec1, sizeInBytes: 100)
-            try await manager1.registerModel(spec2, sizeInBytes: 200)
+            let dir = try ModelRegistryTests.makeTempDir()
+            defer { ModelRegistryTests.removeTempDir(dir) }
+            let registry1 = ModelRegistry(cacheDirectory: dir)
+            let spec1 = ModelRegistryTests.sampleSpec(id: "model-a")
+            let spec2 = ModelRegistryTests.sampleSpec(id: "model-b")
+            try await registry1.registerModel(spec1, sizeInBytes: 100)
+            try await registry1.registerModel(spec2, sizeInBytes: 200)
 
             // Act
-            try await manager1.clearAllCache()
+            try await registry1.clearAllCache()
 
             // Assert - new instance should see empty registry
-            let manager2 = ModelManager(cacheDirectory: dir)
-            let models = await manager2.cachedModels()
+            let registry2 = ModelRegistry(cacheDirectory: dir)
+            let models = await registry2.cachedModels()
             #expect(models.isEmpty)
         }
     }
@@ -394,10 +394,10 @@ struct ModelManagerTests {
         @Test("sets downloadedAt and localPath automatically")
         func setsDownloadedAtAndLocalPath() async throws {
             // Arrange
-            let dir = try ModelManagerTests.makeTempDir()
-            defer { ModelManagerTests.removeTempDir(dir) }
-            let manager = ModelManager(cacheDirectory: dir)
-            let spec = ModelManagerTests.sampleSpec()
+            let dir = try ModelRegistryTests.makeTempDir()
+            defer { ModelRegistryTests.removeTempDir(dir) }
+            let manager = ModelRegistry(cacheDirectory: dir)
+            let spec = ModelRegistryTests.sampleSpec()
             let before = Date()
 
             // Act
@@ -414,10 +414,10 @@ struct ModelManagerTests {
         @Test("overwrites existing entry for same model id")
         func overwritesExistingEntry() async throws {
             // Arrange
-            let dir = try ModelManagerTests.makeTempDir()
-            defer { ModelManagerTests.removeTempDir(dir) }
-            let manager = ModelManager(cacheDirectory: dir)
-            let spec = ModelManagerTests.sampleSpec()
+            let dir = try ModelRegistryTests.makeTempDir()
+            defer { ModelRegistryTests.removeTempDir(dir) }
+            let manager = ModelRegistry(cacheDirectory: dir)
+            let spec = ModelRegistryTests.sampleSpec()
 
             // Act
             try await manager.registerModel(spec, sizeInBytes: 1000)
@@ -438,11 +438,11 @@ struct ModelManagerTests {
         @Test("initializes with custom cache directory")
         func initializesWithCustomDirectory() async throws {
             // Arrange
-            let dir = try ModelManagerTests.makeTempDir()
-            defer { ModelManagerTests.removeTempDir(dir) }
+            let dir = try ModelRegistryTests.makeTempDir()
+            defer { ModelRegistryTests.removeTempDir(dir) }
 
             // Act
-            let manager = ModelManager(cacheDirectory: dir)
+            let manager = ModelRegistry(cacheDirectory: dir)
             let models = await manager.cachedModels()
 
             // Assert
@@ -452,8 +452,8 @@ struct ModelManagerTests {
         @Test("initializes with default cache directory")
         func initializesWithDefaultDirectory() async {
             // Act - should not crash with nil (uses default)
-            let manager = ModelManager()
-            let models = await manager.cachedModels()
+            let registry = ModelRegistry()
+            let models = await registry.cachedModels()
 
             // Assert
             #expect(models.isEmpty)

@@ -532,14 +532,14 @@ struct BackgroundDownloaderErrorHandlingTests {
     }
 }
 
-// MARK: - ModelManager Integration Tests
+// MARK: - ModelRegistry Integration Tests
 
-@Suite("ModelManager background downloader integration")
-struct ModelManagerBackgroundDownloaderTests {
+@Suite("ModelRegistry background downloader integration")
+struct ModelRegistryBackgroundDownloaderTests {
 
     private static func makeTempDir() throws -> URL {
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("ModelManagerBGTests-\(UUID().uuidString)")
+            .appendingPathComponent("ModelRegistryBGTests-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }
@@ -548,15 +548,15 @@ struct ModelManagerBackgroundDownloaderTests {
         try? FileManager.default.removeItem(at: url)
     }
 
-    @Test("ModelManager exposes background downloader")
+    @Test("ModelRegistry exposes background downloader")
     func modelManagerExposesBackgroundDownloader() async throws {
         // Arrange
         let dir = try Self.makeTempDir()
         defer { Self.removeTempDir(dir) }
-        let manager = ModelManager(cacheDirectory: dir)
+        let registry = ModelRegistry(cacheDirectory: dir)
 
         // Act
-        let downloader = await manager.backgroundDownloader
+        let downloader = await registry.backgroundDownloader
 
         // Assert
         let urls = await downloader.activeDownloadURLs()
@@ -568,10 +568,10 @@ struct ModelManagerBackgroundDownloaderTests {
         // Arrange
         let dir = try Self.makeTempDir()
         defer { Self.removeTempDir(dir) }
-        let manager = ModelManager(cacheDirectory: dir)
+        let registry = ModelRegistry(cacheDirectory: dir)
 
         // Act
-        let downloader = await manager.backgroundDownloader
+        let downloader = await registry.backgroundDownloader
 
         // Assert - downloader should be functional
         let hasResumeData = await downloader.hasResumeData(for: testURL)
@@ -588,13 +588,13 @@ struct ModelManagerBackgroundDownloaderTests {
             storageDirectory: dir.appendingPathComponent("bg-downloads"),
             delegate: delegate
         )
-        let manager = ModelManager(
+        let registry = ModelRegistry(
             cacheDirectory: dir,
             backgroundDownloader: bgDownloader
         )
 
         // Act
-        let downloader = await manager.backgroundDownloader
+        let downloader = await registry.backgroundDownloader
 
         // Assert
         let urls = await downloader.activeDownloadURLs()

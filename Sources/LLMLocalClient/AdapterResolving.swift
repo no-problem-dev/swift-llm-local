@@ -2,17 +2,17 @@ import Foundation
 
 /// ``AdapterSource`` をローカルファイルURLに解決するプロトコル
 ///
-/// Layer 2（MLXBackend）が Layer 1（AdapterManager）に直接依存せずに
+/// Layer 2（MLXBackend）が Layer 1（AdapterRegistry）に直接依存せずに
 /// アダプターソースを解決できるようにするプロトコルです。
 /// Layer 1 の型がこのプロトコルに準拠し、Layer 2 は依存性注入で受け取ります。
 ///
 /// ## Usage
 ///
 /// ```swift
-/// // AdapterManager（Layer 1）がこのプロトコルに準拠
-/// let resolver: any AdapterResolving = adapterManager
+/// // AdapterRegistry（Layer 1）がこのプロトコルに準拠
+/// let resolver: any AdapterResolving = adapterRegistry
 ///
-/// // MLXBackend（Layer 2）は AdapterManager を知らずに使用可能
+/// // MLXBackend（Layer 2）は AdapterRegistry を知らずに使用可能
 /// let backend = MLXBackend(adapterResolver: resolver)
 /// ```
 public protocol AdapterResolving: Sendable {

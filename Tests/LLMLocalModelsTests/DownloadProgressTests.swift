@@ -141,11 +141,11 @@ struct DownloadProgressTests {
             // Arrange
             let dir = try DownloadProgressTests.makeTempDir()
             defer { DownloadProgressTests.removeTempDir(dir) }
-            let manager = ModelManager(cacheDirectory: dir)
+            let registry = ModelRegistry(cacheDirectory: dir)
             let spec = DownloadProgressTests.sampleSpec()
 
             // Act
-            let stream = await manager.downloadWithProgress(spec)
+            let stream = await registry.downloadWithProgress(spec)
             var progressUpdates: [DownloadProgress] = []
             for try await progress in stream {
                 progressUpdates.append(progress)
@@ -160,11 +160,11 @@ struct DownloadProgressTests {
             // Arrange
             let dir = try DownloadProgressTests.makeTempDir()
             defer { DownloadProgressTests.removeTempDir(dir) }
-            let manager = ModelManager(cacheDirectory: dir)
+            let registry = ModelRegistry(cacheDirectory: dir)
             let spec = DownloadProgressTests.sampleSpec()
 
             // Act
-            let stream = await manager.downloadWithProgress(spec)
+            let stream = await registry.downloadWithProgress(spec)
             var progressUpdates: [DownloadProgress] = []
             for try await progress in stream {
                 progressUpdates.append(progress)
@@ -179,11 +179,11 @@ struct DownloadProgressTests {
             // Arrange
             let dir = try DownloadProgressTests.makeTempDir()
             defer { DownloadProgressTests.removeTempDir(dir) }
-            let manager = ModelManager(cacheDirectory: dir)
+            let registry = ModelRegistry(cacheDirectory: dir)
             let spec = DownloadProgressTests.sampleSpec()
 
             // Act
-            let stream = await manager.downloadWithProgress(spec)
+            let stream = await registry.downloadWithProgress(spec)
             var progressUpdates: [DownloadProgress] = []
             for try await progress in stream {
                 progressUpdates.append(progress)
@@ -200,15 +200,15 @@ struct DownloadProgressTests {
             // Arrange
             let dir = try DownloadProgressTests.makeTempDir()
             defer { DownloadProgressTests.removeTempDir(dir) }
-            let manager = ModelManager(cacheDirectory: dir)
+            let registry = ModelRegistry(cacheDirectory: dir)
             let spec = DownloadProgressTests.sampleSpec()
 
             // Act - consume the entire stream
-            let stream = await manager.downloadWithProgress(spec)
+            let stream = await registry.downloadWithProgress(spec)
             for try await _ in stream {}
 
             // Assert
-            let isCached = await manager.isCached(spec)
+            let isCached = await registry.isCached(spec)
             #expect(isCached == true)
         }
     }
@@ -268,11 +268,11 @@ struct DownloadProgressTests {
                 steps: [0.25, 0.5, 0.75],
                 totalSize: 4_000_000
             )
-            let manager = ModelManager(cacheDirectory: dir, downloadDelegate: delegate)
+            let registry = ModelRegistry(cacheDirectory: dir, downloadDelegate: delegate)
             let spec = DownloadProgressTests.sampleSpec()
 
             // Act
-            let stream = await manager.downloadWithProgress(spec)
+            let stream = await registry.downloadWithProgress(spec)
             var progressUpdates: [DownloadProgress] = []
             for try await progress in stream {
                 progressUpdates.append(progress)
@@ -296,11 +296,11 @@ struct DownloadProgressTests {
                 steps: [0.5],
                 totalSize: 1_000_000
             )
-            let manager = ModelManager(cacheDirectory: dir, downloadDelegate: delegate)
+            let registry = ModelRegistry(cacheDirectory: dir, downloadDelegate: delegate)
             let spec = DownloadProgressTests.sampleSpec()
 
             // Act
-            let stream = await manager.downloadWithProgress(spec)
+            let stream = await registry.downloadWithProgress(spec)
             var progressUpdates: [DownloadProgress] = []
             for try await progress in stream {
                 progressUpdates.append(progress)
@@ -319,15 +319,15 @@ struct DownloadProgressTests {
                 steps: [0.5],
                 totalSize: 2_500_000
             )
-            let manager = ModelManager(cacheDirectory: dir, downloadDelegate: delegate)
+            let registry = ModelRegistry(cacheDirectory: dir, downloadDelegate: delegate)
             let spec = DownloadProgressTests.sampleSpec()
 
             // Act
-            let stream = await manager.downloadWithProgress(spec)
+            let stream = await registry.downloadWithProgress(spec)
             for try await _ in stream {}
 
             // Assert
-            let models = await manager.cachedModels()
+            let models = await registry.cachedModels()
             #expect(models.count == 1)
             #expect(models[0].sizeInBytes == 2_500_000)
         }
@@ -343,11 +343,11 @@ struct DownloadProgressTests {
                     reason: "network error"
                 )
             )
-            let manager = ModelManager(cacheDirectory: dir, downloadDelegate: delegate)
+            let registry = ModelRegistry(cacheDirectory: dir, downloadDelegate: delegate)
             let spec = DownloadProgressTests.sampleSpec()
 
             // Act & Assert
-            let stream = await manager.downloadWithProgress(spec)
+            let stream = await registry.downloadWithProgress(spec)
             var receivedError: (any Error)?
             do {
                 for try await _ in stream {}
@@ -374,11 +374,11 @@ struct DownloadProgressTests {
                     reason: "network error"
                 )
             )
-            let manager = ModelManager(cacheDirectory: dir, downloadDelegate: delegate)
+            let registry = ModelRegistry(cacheDirectory: dir, downloadDelegate: delegate)
             let spec = DownloadProgressTests.sampleSpec()
 
             // Act - consume stream, ignoring error
-            let stream = await manager.downloadWithProgress(spec)
+            let stream = await registry.downloadWithProgress(spec)
             do {
                 for try await _ in stream {}
             } catch {
@@ -386,7 +386,7 @@ struct DownloadProgressTests {
             }
 
             // Assert - model should NOT be cached
-            let isCached = await manager.isCached(spec)
+            let isCached = await registry.isCached(spec)
             #expect(isCached == false)
         }
     }
@@ -420,11 +420,11 @@ struct DownloadProgressTests {
             let dir = try DownloadProgressTests.makeTempDir()
             defer { DownloadProgressTests.removeTempDir(dir) }
             let delegate = SlowDelegate()
-            let manager = ModelManager(cacheDirectory: dir, downloadDelegate: delegate)
+            let registry = ModelRegistry(cacheDirectory: dir, downloadDelegate: delegate)
             let spec = DownloadProgressTests.sampleSpec()
 
             // Act
-            let stream = await manager.downloadWithProgress(spec)
+            let stream = await registry.downloadWithProgress(spec)
             let task = Task {
                 var updates: [DownloadProgress] = []
                 do {
@@ -450,7 +450,7 @@ struct DownloadProgressTests {
             #expect(updates[0].fraction == 0.0)
 
             // Model should NOT be registered since download was cancelled
-            let isCached = await manager.isCached(spec)
+            let isCached = await registry.isCached(spec)
             #expect(isCached == false)
         }
     }

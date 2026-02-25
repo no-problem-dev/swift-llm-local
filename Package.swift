@@ -18,6 +18,8 @@ let package = Package(
     dependencies: [
         // Canonical LLM types (ToolDefinition, ToolCall, JSONSchema)
         .package(path: "../swift-llm-client"),
+        // Persistence abstractions (RegistryStore)
+        .package(path: "../swift-persistence"),
         // MLX LLM inference
         .package(url: "https://github.com/ml-explore/mlx-swift-lm", from: "2.30.0"),
         // Documentation generation
@@ -36,7 +38,11 @@ let package = Package(
         // MARK: - Layer 1: Model management
         .target(
             name: "LLMLocalModels",
-            dependencies: ["LLMLocalClient"]
+            dependencies: [
+                "LLMLocalClient",
+                .product(name: "PersistenceCore", package: "swift-persistence"),
+                .product(name: "PersistenceFileSystem", package: "swift-persistence"),
+            ]
         ),
 
         // MARK: - Layer 2: MLX backend
@@ -67,7 +73,11 @@ let package = Package(
         ),
         .testTarget(
             name: "LLMLocalModelsTests",
-            dependencies: ["LLMLocalModels", "LLMLocalClient"],
+            dependencies: [
+                "LLMLocalModels",
+                "LLMLocalClient",
+                .product(name: "PersistenceTesting", package: "swift-persistence"),
+            ],
             path: "Tests/LLMLocalModelsTests"
         ),
         .testTarget(

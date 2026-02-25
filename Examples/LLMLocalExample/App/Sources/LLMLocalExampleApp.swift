@@ -19,7 +19,7 @@ struct LLMLocalExampleApp: App {
         _chatState = State(initialValue: ChatState(service: services.llmService))
         _modelState = State(initialValue: ModelState(
             service: services.llmService,
-            modelManager: services.modelManager,
+            modelRegistry: services.modelRegistry,
             memoryMonitor: services.memoryMonitor
         ))
     }

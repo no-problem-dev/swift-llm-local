@@ -51,8 +51,8 @@ struct LLMLocalServiceToolTests {
         let dir = try Self.makeTempDir()
         defer { Self.removeTempDir(dir) }
         let backend = MockBackend()
-        let modelManager = ModelManager(cacheDirectory: dir)
-        let service = LLMLocalService(backend: backend, modelManager: modelManager)
+        let modelRegistry = ModelRegistry(cacheDirectory: dir)
+        let service = LLMLocalService(backend: backend, modelRegistry: modelRegistry)
 
         var outputs: [GenerationOutput] = []
         let stream = await service.generateWithTools(
@@ -89,8 +89,8 @@ struct LLMLocalServiceToolTests {
             .text("Let me check"),
             .toolCall(toolCall),
         ])
-        let modelManager = ModelManager(cacheDirectory: dir)
-        let service = LLMLocalService(backend: backend, modelManager: modelManager)
+        let modelRegistry = ModelRegistry(cacheDirectory: dir)
+        let service = LLMLocalService(backend: backend, modelRegistry: modelRegistry)
 
         var outputs: [GenerationOutput] = []
         let stream = await service.generateWithTools(
@@ -123,8 +123,8 @@ struct LLMLocalServiceToolTests {
         let dir = try Self.makeTempDir()
         defer { Self.removeTempDir(dir) }
         let backend = MockBackend()
-        let modelManager = ModelManager(cacheDirectory: dir)
-        let service = LLMLocalService(backend: backend, modelManager: modelManager)
+        let modelRegistry = ModelRegistry(cacheDirectory: dir)
+        let service = LLMLocalService(backend: backend, modelRegistry: modelRegistry)
 
         let stream = await service.generateWithTools(
             model: Self.sampleSpec(),
@@ -148,8 +148,8 @@ struct LLMLocalServiceToolTests {
         defer { Self.removeTempDir(dir) }
         let backend = MockBackend()
         await backend.setShouldThrow(.loadFailed(modelId: "test", reason: "test error"))
-        let modelManager = ModelManager(cacheDirectory: dir)
-        let service = LLMLocalService(backend: backend, modelManager: modelManager)
+        let modelRegistry = ModelRegistry(cacheDirectory: dir)
+        let service = LLMLocalService(backend: backend, modelRegistry: modelRegistry)
 
         let stream = await service.generateWithTools(
             model: Self.sampleSpec(),
@@ -179,8 +179,8 @@ struct LLMLocalServiceToolTests {
             .toolCall(toolCall),
             .text("c"),
         ])
-        let modelManager = ModelManager(cacheDirectory: dir)
-        let service = LLMLocalService(backend: backend, modelManager: modelManager)
+        let modelRegistry = ModelRegistry(cacheDirectory: dir)
+        let service = LLMLocalService(backend: backend, modelRegistry: modelRegistry)
 
         let stream = await service.generateWithTools(
             model: Self.sampleSpec(),

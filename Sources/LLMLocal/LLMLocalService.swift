@@ -3,7 +3,7 @@ import LLMLocalClient
 import LLMLocalMLX
 import LLMLocalModels
 
-/// バックエンドとモデルマネージャーを統合し、便利なLLM操作を提供するファサード
+/// バックエンドとモデルレジストリを統合し、便利なLLM操作を提供するファサード
 ///
 /// `LLMLocalService` はテキスト生成のための高レベルAPIを提供します。
 /// 必要に応じてモデルの読み込みを自動的に処理し、生成統計を追跡します。
@@ -16,7 +16,7 @@ import LLMLocalModels
 /// let monitor = MemoryMonitor()
 /// let service = LLMLocalService(
 ///     backend: mlxBackend,
-///     modelManager: modelManager,
+///     modelRegistry: modelRegistry,
 ///     memoryMonitor: monitor
 /// )
 /// await service.startMemoryMonitoring()
@@ -32,30 +32,30 @@ import LLMLocalModels
 public actor LLMLocalService {
 
     private let backend: any LLMLocalBackend
-    private let modelManager: ModelManager
+    private let modelRegistry: ModelRegistry
     private let memoryMonitor: MemoryMonitor?
     private let modelSwitcher: ModelSwitcher?
 
     /// 最新の完了した生成の統計情報。まだ生成が完了していない場合は `nil`。
     private(set) public var lastGenerationStats: GenerationStats?
 
-    /// 指定されたバックエンド、モデルマネージャー、およびオプションのメモリモニターと
+    /// 指定されたバックエンド、モデルレジストリ、およびオプションのメモリモニターと
     /// モデルスイッチャーで新しいサービスを作成します。
     ///
     /// - Parameters:
     ///   - backend: モデルの読み込みとテキスト生成に使用する推論バックエンド。
-    ///   - modelManager: キャッシュ照会用のモデルマネージャー。
+    ///   - modelRegistry: キャッシュ照会用のモデルレジストリ。
     ///   - memoryMonitor: メモリ圧迫時の自動モデルアンロード用のオプションメモリモニター。デフォルトは `nil`。
     ///   - modelSwitcher: LRUベースのマルチモデル管理用のオプションモデルスイッチャー。
     ///     指定された場合、バックエンドへの直接呼び出しの代わりにスイッチャーにモデル読み込みを委譲します。デフォルトは `nil`。
     public init(
         backend: any LLMLocalBackend,
-        modelManager: ModelManager,
+        modelRegistry: ModelRegistry,
         memoryMonitor: MemoryMonitor? = nil,
         modelSwitcher: ModelSwitcher? = nil
     ) {
         self.backend = backend
-        self.modelManager = modelManager
+        self.modelRegistry = modelRegistry
         self.memoryMonitor = memoryMonitor
         self.modelSwitcher = modelSwitcher
     }
@@ -298,7 +298,7 @@ public actor LLMLocalService {
     /// - Parameter spec: 確認するモデル仕様。
     /// - Returns: モデルがキャッシュに登録されている場合は `true`。
     public func isModelCached(_ spec: ModelSpec) async -> Bool {
-        await modelManager.isCached(spec)
+        await modelRegistry.isCached(spec)
     }
 
     /// 指定されたモデルをバックエンドにプリロードします。

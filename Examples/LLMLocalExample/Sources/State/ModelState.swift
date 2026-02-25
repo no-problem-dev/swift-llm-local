@@ -5,7 +5,7 @@ import LLMLocal
 @MainActor
 final class ModelState {
     private let service: LLMLocalService
-    private let modelManager: ModelManager
+    private let modelRegistry: ModelRegistry
     private let memoryMonitor: MemoryMonitor
 
     var availableModels: [ModelSpec] = ModelCatalog.specs
@@ -25,9 +25,9 @@ final class ModelState {
     var recommendedContextLength: Int?
     var error: String?
 
-    init(service: LLMLocalService, modelManager: ModelManager, memoryMonitor: MemoryMonitor) {
+    init(service: LLMLocalService, modelRegistry: ModelRegistry, memoryMonitor: MemoryMonitor) {
         self.service = service
-        self.modelManager = modelManager
+        self.modelRegistry = modelRegistry
         self.memoryMonitor = memoryMonitor
 
         if let savedId = UserDefaults.standard.string(forKey: "llmlocal.selectedModelId"),
@@ -37,8 +37,8 @@ final class ModelState {
     }
 
     func refreshCache() async {
-        cachedModels = await modelManager.cachedModels()
-        totalCacheSize = (try? await modelManager.totalCacheSize()) ?? 0
+        cachedModels = await modelRegistry.cachedModels()
+        totalCacheSize = (try? await modelRegistry.totalCacheSize()) ?? 0
     }
 
     func refreshMemoryInfo() async {
@@ -68,7 +68,7 @@ final class ModelState {
             }
 
             // ダウンロード成功後、メタデータをキャッシュに登録
-            try await modelManager.registerModel(spec, sizeInBytes: 0)
+            try await modelRegistry.registerModel(spec, sizeInBytes: 0)
             await refreshCache()
 
             // 自動選択
@@ -85,7 +85,7 @@ final class ModelState {
 
     func deleteModel(_ spec: ModelSpec) async {
         do {
-            try await modelManager.deleteCache(for: spec)
+            try await modelRegistry.deleteCache(for: spec)
             await refreshCache()
             // 削除したモデルが選択中だったらデフォルトに戻す
             if selectedModel == spec {

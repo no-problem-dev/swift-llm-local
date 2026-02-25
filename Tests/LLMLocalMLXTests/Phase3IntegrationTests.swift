@@ -23,8 +23,8 @@ struct Phase3IntegrationTests {
     @Test("Background download completes and returns local URL")
     func backgroundDownloadCompletes() async throws {
         // Arrange
-        let modelManager = ModelManager()
-        let downloader = await modelManager.backgroundDownloader
+        let modelRegistry = ModelRegistry()
+        let downloader = await modelRegistry.backgroundDownloader
 
         let testURL = URL(string: "https://huggingface.co/mlx-community/gemma-2-2b-it-4bit")!
 
@@ -40,8 +40,8 @@ struct Phase3IntegrationTests {
     @Test("Background download can be paused and resumed")
     func backgroundDownloadPauseResume() async throws {
         // Arrange
-        let modelManager = ModelManager()
-        let downloader = await modelManager.backgroundDownloader
+        let modelRegistry = ModelRegistry()
+        let downloader = await modelRegistry.backgroundDownloader
 
         let testURL = URL(string: "https://huggingface.co/mlx-community/gemma-2-2b-it-4bit")!
 
@@ -92,11 +92,11 @@ struct Phase3IntegrationTests {
     func serviceWithModelSwitcher() async throws {
         // Arrange
         let backend = MLXBackend()
-        let modelManager = ModelManager()
+        let modelRegistry = ModelRegistry()
         let switcher = ModelSwitcher(backend: backend, maxLoadedModels: 1)
         let service = LLMLocalService(
             backend: backend,
-            modelManager: modelManager,
+            modelRegistry: modelRegistry,
             modelSwitcher: switcher
         )
 
@@ -125,11 +125,11 @@ struct Phase3IntegrationTests {
     func phase12RegressionNoSwitcher() async throws {
         // Arrange — no modelSwitcher (backward compat)
         let backend = MLXBackend()
-        let modelManager = ModelManager()
+        let modelRegistry = ModelRegistry()
         let monitor = MemoryMonitor()
         let service = LLMLocalService(
             backend: backend,
-            modelManager: modelManager,
+            modelRegistry: modelRegistry,
             memoryMonitor: monitor
         )
 

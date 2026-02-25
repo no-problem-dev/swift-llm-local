@@ -421,11 +421,11 @@ struct LLMLocalServiceModelSwitcherTests {
         let dir = try Self.makeTempDir()
         defer { Self.removeTempDir(dir) }
         let backend = MockSwitcherBackend()
-        let modelManager = ModelManager(cacheDirectory: dir)
+        let modelRegistry = ModelRegistry(cacheDirectory: dir)
         let switcher = ModelSwitcher(backend: backend, maxLoadedModels: 2)
         let service = LLMLocalService(
             backend: backend,
-            modelManager: modelManager,
+            modelRegistry: modelRegistry,
             modelSwitcher: switcher
         )
         let spec = makeSpec(id: "model-a")
@@ -449,10 +449,10 @@ struct LLMLocalServiceModelSwitcherTests {
         let dir = try Self.makeTempDir()
         defer { Self.removeTempDir(dir) }
         let backend = MockSwitcherBackend()
-        let modelManager = ModelManager(cacheDirectory: dir)
+        let modelRegistry = ModelRegistry(cacheDirectory: dir)
         let service = LLMLocalService(
             backend: backend,
-            modelManager: modelManager
+            modelRegistry: modelRegistry
         )
         let spec = makeSpec(id: "model-a")
 
@@ -475,11 +475,11 @@ struct LLMLocalServiceModelSwitcherTests {
         let dir = try Self.makeTempDir()
         defer { Self.removeTempDir(dir) }
         let backend = MockSwitcherBackend()
-        let modelManager = ModelManager(cacheDirectory: dir)
+        let modelRegistry = ModelRegistry(cacheDirectory: dir)
         let switcher = ModelSwitcher(backend: backend, maxLoadedModels: 3)
         let service = LLMLocalService(
             backend: backend,
-            modelManager: modelManager,
+            modelRegistry: modelRegistry,
             modelSwitcher: switcher
         )
         let specA = makeSpec(id: "model-a")
@@ -504,10 +504,10 @@ struct LLMLocalServiceModelSwitcherTests {
         let dir = try Self.makeTempDir()
         defer { Self.removeTempDir(dir) }
         let backend = MockSwitcherBackend()
-        let modelManager = ModelManager(cacheDirectory: dir)
+        let modelRegistry = ModelRegistry(cacheDirectory: dir)
 
         // Act: Use original init without modelSwitcher parameter
-        let service = LLMLocalService(backend: backend, modelManager: modelManager)
+        let service = LLMLocalService(backend: backend, modelRegistry: modelRegistry)
         let spec = makeSpec(id: "model-a")
         let stream = await service.generate(model: spec, prompt: "Hello")
         var tokens: [String] = []

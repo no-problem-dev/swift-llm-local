@@ -1,22 +1,15 @@
 import Foundation
 import LLMLocalClient
+import PersistenceCore
+import PersistenceFileSystem
 
 /// モデルキャッシュのメタデータ管理とキャッシュ操作を提供するアクター
 ///
-/// `ModelManager` はローカルにダウンロード・キャッシュされたモデルを追跡し、
-/// キャッシュディレクトリ内の `registry.json` ファイルにメタデータを保存します。
+/// `ModelRegistry` はローカルにダウンロード・キャッシュされたモデルを追跡し、
+/// ``RegistryStore`` 経由でメタデータを永続化します。
 /// 実際のモデル重みは MLX バックエンドが Hugging Face Hub キャッシュ経由で管理し、
 /// このアクターはメタデータレジストリのみを管理します。
-///
-/// ## Phase 1 スコープ
-///
-/// - キャッシュ済みモデルの一覧表示
-/// - モデルのキャッシュ有無確認
-/// - 合計キャッシュサイズの計算
-/// - 特定モデルのキャッシュメタデータ削除
-/// - 全キャッシュメタデータのクリア
-/// - モデルの登録（ダウンロードスタブ。実際の HF ダウンロードは MLXBackend が担当）
-public actor ModelManager {
+public actor ModelRegistry {
 
     /// レジストリファイルとアダプターファイルを保存するディレクトリ。
     private let cacheDirectory: URL
@@ -24,8 +17,8 @@ public actor ModelManager {
     /// モデルIDをキーとするモデルメタデータのインメモリキャッシュ。
     private var cachedMetadata: [String: CachedModelInfo] = [:]
 
-    /// レジストリをディスクに永続化する内部ヘルパー。
-    private let cache: ModelCache
+    /// レジストリを永続化するストア。
+    private let cache: any RegistryStore<CachedModelInfo>
 
     /// 実際のダウンロード処理を行うデリゲート。
     private let downloadDelegate: any DownloadProgressDelegate
@@ -40,17 +33,20 @@ public actor ModelManager {
         _backgroundDownloader
     }
 
-    /// 新しいモデルマネージャーを作成します。
+    /// 新しいモデルレジストリを作成します。
     ///
     /// - Parameters:
     ///   - cacheDirectory: レジストリとアダプターファイルを保存するディレクトリ。
     ///     デフォルトは `~/Library/Application Support/LLMLocal/models`。
+    ///   - registryStore: レジストリの永続化ストア。
+    ///     `nil` の場合、キャッシュディレクトリの `registry.json` を使用します。
     ///   - downloadDelegate: ダウンロードを実行するオプションのデリゲート。
     ///     `nil` の場合、即座のダウンロードをシミュレートするスタブデリゲートが使用されます。
     ///   - backgroundDownloader: オプションのバックグラウンドダウンローダーインスタンス。
     ///     `nil` の場合、キャッシュディレクトリを使用してデフォルトの ``BackgroundDownloader`` が作成されます。
     public init(
         cacheDirectory: URL? = nil,
+        registryStore: (any RegistryStore<CachedModelInfo>)? = nil,
         downloadDelegate: (any DownloadProgressDelegate)? = nil,
         backgroundDownloader: BackgroundDownloader? = nil
     ) {
@@ -59,7 +55,8 @@ public actor ModelManager {
                 .first!
                 .appendingPathComponent("LLMLocal/models")
         self.cacheDirectory = dir
-        self.cache = ModelCache(directory: dir)
+        self.cache = registryStore
+            ?? FileSystemRegistryStore<CachedModelInfo>(directory: dir)
         self.cachedMetadata = cache.load()
         self.downloadDelegate = downloadDelegate ?? StubDownloadDelegate()
         self._backgroundDownloader = backgroundDownloader
