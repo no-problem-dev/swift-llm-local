@@ -442,8 +442,10 @@ public actor MLXBackend: LLMLocalBackend {
                 toolResults.append((callId: callId, content: content))
             case .image, .audio, .video:
                 break
-            case .thinking:
-                break // Local LLM では thinking は無視
+            case .thinking(let text, _):
+                // マルチターン時にモデルが自身の推論を参照できるよう
+                // <think> タグで再ラップしてメッセージに含める
+                textContent += "<think>\(text)</think>"
             }
         }
 

@@ -10,6 +10,9 @@ import LLMLocalClient
 ///
 /// `generateFromMessages` API を使用し、チャットテンプレートの
 /// 二重適用（double-templating）を回避する。
+///
+/// `<think>` タグを検出し、既存の thinking パイプライン
+/// （`thinkingDelta` → `AgentStep` → `SessionPhaseEvent`）に統合する。
 public final class LocalAgentClient: Sendable {
     private let service: LLMLocalService
 
@@ -131,6 +134,8 @@ extension LocalAgentClient: AgentCapableClient {
         let config = GenerationConfig(maxTokens: 1024, temperature: 0.7)
         let toolDefs = tools.isEmpty ? [] : tools.definitions
 
+        var parser = ThinkTagParser()
+        var thinkingText = ""
         var textParts: [String] = []
         var toolCalls: [ToolCall] = []
 
@@ -144,13 +149,133 @@ extension LocalAgentClient: AgentCapableClient {
         for try await output in stream {
             switch output {
             case .text(let token):
-                textParts.append(token)
+                for chunk in parser.process(token) {
+                    switch chunk {
+                    case .thinking(let text): thinkingText += text
+                    case .text(let text): textParts.append(text)
+                    }
+                }
             case .toolCall(let call):
                 toolCalls.append(call)
             }
         }
 
+        for chunk in parser.finalize() {
+            switch chunk {
+            case .thinking(let text): thinkingText += text
+            case .text(let text): textParts.append(text)
+            }
+        }
+
+        return buildResponse(
+            thinkingText: thinkingText,
+            textParts: textParts,
+            toolCalls: toolCalls,
+            model: model
+        )
+    }
+
+    public func streamAgentStep(
+        messages: [LLMMessage],
+        model: ModelSpec,
+        systemPrompt: SystemPrompt?,
+        tools: ToolSet,
+        toolChoice: ToolChoice?,
+        responseSchema: JSONSchema?,
+        thinkingMode: ThinkingMode,
+        maxTokens: Int?
+    ) -> AsyncThrowingStream<StreamingAgentEvent, Error> {
+        let service = self.service
+        let config = GenerationConfig(maxTokens: 1024, temperature: 0.7)
+        let toolDefs = tools.isEmpty ? [] : tools.definitions
+
+        return makeCancellableStream { continuation in
+            Task {
+                do {
+                    var parser = ThinkTagParser()
+                    var thinkingText = ""
+                    var textParts: [String] = []
+                    var toolCalls: [ToolCall] = []
+
+                    let stream = await service.generateFromMessages(
+                        model: model,
+                        messages: messages,
+                        systemPrompt: systemPrompt?.render(),
+                        config: config,
+                        tools: toolDefs
+                    )
+                    for try await output in stream {
+                        switch output {
+                        case .text(let token):
+                            for chunk in parser.process(token) {
+                                switch chunk {
+                                case .thinking(let text):
+                                    thinkingText += text
+                                    continuation.yield(.delta(.thinkingDelta(text)))
+                                case .text(let text):
+                                    textParts.append(text)
+                                    continuation.yield(.delta(.textDelta(text)))
+                                }
+                            }
+                        case .toolCall(let call):
+                            toolCalls.append(call)
+                        }
+                    }
+
+                    for chunk in parser.finalize() {
+                        switch chunk {
+                        case .thinking(let text):
+                            thinkingText += text
+                            continuation.yield(.delta(.thinkingDelta(text)))
+                        case .text(let text):
+                            textParts.append(text)
+                            continuation.yield(.delta(.textDelta(text)))
+                        }
+                    }
+
+                    let response = Self.buildResponseStatic(
+                        thinkingText: thinkingText,
+                        textParts: textParts,
+                        toolCalls: toolCalls,
+                        model: model
+                    )
+
+                    continuation.yield(.completed(response))
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+        }
+    }
+
+    // MARK: - Private
+
+    private func buildResponse(
+        thinkingText: String,
+        textParts: [String],
+        toolCalls: [ToolCall],
+        model: ModelSpec
+    ) -> LLMResponse {
+        Self.buildResponseStatic(
+            thinkingText: thinkingText,
+            textParts: textParts,
+            toolCalls: toolCalls,
+            model: model
+        )
+    }
+
+    private static func buildResponseStatic(
+        thinkingText: String,
+        textParts: [String],
+        toolCalls: [ToolCall],
+        model: ModelSpec
+    ) -> LLMResponse {
         var contentBlocks: [LLMResponse.ContentBlock] = []
+
+        if !thinkingText.isEmpty {
+            contentBlocks.append(.thinking(text: thinkingText, signature: nil))
+        }
 
         let fullText = textParts.joined()
         if !fullText.isEmpty {
