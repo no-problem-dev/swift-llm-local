@@ -131,6 +131,9 @@ public actor AdapterRegistry {
     /// AdapterSource から導出された一意のキーをキーとします。
     private var adapterRegistry: [String: AdapterInfo] = [:]
 
+    /// ストアからの初回ロードが完了しているかどうか。
+    private var isLoaded: Bool = false
+
     /// アダプターレジストリを永続化するストア。
     private let cache: any RegistryStore<AdapterInfo>
 
@@ -164,8 +167,16 @@ public actor AdapterRegistry {
                 directory: dir,
                 filename: "adapter-registry.json"
             )
-        self.adapterRegistry = cache.load()
         self.networkDelegate = networkDelegate ?? StubAdapterNetworkDelegate()
+    }
+
+    // MARK: - Private Helpers
+
+    /// ストアからのデータが未ロードの場合、非同期でロードします。
+    private func ensureLoaded() async {
+        guard !isLoaded else { return }
+        adapterRegistry = await cache.load()
+        isLoaded = true
     }
 
     // MARK: - Public API
@@ -180,6 +191,7 @@ public actor AdapterRegistry {
     /// - Throws: ローカルアダプターが見つからない場合は ``LLMLocalError/adapterMergeFailed(reason:)``、
     ///   リモート取得に失敗した場合はダウンロードエラー。
     public func resolve(_ source: AdapterSource) async throws -> URL {
+        await ensureLoaded()
         switch source {
         case .local(let path):
             guard FileManager.default.fileExists(atPath: path.path()) else {
@@ -208,7 +220,7 @@ public actor AdapterRegistry {
                 localPath: localPath
             )
             adapterRegistry[key] = info
-            try cache.save(adapterRegistry)
+            try await cache.save(adapterRegistry)
             return localPath
 
         case .huggingFace(let id):
@@ -228,7 +240,7 @@ public actor AdapterRegistry {
                 localPath: localPath
             )
             adapterRegistry[key] = info
-            try cache.save(adapterRegistry)
+            try await cache.save(adapterRegistry)
             return localPath
         }
     }
@@ -236,15 +248,17 @@ public actor AdapterRegistry {
     /// すべてのキャッシュ済みアダプターを返します。
     ///
     /// - Returns: キャッシュされた全アダプターの ``AdapterInfo`` 配列。
-    public func cachedAdapters() -> [AdapterInfo] {
-        Array(adapterRegistry.values)
+    public func cachedAdapters() async -> [AdapterInfo] {
+        await ensureLoaded()
+        return Array(adapterRegistry.values)
     }
 
     /// アダプターがキャッシュされているか確認します。
     ///
     /// - Parameter source: 確認するアダプターソース。
     /// - Returns: アダプターがダウンロード・キャッシュ済みの場合は `true`。
-    public func isCached(_ source: AdapterSource) -> Bool {
+    public func isCached(_ source: AdapterSource) async -> Bool {
+        await ensureLoaded()
         let key = Self.cacheKey(for: source)
         return adapterRegistry[key] != nil
     }
@@ -255,18 +269,20 @@ public actor AdapterRegistry {
     ///
     /// - Parameter source: 削除するアダプターソース。
     /// - Throws: レジストリの永続化に失敗した場合のエラー。
-    public func deleteAdapter(for source: AdapterSource) throws {
+    public func deleteAdapter(for source: AdapterSource) async throws {
+        await ensureLoaded()
         let key = Self.cacheKey(for: source)
         adapterRegistry.removeValue(forKey: key)
-        try cache.save(adapterRegistry)
+        try await cache.save(adapterRegistry)
     }
 
     /// すべてのキャッシュ済みアダプターレジストリエントリを削除します。
     ///
     /// - Throws: レジストリの永続化に失敗した場合のエラー。
-    public func clearAll() throws {
+    public func clearAll() async throws {
+        await ensureLoaded()
         adapterRegistry.removeAll()
-        try cache.save(adapterRegistry)
+        try await cache.save(adapterRegistry)
     }
 
     /// キャッシュされたアダプターの新しいバージョンが利用可能か確認します。
@@ -280,7 +296,8 @@ public actor AdapterRegistry {
     /// - Returns: アップデートが利用可能な場合は `true`。
     public func isUpdateAvailable(
         for source: AdapterSource, latestTag: String
-    ) -> Bool {
+    ) async -> Bool {
+        await ensureLoaded()
         let key = Self.cacheKey(for: source)
         guard let info = adapterRegistry[key] else { return true }
         return info.version != latestTag

@@ -17,6 +17,9 @@ public actor ModelRegistry {
     /// モデルIDをキーとするモデルメタデータのインメモリキャッシュ。
     private var cachedMetadata: [String: CachedModelInfo] = [:]
 
+    /// ストアからの初回ロードが完了しているかどうか。
+    private var isLoaded: Bool = false
+
     /// レジストリを永続化するストア。
     private let cache: any RegistryStore<CachedModelInfo>
 
@@ -57,7 +60,6 @@ public actor ModelRegistry {
         self.cacheDirectory = dir
         self.cache = registryStore
             ?? FileSystemRegistryStore<CachedModelInfo>(directory: dir)
-        self.cachedMetadata = cache.load()
         self.downloadDelegate = downloadDelegate ?? StubDownloadDelegate()
         self._backgroundDownloader = backgroundDownloader
             ?? BackgroundDownloader(
@@ -65,29 +67,41 @@ public actor ModelRegistry {
             )
     }
 
+    // MARK: - Private Helpers
+
+    /// ストアからのデータが未ロードの場合、非同期でロードします。
+    private func ensureLoaded() async {
+        guard !isLoaded else { return }
+        cachedMetadata = await cache.load()
+        isLoaded = true
+    }
+
     // MARK: - Public API
 
     /// すべてのキャッシュ済みモデルの一覧を返します。
     ///
     /// - Returns: 登録済みの全モデルの ``CachedModelInfo`` 配列。
-    public func cachedModels() -> [CachedModelInfo] {
-        Array(cachedMetadata.values)
+    public func cachedModels() async -> [CachedModelInfo] {
+        await ensureLoaded()
+        return Array(cachedMetadata.values)
     }
 
     /// 指定されたモデル仕様がキャッシュに登録されているかを確認します。
     ///
     /// - Parameter spec: 確認するモデル仕様。
     /// - Returns: モデルがキャッシュに登録されている場合は `true`。
-    public func isCached(_ spec: ModelSpec) -> Bool {
-        cachedMetadata[spec.id] != nil
+    public func isCached(_ spec: ModelSpec) async -> Bool {
+        await ensureLoaded()
+        return cachedMetadata[spec.id] != nil
     }
 
     /// すべてのキャッシュ済みモデルの合計サイズをバイト単位で返します。
     ///
     /// - Returns: 全登録モデルの `sizeInBytes` の合計。
     /// - Throws: 現在はスローしませんが、将来のファイルシステムベースのサイズ計算に対応するシグネチャです。
-    public func totalCacheSize() throws -> Int64 {
-        cachedMetadata.values.reduce(0) { $0 + $1.sizeInBytes }
+    public func totalCacheSize() async throws -> Int64 {
+        await ensureLoaded()
+        return cachedMetadata.values.reduce(0) { $0 + $1.sizeInBytes }
     }
 
     /// 特定モデルのキャッシュメタデータエントリを削除し、モデルファイルも除去します。
@@ -97,25 +111,27 @@ public actor ModelRegistry {
     ///
     /// - Parameter spec: 削除するモデル仕様。
     /// - Throws: レジストリの永続化に失敗した場合。
-    public func deleteCache(for spec: ModelSpec) throws {
+    public func deleteCache(for spec: ModelSpec) async throws {
+        await ensureLoaded()
         if let info = cachedMetadata[spec.id], let filesPath = info.modelFilesPath {
             try? FileManager.default.removeItem(at: filesPath)
         }
         cachedMetadata.removeValue(forKey: spec.id)
-        try cache.save(cachedMetadata)
+        try await cache.save(cachedMetadata)
     }
 
     /// すべてのキャッシュ済みモデルメタデータを削除し、モデルファイルも除去します。
     ///
     /// - Throws: レジストリの永続化に失敗した場合。
-    public func clearAllCache() throws {
+    public func clearAllCache() async throws {
+        await ensureLoaded()
         for info in cachedMetadata.values {
             if let filesPath = info.modelFilesPath {
                 try? FileManager.default.removeItem(at: filesPath)
             }
         }
         cachedMetadata.removeAll()
-        try cache.save(cachedMetadata)
+        try await cache.save(cachedMetadata)
     }
 
     /// モデルをキャッシュメタデータに登録します。
@@ -134,7 +150,8 @@ public actor ModelRegistry {
         _ spec: ModelSpec,
         sizeInBytes: Int64,
         modelFilesPath: URL? = nil
-    ) throws {
+    ) async throws {
+        await ensureLoaded()
         let info = CachedModelInfo(
             modelId: spec.id,
             displayName: spec.displayName,
@@ -144,7 +161,7 @@ public actor ModelRegistry {
             modelFilesPath: modelFilesPath
         )
         cachedMetadata[spec.id] = info
-        try cache.save(cachedMetadata)
+        try await cache.save(cachedMetadata)
     }
 
     // MARK: - Download with Progress

@@ -19,7 +19,7 @@ let package = Package(
         // Canonical LLM types (ToolDefinition, ToolCall, JSONSchema)
         .package(url: "https://github.com/no-problem-dev/swift-llm-client.git", .upToNextMajor(from: "1.6.0")),
         // Persistence abstractions (RegistryStore)
-        .package(url: "https://github.com/no-problem-dev/swift-persistence.git", .upToNextMajor(from: "1.0.0")),
+        .package(url: "https://github.com/no-problem-dev/swift-persistence.git", .upToNextMajor(from: "2.0.0")),
         // MLX LLM inference
         .package(url: "https://github.com/ml-explore/mlx-swift-lm", from: "2.30.0"),
         // Documentation generation
