@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import LLMClient
 import LLMLocalClient
 
 // MARK: - ModelSource Tests
@@ -360,6 +361,76 @@ struct ModelSpecTests {
     func sizeTierReturnsMedium() {
         let spec = Self.sampleSpec(estimatedMemoryBytes: 5_000_000_000)
         #expect(spec.sizeTier == .medium)
+    }
+
+    // MARK: - profile
+
+    @Test("initializes with profile")
+    func initializesWithProfile() {
+        let profile = ModelProfile(
+            summary: "Test profile",
+            modelFamily: "Test",
+            parameterCount: "4B",
+            toolCallSupport: .excellent,
+            japaneseSupport: .good,
+            modalities: [.text, .code],
+            quantization: "4bit",
+            inferenceSpeed: .medium
+        )
+        let spec = ModelSpec(
+            id: "test",
+            base: .huggingFace(id: "test/model"),
+            contextLength: 4096,
+            displayName: "Test",
+            description: "Test",
+            estimatedMemoryBytes: 1000,
+            profile: profile
+        )
+        #expect(spec.profile == profile)
+        #expect(spec.profile?.toolCallSupport == .excellent)
+    }
+
+    @Test("profile defaults to nil")
+    func profileDefaultsToNil() {
+        let spec = Self.sampleSpec()
+        #expect(spec.profile == nil)
+    }
+
+    @Test("backward compatible: decodes JSON without profile")
+    func backwardCompatibleDecodingWithoutProfile() throws {
+        // Encode a spec without profile (all existing data)
+        let spec = Self.sampleSpec()
+        let data = try JSONEncoder().encode(spec)
+        let decoded = try JSONDecoder().decode(ModelSpec.self, from: data)
+        #expect(decoded.profile == nil)
+        #expect(decoded == spec)
+    }
+
+    @Test("Codable round-trip preserves profile")
+    func codableRoundTripWithProfile() throws {
+        let profile = ModelProfile(
+            summary: "Test",
+            modelFamily: "Qwen",
+            parameterCount: "8B",
+            toolCallSupport: .excellent,
+            japaneseSupport: .good,
+            modalities: [.text, .code],
+            quantization: "4bit",
+            inferenceSpeed: .medium
+        )
+        let original = ModelSpec(
+            id: "test-profile",
+            base: .huggingFace(id: "test/model"),
+            contextLength: 4096,
+            displayName: "Test",
+            description: "Test",
+            estimatedMemoryBytes: 4000,
+            profile: profile
+        )
+
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(ModelSpec.self, from: data)
+        #expect(decoded.profile == profile)
     }
 
     // MARK: - Sendable

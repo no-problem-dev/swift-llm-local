@@ -430,6 +430,101 @@ struct ModelRegistryTests {
         }
     }
 
+    // MARK: - File Deletion
+
+    @Suite("fileDeletion")
+    struct FileDeletionTests {
+
+        @Test("deleteCache removes model files from disk")
+        func deleteCacheRemovesFiles() async throws {
+            // Arrange
+            let dir = try ModelRegistryTests.makeTempDir()
+            defer { ModelRegistryTests.removeTempDir(dir) }
+
+            // Create dummy model files directory
+            let modelFilesDir = dir.appendingPathComponent("hf-cache/test-model")
+            try FileManager.default.createDirectory(
+                at: modelFilesDir, withIntermediateDirectories: true
+            )
+            // Create a dummy weight file
+            let weightFile = modelFilesDir.appendingPathComponent("model.safetensors")
+            try Data("fake weights".utf8).write(to: weightFile)
+
+            let manager = ModelRegistry(cacheDirectory: dir)
+            let spec = ModelRegistryTests.sampleSpec()
+            try await manager.registerModel(
+                spec, sizeInBytes: 1000, modelFilesPath: modelFilesDir
+            )
+
+            // Verify file exists
+            #expect(FileManager.default.fileExists(atPath: modelFilesDir.path))
+
+            // Act
+            try await manager.deleteCache(for: spec)
+
+            // Assert - files should be deleted
+            #expect(!FileManager.default.fileExists(atPath: modelFilesDir.path))
+            let isCached = await manager.isCached(spec)
+            #expect(isCached == false)
+        }
+
+        @Test("clearAllCache removes all model files from disk")
+        func clearAllCacheRemovesFiles() async throws {
+            // Arrange
+            let dir = try ModelRegistryTests.makeTempDir()
+            defer { ModelRegistryTests.removeTempDir(dir) }
+
+            let filesDir1 = dir.appendingPathComponent("hf-cache/model-a")
+            let filesDir2 = dir.appendingPathComponent("hf-cache/model-b")
+            try FileManager.default.createDirectory(
+                at: filesDir1, withIntermediateDirectories: true
+            )
+            try FileManager.default.createDirectory(
+                at: filesDir2, withIntermediateDirectories: true
+            )
+            try Data("weights1".utf8).write(
+                to: filesDir1.appendingPathComponent("model.safetensors")
+            )
+            try Data("weights2".utf8).write(
+                to: filesDir2.appendingPathComponent("model.safetensors")
+            )
+
+            let manager = ModelRegistry(cacheDirectory: dir)
+            let spec1 = ModelRegistryTests.sampleSpec(id: "model-a")
+            let spec2 = ModelRegistryTests.sampleSpec(id: "model-b")
+            try await manager.registerModel(
+                spec1, sizeInBytes: 100, modelFilesPath: filesDir1
+            )
+            try await manager.registerModel(
+                spec2, sizeInBytes: 200, modelFilesPath: filesDir2
+            )
+
+            // Act
+            try await manager.clearAllCache()
+
+            // Assert
+            #expect(!FileManager.default.fileExists(atPath: filesDir1.path))
+            #expect(!FileManager.default.fileExists(atPath: filesDir2.path))
+            let models = await manager.cachedModels()
+            #expect(models.isEmpty)
+        }
+
+        @Test("deleteCache without modelFilesPath only removes metadata")
+        func deleteCacheWithoutFilesPath() async throws {
+            // Arrange
+            let dir = try ModelRegistryTests.makeTempDir()
+            defer { ModelRegistryTests.removeTempDir(dir) }
+            let manager = ModelRegistry(cacheDirectory: dir)
+            let spec = ModelRegistryTests.sampleSpec()
+            try await manager.registerModel(spec, sizeInBytes: 1000)
+
+            // Act & Assert - should not throw
+            try await manager.deleteCache(for: spec)
+            let isCached = await manager.isCached(spec)
+            #expect(isCached == false)
+        }
+    }
+
     // MARK: - Default init
 
     @Suite("init")

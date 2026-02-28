@@ -90,21 +90,30 @@ public actor ModelRegistry {
         cachedMetadata.values.reduce(0) { $0 + $1.sizeInBytes }
     }
 
-    /// 特定モデルのキャッシュメタデータエントリを削除します。
+    /// 特定モデルのキャッシュメタデータエントリを削除し、モデルファイルも除去します。
     ///
     /// モデルがキャッシュされていない場合、このメソッドは何も行いません。
+    /// `modelFilesPath` が設定されている場合、そのディレクトリを削除してディスク容量を解放します。
     ///
     /// - Parameter spec: 削除するモデル仕様。
     /// - Throws: レジストリの永続化に失敗した場合。
     public func deleteCache(for spec: ModelSpec) throws {
+        if let info = cachedMetadata[spec.id], let filesPath = info.modelFilesPath {
+            try? FileManager.default.removeItem(at: filesPath)
+        }
         cachedMetadata.removeValue(forKey: spec.id)
         try cache.save(cachedMetadata)
     }
 
-    /// すべてのキャッシュ済みモデルメタデータを削除します。
+    /// すべてのキャッシュ済みモデルメタデータを削除し、モデルファイルも除去します。
     ///
     /// - Throws: レジストリの永続化に失敗した場合。
     public func clearAllCache() throws {
+        for info in cachedMetadata.values {
+            if let filesPath = info.modelFilesPath {
+                try? FileManager.default.removeItem(at: filesPath)
+            }
+        }
         cachedMetadata.removeAll()
         try cache.save(cachedMetadata)
     }
@@ -119,14 +128,20 @@ public actor ModelRegistry {
     /// - Parameters:
     ///   - spec: 登録するモデル仕様。
     ///   - sizeInBytes: モデルのサイズ（バイト単位）。
+    ///   - modelFilesPath: モデル実ファイルのパス。削除時にこのパスを使用してファイルを除去します。
     /// - Throws: レジストリの永続化に失敗した場合。
-    public func registerModel(_ spec: ModelSpec, sizeInBytes: Int64) throws {
+    public func registerModel(
+        _ spec: ModelSpec,
+        sizeInBytes: Int64,
+        modelFilesPath: URL? = nil
+    ) throws {
         let info = CachedModelInfo(
             modelId: spec.id,
             displayName: spec.displayName,
             sizeInBytes: sizeInBytes,
             downloadedAt: Date(),
-            localPath: cacheDirectory.appendingPathComponent(spec.id)
+            localPath: cacheDirectory.appendingPathComponent(spec.id),
+            modelFilesPath: modelFilesPath
         )
         cachedMetadata[spec.id] = info
         try cache.save(cachedMetadata)

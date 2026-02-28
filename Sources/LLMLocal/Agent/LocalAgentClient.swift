@@ -94,7 +94,7 @@ extension LocalAgentClient: ToolCallableClient {
         let response = try await executeAgentStep(
             messages: messages,
             model: model,
-            systemPrompt: systemPrompt.map { Prompt(stringLiteral: $0) },
+            systemPrompt: systemPrompt.map { SystemPrompt(stringLiteral: $0) },
             tools: tools,
             toolChoice: toolChoice,
             responseSchema: nil,
@@ -122,7 +122,7 @@ extension LocalAgentClient: AgentCapableClient {
     public func executeAgentStep(
         messages: [LLMMessage],
         model: ModelSpec,
-        systemPrompt: Prompt?,
+        systemPrompt: SystemPrompt?,
         tools: ToolSet,
         toolChoice: ToolChoice?,
         responseSchema: JSONSchema?,

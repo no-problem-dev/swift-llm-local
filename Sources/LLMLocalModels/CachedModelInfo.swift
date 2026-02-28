@@ -17,18 +17,26 @@ public struct CachedModelInfo: Sendable, Codable {
     /// このモデルのローカルキャッシュディレクトリへのパス。
     public let localPath: URL
 
+    /// モデル実ファイルのパス（HF Hub キャッシュディレクトリ）。
+    ///
+    /// 削除時にこのパスのディレクトリごと削除することで、
+    /// ディスク上のモデルファイルを確実に除去します。
+    public let modelFilesPath: URL?
+
     /// 新しいキャッシュモデル情報を作成します。
     public init(
         modelId: String,
         displayName: String,
         sizeInBytes: Int64,
         downloadedAt: Date,
-        localPath: URL
+        localPath: URL,
+        modelFilesPath: URL? = nil
     ) {
         self.modelId = modelId
         self.displayName = displayName
         self.sizeInBytes = sizeInBytes
         self.downloadedAt = downloadedAt
         self.localPath = localPath
+        self.modelFilesPath = modelFilesPath
     }
 }

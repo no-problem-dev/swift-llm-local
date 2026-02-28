@@ -35,4 +35,60 @@ struct ModelPresetsTests {
     func containsExpectedModelCount() {
         #expect(ModelPresets.all.count >= 30)
     }
+
+    @Test("all presets have a profile")
+    func allPresetsHaveProfile() {
+        for preset in ModelPresets.all {
+            #expect(preset.profile != nil, "Model \(preset.id) has no profile")
+        }
+    }
+
+    @Test("all profiles have non-empty summary")
+    func allProfilesHaveNonEmptySummary() {
+        for preset in ModelPresets.all {
+            guard let profile = preset.profile else { continue }
+            #expect(!profile.summary.isEmpty, "Model \(preset.id) profile has empty summary")
+        }
+    }
+
+    @Test("all profiles have non-empty modelFamily")
+    func allProfilesHaveModelFamily() {
+        for preset in ModelPresets.all {
+            guard let profile = preset.profile else { continue }
+            #expect(!profile.modelFamily.isEmpty, "Model \(preset.id) profile has empty modelFamily")
+        }
+    }
+
+    @Test("all profiles have text modality")
+    func allProfilesHaveTextModality() {
+        for preset in ModelPresets.all {
+            guard let profile = preset.profile else { continue }
+            #expect(
+                profile.modalities.contains(.text),
+                "Model \(preset.id) profile missing text modality"
+            )
+        }
+    }
+
+    @Test("all local profiles have quantization info")
+    func allLocalProfilesHaveQuantization() {
+        for preset in ModelPresets.all {
+            guard let profile = preset.profile else { continue }
+            #expect(
+                profile.quantization != nil,
+                "Model \(preset.id) profile missing quantization"
+            )
+        }
+    }
+
+    @Test("all local profiles have inference speed")
+    func allLocalProfilesHaveInferenceSpeed() {
+        for preset in ModelPresets.all {
+            guard let profile = preset.profile else { continue }
+            #expect(
+                profile.inferenceSpeed != nil,
+                "Model \(preset.id) profile missing inferenceSpeed"
+            )
+        }
+    }
 }

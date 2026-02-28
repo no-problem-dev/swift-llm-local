@@ -100,4 +100,68 @@ struct CachedModelInfoTests {
         let _: any Sendable = info
         #expect(info.modelId == "sendable-test")
     }
+
+    // MARK: - modelFilesPath
+
+    @Test("initializes with modelFilesPath")
+    func initializesWithModelFilesPath() {
+        let filesPath = URL(fileURLWithPath: "/tmp/huggingface/models/test")
+        let info = CachedModelInfo(
+            modelId: "test",
+            displayName: "Test",
+            sizeInBytes: 100,
+            downloadedAt: Date(),
+            localPath: URL(fileURLWithPath: "/tmp/local"),
+            modelFilesPath: filesPath
+        )
+        #expect(info.modelFilesPath == filesPath)
+    }
+
+    @Test("modelFilesPath defaults to nil")
+    func modelFilesPathDefaultsToNil() {
+        let info = CachedModelInfo(
+            modelId: "test",
+            displayName: "Test",
+            sizeInBytes: 100,
+            downloadedAt: Date(),
+            localPath: URL(fileURLWithPath: "/tmp/local")
+        )
+        #expect(info.modelFilesPath == nil)
+    }
+
+    @Test("backward compatible: decodes JSON without modelFilesPath")
+    func backwardCompatibleDecoding() throws {
+        // Simulate legacy JSON without modelFilesPath field
+        let legacyJSON = """
+        {
+            "modelId": "legacy-model",
+            "displayName": "Legacy",
+            "sizeInBytes": 500,
+            "downloadedAt": 1700000000,
+            "localPath": "file:///tmp/models/legacy"
+        }
+        """.data(using: .utf8)!
+
+        let decoded = try JSONDecoder().decode(CachedModelInfo.self, from: legacyJSON)
+        #expect(decoded.modelId == "legacy-model")
+        #expect(decoded.modelFilesPath == nil)
+    }
+
+    @Test("Codable round-trip preserves modelFilesPath")
+    func codableRoundTripWithModelFilesPath() throws {
+        let filesPath = URL(fileURLWithPath: "/tmp/hf/models/qwen")
+        let original = CachedModelInfo(
+            modelId: "qwen-test",
+            displayName: "Qwen Test",
+            sizeInBytes: 2000,
+            downloadedAt: Date(),
+            localPath: URL(fileURLWithPath: "/tmp/local"),
+            modelFilesPath: filesPath
+        )
+
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(CachedModelInfo.self, from: data)
+
+        #expect(decoded.modelFilesPath == filesPath)
+    }
 }

@@ -1,4 +1,5 @@
 import Foundation
+import LLMClient
 
 /// モデルのソース・オプションアダプター・メタデータを含むモデル設定
 public struct ModelSpec: Sendable, Hashable, Codable {
@@ -26,6 +27,11 @@ public struct ModelSpec: Sendable, Hashable, Codable {
     /// KV キャッシュやランタイムオーバーヘッドを含む概算値です。
     public let estimatedMemoryBytes: UInt64
 
+    /// モデルの特性・能力プロファイル。
+    ///
+    /// ツールコール対応度、日本語力、量子化情報などを含みます。
+    public let profile: ModelProfile?
+
     /// 新しいモデル仕様を作成します。
     /// - Parameters:
     ///   - id: このモデル仕様の一意識別子。
@@ -35,6 +41,7 @@ public struct ModelSpec: Sendable, Hashable, Codable {
     ///   - displayName: 人間可読な表示名。
     ///   - description: モデルの人間可読な説明文。
     ///   - estimatedMemoryBytes: 推定メモリ使用量（バイト単位）。
+    ///   - profile: モデルの特性プロファイル。デフォルトは `nil`。
     public init(
         id: String,
         base: ModelSource,
@@ -42,7 +49,8 @@ public struct ModelSpec: Sendable, Hashable, Codable {
         contextLength: Int,
         displayName: String,
         description: String,
-        estimatedMemoryBytes: UInt64
+        estimatedMemoryBytes: UInt64,
+        profile: ModelProfile? = nil
     ) {
         self.id = id
         self.base = base
@@ -51,6 +59,7 @@ public struct ModelSpec: Sendable, Hashable, Codable {
         self.displayName = displayName
         self.description = description
         self.estimatedMemoryBytes = estimatedMemoryBytes
+        self.profile = profile
     }
 }
 

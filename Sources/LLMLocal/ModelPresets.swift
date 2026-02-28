@@ -1,3 +1,4 @@
+import LLMClient
 import LLMLocalClient
 
 // swiftlint:disable type_body_length
@@ -17,7 +18,17 @@ public enum ModelPresets {
         contextLength: 4096,
         displayName: "Qwen3 0.6B",
         description: "超軽量モデル。基本的な質問応答やテスト向け",
-        estimatedMemoryBytes: 350 * mb
+        estimatedMemoryBytes: 350 * mb,
+        profile: ModelProfile(
+            summary: "超軽量。テスト・プロトタイプ向け",
+            modelFamily: "Qwen",
+            parameterCount: "0.6B",
+            toolCallSupport: .excellent,
+            japaneseSupport: .good,
+            modalities: [.text, .code],
+            quantization: "4bit",
+            inferenceSpeed: .fast
+        )
     )
 
     /// Qwen3 1.7B 4bit — 軽量・多言語対応
@@ -27,7 +38,17 @@ public enum ModelPresets {
         contextLength: 4096,
         displayName: "Qwen3 1.7B",
         description: "軽量かつ多言語対応。日本語もサポート",
-        estimatedMemoryBytes: 1000 * mb
+        estimatedMemoryBytes: 1000 * mb,
+        profile: ModelProfile(
+            summary: "軽量・多言語対応のバランス型",
+            modelFamily: "Qwen",
+            parameterCount: "1.7B",
+            toolCallSupport: .excellent,
+            japaneseSupport: .good,
+            modalities: [.text, .code],
+            quantization: "4bit",
+            inferenceSpeed: .medium
+        )
     )
 
     /// Qwen3 4B Instruct 2507 4bit — バランス型・多言語
@@ -37,7 +58,17 @@ public enum ModelPresets {
         contextLength: 4096,
         displayName: "Qwen3 4B",
         description: "多言語対応のバランス型モデル。日本語・コード生成に強い",
-        estimatedMemoryBytes: 2300 * mb
+        estimatedMemoryBytes: 2300 * mb,
+        profile: ModelProfile(
+            summary: "バランス型。日本語・コード生成に強い",
+            modelFamily: "Qwen",
+            parameterCount: "4B",
+            toolCallSupport: .excellent,
+            japaneseSupport: .good,
+            modalities: [.text, .code],
+            quantization: "4bit",
+            inferenceSpeed: .medium
+        )
     )
 
     /// Qwen3 4B 日本語ファインチューニング済み 4bit
@@ -47,7 +78,17 @@ public enum ModelPresets {
         contextLength: 4096,
         displayName: "Qwen3 4B 日本語",
         description: "日本語データでファインチューニング済み。日本語推論に最適化",
-        estimatedMemoryBytes: 2300 * mb
+        estimatedMemoryBytes: 2300 * mb,
+        profile: ModelProfile(
+            summary: "日本語 FT 済み。日本語推論に最適化",
+            modelFamily: "Qwen",
+            parameterCount: "4B",
+            toolCallSupport: .excellent,
+            japaneseSupport: .excellent,
+            modalities: [.text, .code],
+            quantization: "4bit",
+            inferenceSpeed: .medium
+        )
     )
 
     /// Qwen3 8B 4bit — 高品質・多言語
@@ -57,7 +98,17 @@ public enum ModelPresets {
         contextLength: 4096,
         displayName: "Qwen3 8B",
         description: "高品質な多言語モデル。日本語対応が特に良好",
-        estimatedMemoryBytes: 4700 * mb
+        estimatedMemoryBytes: 4700 * mb,
+        profile: ModelProfile(
+            summary: "高品質な多言語モデル。日本語が良好",
+            modelFamily: "Qwen",
+            parameterCount: "8B",
+            toolCallSupport: .excellent,
+            japaneseSupport: .good,
+            modalities: [.text, .code],
+            quantization: "4bit",
+            inferenceSpeed: .medium
+        )
     )
 
     /// Qwen 2.5 14B Instruct 4bit — 大型・高品質
@@ -67,7 +118,17 @@ public enum ModelPresets {
         contextLength: 4096,
         displayName: "Qwen 2.5 14B",
         description: "高品質な大型モデル。複雑なタスクに対応",
-        estimatedMemoryBytes: 8500 * mb
+        estimatedMemoryBytes: 8500 * mb,
+        profile: ModelProfile(
+            summary: "大型・高品質。複雑なタスクに対応",
+            modelFamily: "Qwen",
+            parameterCount: "14B",
+            toolCallSupport: .excellent,
+            japaneseSupport: .good,
+            modalities: [.text, .code],
+            quantization: "4bit",
+            inferenceSpeed: .medium
+        )
     )
 
     /// Qwen3 MoE 30B-A3B 4bit — MoE 高品質（3B アクティブ）
@@ -77,7 +138,17 @@ public enum ModelPresets {
         contextLength: 4096,
         displayName: "Qwen3 MoE 30B-A3B",
         description: "Mixture-of-Experts。30B パラメータ中 3B をアクティブに使用",
-        estimatedMemoryBytes: 18_000 * mb
+        estimatedMemoryBytes: 18_000 * mb,
+        profile: ModelProfile(
+            summary: "MoE アーキテクチャ。3B アクティブで効率的",
+            modelFamily: "Qwen",
+            parameterCount: "30B-A3B",
+            toolCallSupport: .excellent,
+            japaneseSupport: .good,
+            modalities: [.text, .code],
+            quantization: "4bit",
+            inferenceSpeed: .medium
+        )
     )
 
     /// Qwen 2.5 32B Instruct 4bit — Mac 向けフラッグシップ
@@ -87,7 +158,17 @@ public enum ModelPresets {
         contextLength: 4096,
         displayName: "Qwen 2.5 32B",
         description: "Mac 向けフラッグシップ。32GB+ RAM 推奨",
-        estimatedMemoryBytes: 19_000 * mb
+        estimatedMemoryBytes: 19_000 * mb,
+        profile: ModelProfile(
+            summary: "Mac 向けフラッグシップ。高品質",
+            modelFamily: "Qwen",
+            parameterCount: "32B",
+            toolCallSupport: .excellent,
+            japaneseSupport: .good,
+            modalities: [.text, .code],
+            quantization: "4bit",
+            inferenceSpeed: .medium
+        )
     )
 
     /// Qwen 2.5 72B Instruct 4bit — 最大級
@@ -97,7 +178,17 @@ public enum ModelPresets {
         contextLength: 4096,
         displayName: "Qwen 2.5 72B",
         description: "最大級モデル。64GB+ RAM の Mac 専用",
-        estimatedMemoryBytes: 42_000 * mb
+        estimatedMemoryBytes: 42_000 * mb,
+        profile: ModelProfile(
+            summary: "最大級。64GB+ RAM の Mac 専用",
+            modelFamily: "Qwen",
+            parameterCount: "72B",
+            toolCallSupport: .excellent,
+            japaneseSupport: .good,
+            modalities: [.text, .code],
+            quantization: "4bit",
+            inferenceSpeed: .slow
+        )
     )
 
     // MARK: - Gemma Family (Google)
@@ -109,7 +200,17 @@ public enum ModelPresets {
         contextLength: 8192,
         displayName: "Gemma 3 1B QAT",
         description: "Google の超軽量モデル。QAT で品質を維持した 4bit 量子化",
-        estimatedMemoryBytes: 800 * mb
+        estimatedMemoryBytes: 800 * mb,
+        profile: ModelProfile(
+            summary: "超軽量・QAT で品質維持",
+            modelFamily: "Gemma",
+            parameterCount: "1B",
+            toolCallSupport: .basic,
+            japaneseSupport: .basic,
+            modalities: [.text],
+            quantization: "QAT-4bit",
+            inferenceSpeed: .fast
+        )
     )
 
     /// Gemma 2 2B Instruct 4bit — 軽量・汎用
@@ -119,7 +220,17 @@ public enum ModelPresets {
         contextLength: 8192,
         displayName: "Gemma 2 2B",
         description: "Google の軽量汎用モデル。幅広いタスクに対応",
-        estimatedMemoryBytes: 1400 * mb
+        estimatedMemoryBytes: 1400 * mb,
+        profile: ModelProfile(
+            summary: "軽量汎用モデル",
+            modelFamily: "Gemma",
+            parameterCount: "2B",
+            toolCallSupport: .basic,
+            japaneseSupport: .basic,
+            modalities: [.text],
+            quantization: "4bit",
+            inferenceSpeed: .medium
+        )
     )
 
     /// Gemma 3n E2B 4bit — モバイル特化（2B 相当）
@@ -129,7 +240,17 @@ public enum ModelPresets {
         contextLength: 8192,
         displayName: "Gemma 3n E2B",
         description: "モバイル特化の Nano バリアント。2B 相当の効率的な推論",
-        estimatedMemoryBytes: 1200 * mb
+        estimatedMemoryBytes: 1200 * mb,
+        profile: ModelProfile(
+            summary: "モバイル特化 Nano。2B 相当",
+            modelFamily: "Gemma",
+            parameterCount: "E2B",
+            toolCallSupport: .basic,
+            japaneseSupport: .basic,
+            modalities: [.text],
+            quantization: "4bit",
+            inferenceSpeed: .fast
+        )
     )
 
     /// Gemma 3n E4B 4bit — モバイル特化（4B 相当）
@@ -139,7 +260,17 @@ public enum ModelPresets {
         contextLength: 8192,
         displayName: "Gemma 3n E4B",
         description: "モバイル特化の Nano バリアント。4B 相当の効率的な推論",
-        estimatedMemoryBytes: 2300 * mb
+        estimatedMemoryBytes: 2300 * mb,
+        profile: ModelProfile(
+            summary: "モバイル特化 Nano。4B 相当",
+            modelFamily: "Gemma",
+            parameterCount: "E4B",
+            toolCallSupport: .basic,
+            japaneseSupport: .basic,
+            modalities: [.text],
+            quantization: "4bit",
+            inferenceSpeed: .fast
+        )
     )
 
     /// Gemma 3 4B QAT 4bit — VLM 対応
@@ -149,7 +280,17 @@ public enum ModelPresets {
         contextLength: 8192,
         displayName: "Gemma 3 4B QAT",
         description: "Google の QAT 最適化 4B モデル。高品質な推論",
-        estimatedMemoryBytes: 2500 * mb
+        estimatedMemoryBytes: 2500 * mb,
+        profile: ModelProfile(
+            summary: "QAT 最適化。高品質な推論",
+            modelFamily: "Gemma",
+            parameterCount: "4B",
+            toolCallSupport: .good,
+            japaneseSupport: .basic,
+            modalities: [.text],
+            quantization: "QAT-4bit",
+            inferenceSpeed: .medium
+        )
     )
 
     /// Gemma 2 9B Instruct 4bit — 高品質
@@ -159,7 +300,17 @@ public enum ModelPresets {
         contextLength: 8192,
         displayName: "Gemma 2 9B",
         description: "Google の高品質 9B モデル。多言語対応",
-        estimatedMemoryBytes: 5300 * mb
+        estimatedMemoryBytes: 5300 * mb,
+        profile: ModelProfile(
+            summary: "高品質 9B。多言語対応",
+            modelFamily: "Gemma",
+            parameterCount: "9B",
+            toolCallSupport: .good,
+            japaneseSupport: .basic,
+            modalities: [.text],
+            quantization: "4bit",
+            inferenceSpeed: .medium
+        )
     )
 
     /// Gemma 3 12B QAT 4bit — 大型・高品質
@@ -169,7 +320,17 @@ public enum ModelPresets {
         contextLength: 8192,
         displayName: "Gemma 3 12B QAT",
         description: "Google の最新 12B モデル。QAT で高品質を維持",
-        estimatedMemoryBytes: 7000 * mb
+        estimatedMemoryBytes: 7000 * mb,
+        profile: ModelProfile(
+            summary: "12B QAT。高品質を維持",
+            modelFamily: "Gemma",
+            parameterCount: "12B",
+            toolCallSupport: .good,
+            japaneseSupport: .basic,
+            modalities: [.text],
+            quantization: "QAT-4bit",
+            inferenceSpeed: .medium
+        )
     )
 
     /// Gemma 3 27B QAT 4bit — Google 最大級
@@ -179,7 +340,17 @@ public enum ModelPresets {
         contextLength: 8192,
         displayName: "Gemma 3 27B QAT",
         description: "Google 最大のオープンモデル。全タスクで高品質",
-        estimatedMemoryBytes: 16_000 * mb
+        estimatedMemoryBytes: 16_000 * mb,
+        profile: ModelProfile(
+            summary: "Google 最大級。全タスクで高品質",
+            modelFamily: "Gemma",
+            parameterCount: "27B",
+            toolCallSupport: .good,
+            japaneseSupport: .basic,
+            modalities: [.text, .vision],
+            quantization: "QAT-4bit",
+            inferenceSpeed: .slow
+        )
     )
 
     // MARK: - Llama Family (Meta)
@@ -191,7 +362,17 @@ public enum ModelPresets {
         contextLength: 8192,
         displayName: "Llama 3.2 1B",
         description: "Meta の軽量モデル。バランスの良い性能",
-        estimatedMemoryBytes: 700 * mb
+        estimatedMemoryBytes: 700 * mb,
+        profile: ModelProfile(
+            summary: "軽量バランス型",
+            modelFamily: "Llama",
+            parameterCount: "1B",
+            toolCallSupport: .good,
+            japaneseSupport: .basic,
+            modalities: [.text],
+            quantization: "4bit",
+            inferenceSpeed: .fast
+        )
     )
 
     /// Llama 3.2 3B Instruct 4bit — 実用的
@@ -201,7 +382,17 @@ public enum ModelPresets {
         contextLength: 8192,
         displayName: "Llama 3.2 3B",
         description: "Meta の 3B モデル。実用的なオンデバイス性能",
-        estimatedMemoryBytes: 1800 * mb
+        estimatedMemoryBytes: 1800 * mb,
+        profile: ModelProfile(
+            summary: "実用的なオンデバイスモデル",
+            modelFamily: "Llama",
+            parameterCount: "3B",
+            toolCallSupport: .good,
+            japaneseSupport: .basic,
+            modalities: [.text],
+            quantization: "4bit",
+            inferenceSpeed: .medium
+        )
     )
 
     /// Llama 3.1 8B Instruct 4bit — 定番
@@ -211,7 +402,17 @@ public enum ModelPresets {
         contextLength: 8192,
         displayName: "Llama 3.1 8B",
         description: "Meta の定番 8B モデル。幅広いタスクに対応",
-        estimatedMemoryBytes: 4500 * mb
+        estimatedMemoryBytes: 4500 * mb,
+        profile: ModelProfile(
+            summary: "定番 8B。幅広いタスクに対応",
+            modelFamily: "Llama",
+            parameterCount: "8B",
+            toolCallSupport: .good,
+            japaneseSupport: .basic,
+            modalities: [.text, .code],
+            quantization: "4bit",
+            inferenceSpeed: .medium
+        )
     )
 
     /// Llama 3.3 70B Instruct 4bit — フロンティア
@@ -221,7 +422,17 @@ public enum ModelPresets {
         contextLength: 8192,
         displayName: "Llama 3.3 70B",
         description: "Meta のフロンティアモデル。64GB+ RAM の Mac 専用",
-        estimatedMemoryBytes: 40_000 * mb
+        estimatedMemoryBytes: 40_000 * mb,
+        profile: ModelProfile(
+            summary: "フロンティア級。64GB+ RAM 必須",
+            modelFamily: "Llama",
+            parameterCount: "70B",
+            toolCallSupport: .good,
+            japaneseSupport: .basic,
+            modalities: [.text, .code],
+            quantization: "4bit",
+            inferenceSpeed: .slow
+        )
     )
 
     // MARK: - Mistral Family
@@ -233,7 +444,17 @@ public enum ModelPresets {
         contextLength: 8192,
         displayName: "Mistral 7B v0.3",
         description: "Mistral AI の定番汎用モデル",
-        estimatedMemoryBytes: 4100 * mb
+        estimatedMemoryBytes: 4100 * mb,
+        profile: ModelProfile(
+            summary: "定番汎用モデル",
+            modelFamily: "Mistral",
+            parameterCount: "7B",
+            toolCallSupport: .good,
+            japaneseSupport: .basic,
+            modalities: [.text, .code],
+            quantization: "4bit",
+            inferenceSpeed: .medium
+        )
     )
 
     /// Mistral Small 24B Instruct 4bit — 高品質
@@ -243,7 +464,17 @@ public enum ModelPresets {
         contextLength: 8192,
         displayName: "Mistral Small 24B",
         description: "Mistral AI の効率的な 24B モデル",
-        estimatedMemoryBytes: 14_000 * mb
+        estimatedMemoryBytes: 14_000 * mb,
+        profile: ModelProfile(
+            summary: "効率的な 24B。高品質",
+            modelFamily: "Mistral",
+            parameterCount: "24B",
+            toolCallSupport: .good,
+            japaneseSupport: .basic,
+            modalities: [.text, .code],
+            quantization: "4bit",
+            inferenceSpeed: .medium
+        )
     )
 
     // MARK: - DeepSeek Family
@@ -255,7 +486,17 @@ public enum ModelPresets {
         contextLength: 4096,
         displayName: "DeepSeek R1 1.5B",
         description: "推論能力を蒸留した軽量モデル",
-        estimatedMemoryBytes: 900 * mb
+        estimatedMemoryBytes: 900 * mb,
+        profile: ModelProfile(
+            summary: "推論特化の蒸留モデル",
+            modelFamily: "DeepSeek",
+            parameterCount: "1.5B",
+            toolCallSupport: .unsupported,
+            japaneseSupport: .basic,
+            modalities: [.text],
+            quantization: "4bit",
+            inferenceSpeed: .fast
+        )
     )
 
     /// DeepSeek R1 Distill Qwen 7B 4bit — 推論特化
@@ -265,7 +506,17 @@ public enum ModelPresets {
         contextLength: 4096,
         displayName: "DeepSeek R1 7B",
         description: "推論能力に優れた 7B モデル",
-        estimatedMemoryBytes: 4100 * mb
+        estimatedMemoryBytes: 4100 * mb,
+        profile: ModelProfile(
+            summary: "推論特化 7B",
+            modelFamily: "DeepSeek",
+            parameterCount: "7B",
+            toolCallSupport: .unsupported,
+            japaneseSupport: .basic,
+            modalities: [.text],
+            quantization: "4bit",
+            inferenceSpeed: .medium
+        )
     )
 
     /// DeepSeek R1 Distill Qwen 14B 4bit — 高品質推論
@@ -275,7 +526,17 @@ public enum ModelPresets {
         contextLength: 4096,
         displayName: "DeepSeek R1 14B",
         description: "高品質な推論特化モデル",
-        estimatedMemoryBytes: 8500 * mb
+        estimatedMemoryBytes: 8500 * mb,
+        profile: ModelProfile(
+            summary: "高品質な推論特化",
+            modelFamily: "DeepSeek",
+            parameterCount: "14B",
+            toolCallSupport: .unsupported,
+            japaneseSupport: .basic,
+            modalities: [.text],
+            quantization: "4bit",
+            inferenceSpeed: .medium
+        )
     )
 
     /// DeepSeek R1 Distill Llama 70B 4bit — 最大級推論
@@ -285,7 +546,17 @@ public enum ModelPresets {
         contextLength: 4096,
         displayName: "DeepSeek R1 70B",
         description: "最大級の推論特化モデル。64GB+ RAM の Mac 専用",
-        estimatedMemoryBytes: 40_000 * mb
+        estimatedMemoryBytes: 40_000 * mb,
+        profile: ModelProfile(
+            summary: "最大級の推論特化。64GB+ RAM 必須",
+            modelFamily: "DeepSeek",
+            parameterCount: "70B",
+            toolCallSupport: .unsupported,
+            japaneseSupport: .basic,
+            modalities: [.text],
+            quantization: "4bit",
+            inferenceSpeed: .slow
+        )
     )
 
     // MARK: - Phi Family (Microsoft)
@@ -297,7 +568,17 @@ public enum ModelPresets {
         contextLength: 4096,
         displayName: "Phi-3.5 Mini",
         description: "Microsoft の小型モデル。推論能力が高い",
-        estimatedMemoryBytes: 2300 * mb
+        estimatedMemoryBytes: 2300 * mb,
+        profile: ModelProfile(
+            summary: "小型・推論能力が高い",
+            modelFamily: "Phi",
+            parameterCount: "3.8B",
+            toolCallSupport: .basic,
+            japaneseSupport: .basic,
+            modalities: [.text],
+            quantization: "4bit",
+            inferenceSpeed: .medium
+        )
     )
 
     /// Phi-4 Mini Instruct 4bit — 最新・高推論
@@ -307,7 +588,17 @@ public enum ModelPresets {
         contextLength: 4096,
         displayName: "Phi-4 Mini",
         description: "Microsoft の最新小型モデル。改良された推論能力",
-        estimatedMemoryBytes: 2300 * mb
+        estimatedMemoryBytes: 2300 * mb,
+        profile: ModelProfile(
+            summary: "最新 Phi。改良された推論能力",
+            modelFamily: "Phi",
+            parameterCount: "3.8B",
+            toolCallSupport: .basic,
+            japaneseSupport: .basic,
+            modalities: [.text, .code],
+            quantization: "4bit",
+            inferenceSpeed: .medium
+        )
     )
 
     // MARK: - SmolLM Family (Hugging Face)
@@ -319,7 +610,17 @@ public enum ModelPresets {
         contextLength: 2048,
         displayName: "SmolLM2 135M",
         description: "超軽量モデル。動作確認やテスト向け",
-        estimatedMemoryBytes: 100 * mb
+        estimatedMemoryBytes: 100 * mb,
+        profile: ModelProfile(
+            summary: "超軽量。テスト・動作確認向け",
+            modelFamily: "SmolLM",
+            parameterCount: "135M",
+            toolCallSupport: .unsupported,
+            japaneseSupport: .unsupported,
+            modalities: [.text],
+            quantization: "4bit",
+            inferenceSpeed: .fast
+        )
     )
 
     /// SmolLM3 3B 4bit — 軽量効率型
@@ -329,7 +630,17 @@ public enum ModelPresets {
         contextLength: 4096,
         displayName: "SmolLM3 3B",
         description: "Hugging Face の効率的な 3B モデル",
-        estimatedMemoryBytes: 1800 * mb
+        estimatedMemoryBytes: 1800 * mb,
+        profile: ModelProfile(
+            summary: "効率的な 3B モデル",
+            modelFamily: "SmolLM",
+            parameterCount: "3B",
+            toolCallSupport: .unsupported,
+            japaneseSupport: .unsupported,
+            modalities: [.text],
+            quantization: "4bit",
+            inferenceSpeed: .fast
+        )
     )
 
     // MARK: - Other Models
@@ -341,7 +652,17 @@ public enum ModelPresets {
         contextLength: 4096,
         displayName: "LFM2 1.2B",
         description: "Liquid AI の高速推論モデル。トークン生成が特に高速",
-        estimatedMemoryBytes: 700 * mb
+        estimatedMemoryBytes: 700 * mb,
+        profile: ModelProfile(
+            summary: "超高速推論。Liquid AI",
+            modelFamily: "LFM",
+            parameterCount: "1.2B",
+            toolCallSupport: .good,
+            japaneseSupport: .basic,
+            modalities: [.text],
+            quantization: "4bit",
+            inferenceSpeed: .fast
+        )
     )
 
     /// Granite 3.3 2B Instruct 4bit — エンタープライズ軽量
@@ -351,7 +672,17 @@ public enum ModelPresets {
         contextLength: 4096,
         displayName: "Granite 3.3 2B",
         description: "IBM のエンタープライズ向け軽量モデル",
-        estimatedMemoryBytes: 1200 * mb
+        estimatedMemoryBytes: 1200 * mb,
+        profile: ModelProfile(
+            summary: "エンタープライズ向け軽量モデル",
+            modelFamily: "Granite",
+            parameterCount: "2B",
+            toolCallSupport: .good,
+            japaneseSupport: .basic,
+            modalities: [.text],
+            quantization: "4bit",
+            inferenceSpeed: .medium
+        )
     )
 
     /// GPT-OSS 20B MXFP4-Q8 — OpenAI オープンソース
@@ -361,7 +692,17 @@ public enum ModelPresets {
         contextLength: 8192,
         displayName: "GPT-OSS 20B",
         description: "OpenAI のオープンソースモデル。高い日本語性能",
-        estimatedMemoryBytes: 12_000 * mb
+        estimatedMemoryBytes: 12_000 * mb,
+        profile: ModelProfile(
+            summary: "OpenAI OSS。高い日本語性能",
+            modelFamily: "GPT-OSS",
+            parameterCount: "20B",
+            toolCallSupport: .good,
+            japaneseSupport: .good,
+            modalities: [.text, .code],
+            quantization: "MXFP4-Q8",
+            inferenceSpeed: .slow
+        )
     )
 
     // MARK: - All Models
