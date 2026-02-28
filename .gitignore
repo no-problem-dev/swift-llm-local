@@ -9,3 +9,4 @@ fine-tuning/data/
 fine-tuning/output/
 fine-tuning/.venv/
 fine-tuning/lora_config.yaml
+Package.resolved
