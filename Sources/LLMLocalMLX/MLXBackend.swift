@@ -92,11 +92,19 @@ public actor MLXBackend: LLMLocalBackend {
         _ spec: ModelSpec,
         progressHandler: (@Sendable (DownloadProgress) -> Void)?
     ) async throws {
+        print("[MLXBackend] performLoad started: \(spec.id)")
+
         // If same model already loaded, skip
-        if loadedSpec == spec { return }
+        if loadedSpec == spec {
+            print("[MLXBackend] model already loaded, skipping")
+            return
+        }
 
         // If another load is in progress, throw
-        guard !isLoading else { throw LLMLocalError.loadInProgress }
+        guard !isLoading else {
+            print("[MLXBackend] ERROR: another load is in progress")
+            throw LLMLocalError.loadInProgress
+        }
 
         isLoading = true
         defer { isLoading = false }
@@ -117,18 +125,22 @@ public actor MLXBackend: LLMLocalBackend {
         switch spec.base {
         case .huggingFace(let id):
             hfID = id
+            print("[MLXBackend] loading HuggingFace model: \(id)")
         case .local(let path):
             hfID = path.path()
+            print("[MLXBackend] loading local model: \(hfID)")
         }
 
         do {
             // Load base model (with or without progress tracking)
             let modelContainer: ModelContainer
             if let progressHandler {
+                print("[MLXBackend] loading with progress handler, hfID=\(hfID)")
                 let config = ModelConfiguration(id: hfID)
                 modelContainer = try await LLMModelFactory.shared.loadContainer(
                     configuration: config,
                     progressHandler: { progress in
+                        print("[MLXBackend] download progress: \(progress.fractionCompleted) (\(progress.completedUnitCount)/\(progress.totalUnitCount))")
                         progressHandler(DownloadProgress(
                             fraction: progress.fractionCompleted,
                             completedBytes: progress.completedUnitCount,
@@ -138,11 +150,15 @@ public actor MLXBackend: LLMLocalBackend {
                     }
                 )
             } else {
+                print("[MLXBackend] loading without progress handler")
                 modelContainer = try await MLXLMCommon.loadModelContainer(id: hfID)
             }
 
+            print("[MLXBackend] model container loaded successfully")
+
             // Apply adapter if resolved
             if let adapterURL {
+                print("[MLXBackend] applying adapter from: \(adapterURL)")
                 let adapterConfig = ModelConfiguration(directory: adapterURL)
                 let adapter = try await ModelAdapterFactory.shared.load(
                     configuration: adapterConfig
@@ -150,14 +166,19 @@ public actor MLXBackend: LLMLocalBackend {
                 try await modelContainer.perform { context in
                     try context.model.load(adapter: adapter)
                 }
+                print("[MLXBackend] adapter applied successfully")
             }
 
             self.modelContainer = modelContainer
             chatSession = ChatSession(modelContainer, instructions: _systemPrompt)
             loadedSpec = spec
+            print("[MLXBackend] performLoad completed successfully for \(spec.id)")
         } catch let error as LLMLocalError {
+            print("[MLXBackend] LLMLocalError: \(error)")
             throw error
         } catch {
+            print("[MLXBackend] ERROR loading model \(spec.id): \(error)")
+            print("[MLXBackend] ERROR type: \(type(of: error))")
             throw LLMLocalError.loadFailed(
                 modelId: spec.id,
                 reason: error.localizedDescription

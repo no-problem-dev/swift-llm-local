@@ -21,7 +21,7 @@ let package = Package(
         // Persistence abstractions (RegistryStore)
         .package(url: "https://github.com/no-problem-dev/swift-persistence.git", .upToNextMajor(from: "2.0.0")),
         // MLX LLM inference
-        .package(url: "https://github.com/ml-explore/mlx-swift-lm", from: "2.30.0"),
+        .package(url: "https://github.com/ml-explore/mlx-swift-lm", branch: "main"),
         // Documentation generation
         .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.4.0"),
     ],

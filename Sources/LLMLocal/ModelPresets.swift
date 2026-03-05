@@ -111,6 +111,88 @@ public enum ModelPresets {
         )
     )
 
+    // MARK: - Qwen3.5 Family (Alibaba)
+
+    /// Qwen3.5 0.8B 4bit — 超軽量・ネイティブマルチモーダル
+    public static let qwen3_5_0_8B = ModelSpec(
+        id: "qwen3.5-0.8b-4bit",
+        base: .huggingFace(id: "mlx-community/Qwen3.5-0.8B-4bit"),
+        contextLength: 4096,
+        displayName: "Qwen3.5 0.8B",
+        description: "Qwen3.5 の超軽量モデル。ネイティブマルチモーダル対応",
+        estimatedMemoryBytes: 500 * mb,
+        profile: ModelProfile(
+            summary: "超軽量マルチモーダル。テスト・プロトタイプ向け",
+            modelFamily: "Qwen",
+            parameterCount: "0.8B",
+            toolCallSupport: .excellent,
+            japaneseSupport: .good,
+            modalities: [.text, .vision, .code],
+            quantization: "4bit",
+            inferenceSpeed: .fast
+        )
+    )
+
+    /// Qwen3.5 2B 4bit — 軽量・オンデバイス推論
+    public static let qwen3_5_2B = ModelSpec(
+        id: "qwen3.5-2b-4bit",
+        base: .huggingFace(id: "mlx-community/Qwen3.5-2B-4bit"),
+        contextLength: 4096,
+        displayName: "Qwen3.5 2B",
+        description: "軽量マルチモーダル。オンデバイス推論に最適",
+        estimatedMemoryBytes: 1200 * mb,
+        profile: ModelProfile(
+            summary: "軽量マルチモーダル。オンデバイス推論向け",
+            modelFamily: "Qwen",
+            parameterCount: "2B",
+            toolCallSupport: .excellent,
+            japaneseSupport: .good,
+            modalities: [.text, .vision, .code],
+            quantization: "4bit",
+            inferenceSpeed: .fast
+        )
+    )
+
+    /// Qwen3.5 4B OptiQ 4bit — バランス型マルチモーダル
+    public static let qwen3_5_4B = ModelSpec(
+        id: "qwen3.5-4b-optiq-4bit",
+        base: .huggingFace(id: "mlx-community/Qwen3.5-4B-OptiQ-4bit"),
+        contextLength: 4096,
+        displayName: "Qwen3.5 4B",
+        description: "バランス型マルチモーダル。軽量エージェント向け",
+        estimatedMemoryBytes: 2500 * mb,
+        profile: ModelProfile(
+            summary: "バランス型マルチモーダル。軽量エージェント向け",
+            modelFamily: "Qwen",
+            parameterCount: "4B",
+            toolCallSupport: .excellent,
+            japaneseSupport: .good,
+            modalities: [.text, .vision, .code],
+            quantization: "OptiQ-4bit",
+            inferenceSpeed: .medium
+        )
+    )
+
+    /// Qwen3.5 9B 4bit — 高品質マルチモーダル
+    public static let qwen3_5_9B = ModelSpec(
+        id: "qwen3.5-9b-4bit",
+        base: .huggingFace(id: "mlx-community/Qwen3.5-9B-4bit"),
+        contextLength: 4096,
+        displayName: "Qwen3.5 9B",
+        description: "高品質マルチモーダル。GPT-OSS-120B 超えの報告あり",
+        estimatedMemoryBytes: 5500 * mb,
+        profile: ModelProfile(
+            summary: "高品質マルチモーダル。小型ながら高性能",
+            modelFamily: "Qwen",
+            parameterCount: "9B",
+            toolCallSupport: .excellent,
+            japaneseSupport: .good,
+            modalities: [.text, .vision, .code],
+            quantization: "4bit",
+            inferenceSpeed: .medium
+        )
+    )
+
     /// Qwen 2.5 14B Instruct 4bit — 大型・高品質
     public static let qwen2_5_14B = ModelSpec(
         id: "qwen2.5-14b-instruct-4bit",
@@ -712,6 +794,7 @@ public enum ModelPresets {
         // Tiny (< 1GB)
         smolLM_135M,
         qwen3_0_6B,
+        qwen3_5_0_8B,
         lfm2_1_2B,
         llama3_2_1B,
         gemma3_1B_qat,
@@ -719,6 +802,7 @@ public enum ModelPresets {
         // Small (1-3GB)
         qwen3_1_7B,
         gemma3n_e2b,
+        qwen3_5_2B,
         granite3_3_2B,
         gemma2_2B,
         llama3_2_3B,
@@ -729,11 +813,13 @@ public enum ModelPresets {
         qwen3_4B_ja,
         gemma3n_e4b,
         gemma3_4B_qat,
+        qwen3_5_4B,
         // Medium (3-8GB)
         mistral7B,
         deepseekR1_7B,
         llama3_1_8B,
         qwen3_8B,
+        qwen3_5_9B,
         gemma2_9B,
         gemma3_12B_qat,
         // Large (8-20GB)
