@@ -35,7 +35,7 @@ struct IntegrationTests {
         // Generate tokens
         var receivedTokens: [String] = []
         let stream = await service.generate(
-            model: ModelPresets.gemma2_2B,
+            model: ModelPresets.qwen3_0_6B,
             prompt: prompt,
             config: config
         )
@@ -118,7 +118,7 @@ struct IntegrationTests {
         let task = Task {
             var tokenCount = 0
             let stream = await service.generate(
-                model: ModelPresets.gemma2_2B,
+                model: ModelPresets.qwen3_0_6B,
                 prompt: prompt,
                 config: config
             )
@@ -169,7 +169,7 @@ struct IntegrationTests {
         // First generation
         var firstTokens: [String] = []
         let stream1 = await service.generate(
-            model: ModelPresets.gemma2_2B,
+            model: ModelPresets.qwen3_0_6B,
             prompt: prompt1,
             config: config
         )
@@ -183,7 +183,7 @@ struct IntegrationTests {
         // Second generation (without unloading)
         var secondTokens: [String] = []
         let stream2 = await service.generate(
-            model: ModelPresets.gemma2_2B,
+            model: ModelPresets.qwen3_0_6B,
             prompt: prompt2,
             config: config
         )
@@ -215,7 +215,7 @@ struct IntegrationTests {
         // Generate
         var tokenCount = 0
         let stream = await service.generate(
-            model: ModelPresets.gemma2_2B,
+            model: ModelPresets.qwen3_0_6B,
             prompt: prompt,
             config: config
         )

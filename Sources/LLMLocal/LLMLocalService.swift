@@ -22,7 +22,7 @@ import LLMLocalModels
 /// await service.startMemoryMonitoring()
 ///
 /// let stream = await service.generate(
-///     model: ModelPresets.gemma2_2B,
+///     model: ModelPresets.qwen3_0_6B,
 ///     prompt: "What is Swift?"
 /// )
 /// for try await token in stream {
@@ -152,6 +152,8 @@ public actor LLMLocalService {
         return makeCancellableStream { [weak self] continuation in
             Task {
                 do {
+                    try Self.validateToolCallSupport(model: model, tools: tools)
+
                     // Load model: use switcher if available, otherwise direct backend
                     if let switcher = modelSwitcher {
                         try await switcher.ensureLoaded(model)
@@ -163,31 +165,17 @@ public actor LLMLocalService {
                     }
 
                     // Generate and track stats
-                    var tokenCount = 0
+                    var counter = TokenCounter()
                     let innerStream = backend.generateWithTools(
                         prompt: prompt, config: config, tools: tools
                     )
                     for try await output in innerStream {
                         try Task.checkCancellation()
-                        if case .text = output {
-                            tokenCount += 1
-                        }
+                        counter.observe(output)
                         continuation.yield(output)
                     }
 
-                    // Record stats
-                    let duration = ContinuousClock.now - startTime
-                    let seconds = Double(duration.components.seconds)
-                        + Double(duration.components.attoseconds) / 1e18
-                    let tokensPerSecond = seconds > 0
-                        ? Double(tokenCount) / seconds : 0
-
-                    let stats = GenerationStats(
-                        tokenCount: tokenCount,
-                        tokensPerSecond: tokensPerSecond,
-                        duration: duration
-                    )
-                    await self?.updateStats(stats)
+                    await self?.updateStats(counter.stats(since: startTime))
 
                     continuation.finish()
                 } catch is CancellationError {
@@ -226,6 +214,8 @@ public actor LLMLocalService {
         return makeCancellableStream { [weak self] continuation in
             Task {
                 do {
+                    try Self.validateToolCallSupport(model: model, tools: tools)
+
                     // Load model: use switcher if available, otherwise direct backend
                     if let switcher = modelSwitcher {
                         try await switcher.ensureLoaded(model)
@@ -237,7 +227,7 @@ public actor LLMLocalService {
                     }
 
                     // Generate and track stats
-                    var tokenCount = 0
+                    var counter = TokenCounter()
                     let innerStream = backend.generateFromMessages(
                         messages: messages,
                         systemPrompt: systemPrompt,
@@ -246,25 +236,11 @@ public actor LLMLocalService {
                     )
                     for try await output in innerStream {
                         try Task.checkCancellation()
-                        if case .text = output {
-                            tokenCount += 1
-                        }
+                        counter.observe(output)
                         continuation.yield(output)
                     }
 
-                    // Record stats
-                    let duration = ContinuousClock.now - startTime
-                    let seconds = Double(duration.components.seconds)
-                        + Double(duration.components.attoseconds) / 1e18
-                    let tokensPerSecond = seconds > 0
-                        ? Double(tokenCount) / seconds : 0
-
-                    let stats = GenerationStats(
-                        tokenCount: tokenCount,
-                        tokensPerSecond: tokensPerSecond,
-                        duration: duration
-                    )
-                    await self?.updateStats(stats)
+                    await self?.updateStats(counter.stats(since: startTime))
 
                     continuation.finish()
                 } catch is CancellationError {
@@ -274,6 +250,23 @@ public actor LLMLocalService {
                 }
             }
         }
+    }
+
+    // MARK: - Tool Call Capability
+
+    /// ツールコール非対応モデルへのツール付きリクエストを拒否します。
+    ///
+    /// ツールコール対応はバックエンドではなくモデル（チャットテンプレート）に
+    /// 依存するため、型レベルではなくモデルプロファイルで検証します。
+    /// プロファイル未設定のモデルは検証をスキップします（対応未知として許容）。
+    private static func validateToolCallSupport(
+        model: ModelSpec,
+        tools: [ToolDefinition]
+    ) throws {
+        guard !tools.isEmpty,
+              model.profile?.toolCallSupport == ToolCallSupport.unsupported
+        else { return }
+        throw LLMLocalError.toolCallsUnsupported(modelId: model.id)
     }
 
     // MARK: - System Prompt
@@ -407,5 +400,43 @@ public actor LLMLocalService {
 
     private func updateStats(_ stats: GenerationStats) {
         lastGenerationStats = stats
+    }
+}
+
+/// 生成ストリームからトークン統計を集計するヘルパー
+///
+/// バックエンドが ``GenerationInfo`` を流した場合は実測値を優先し、
+/// 流さない場合はテキストチャンク数で近似します。
+private struct TokenCounter {
+    private var chunkCount = 0
+    private var info: GenerationInfo?
+
+    mutating func observe(_ output: GenerationOutput) {
+        switch output {
+        case .text:
+            chunkCount += 1
+        case .info(let generationInfo):
+            info = generationInfo
+        case .toolCall:
+            break
+        }
+    }
+
+    func stats(since startTime: ContinuousClock.Instant) -> GenerationStats {
+        let duration = ContinuousClock.now - startTime
+        if let info {
+            return GenerationStats(
+                tokenCount: info.generationTokenCount,
+                tokensPerSecond: info.tokensPerSecond,
+                duration: duration
+            )
+        }
+        let seconds = Double(duration.components.seconds)
+            + Double(duration.components.attoseconds) / 1e18
+        return GenerationStats(
+            tokenCount: chunkCount,
+            tokensPerSecond: seconds > 0 ? Double(chunkCount) / seconds : 0,
+            duration: duration
+        )
     }
 }

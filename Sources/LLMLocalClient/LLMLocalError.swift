@@ -40,4 +40,11 @@ public enum LLMLocalError: Error, Sendable, Equatable {
     /// サポートされていないモデル形式。
     /// - Parameter format: サポートされていない形式の説明。
     case unsupportedModelFormat(String)
+
+    /// ツールコール非対応のモデルにツールが渡された。
+    ///
+    /// ツールを黙って無視すると、エージェントループが「ツール不要」と
+    /// 誤解釈してターンを終了してしまうため、明示的にエラーにします。
+    /// - Parameter modelId: ツールコール非対応のモデルの識別子。
+    case toolCallsUnsupported(modelId: String)
 }

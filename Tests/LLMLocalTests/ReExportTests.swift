@@ -19,7 +19,7 @@ struct ReExportTests {
         #expect(spec.id == "test")
 
         // GenerationConfig
-        let config = GenerationConfig()
+        let config = GenerationConfig(maxTokens: 1024)
         #expect(config.maxTokens == 1024)
 
         // GenerationStats
@@ -54,7 +54,7 @@ struct ReExportTests {
         #expect(serviceType == LLMLocalService.self)
 
         // ModelPresets
-        let preset = ModelPresets.gemma2_2B
+        let preset = ModelPresets.qwen3_0_6B
         #expect(!preset.id.isEmpty)
     }
 }

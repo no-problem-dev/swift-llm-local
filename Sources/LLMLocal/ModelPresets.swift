@@ -1,12 +1,27 @@
 import LLMClient
 import LLMLocalClient
 
-// swiftlint:disable type_body_length
+// swiftlint:disable type_body_length file_length
 
 /// MLX コミュニティの推奨モデルプリセット
 ///
 /// 各プリセットは mlx-community（Hugging Face）の特定の量子化モデルを対象とした
 /// 事前設定済みの ``ModelSpec`` です。ファミリー別に整理されています。
+///
+/// ## toolCallSupport の判定基準
+///
+/// 各モデルの `toolCallSupport` は以下の積で判定しています（2026-06 検証）:
+/// 1. chat template に tools 分岐があるか（ツール定義がモデルに見えるか）
+/// 2. モデルの出力形式が mlx-swift-lm の `ToolCallFormat` でパース可能か
+///
+/// テンプレートが対応していても出力形式のパーサが mlx-swift-lm に存在しない
+/// モデル（GPT-OSS の harmony 形式、Granite の `<|tool_call|>` 形式等）は
+/// `.unsupported` です。
+///
+/// ## contextLength
+///
+/// モデル本来の最大コンテキスト長（config.json の max_position_embeddings）です。
+/// 実行時のメモリ予算は別途 `GenerationConfig` / デバイスメモリで管理してください。
 public enum ModelPresets {
 
     // MARK: - Qwen Family (Alibaba)
@@ -15,7 +30,7 @@ public enum ModelPresets {
     public static let qwen3_0_6B = ModelSpec(
         id: "qwen3-0.6b-4bit",
         base: .huggingFace(id: "mlx-community/Qwen3-0.6B-4bit"),
-        contextLength: 4096,
+        contextLength: 40_960,
         displayName: "Qwen3 0.6B",
         description: "超軽量モデル。基本的な質問応答やテスト向け",
         estimatedMemoryBytes: 350 * mb,
@@ -35,7 +50,7 @@ public enum ModelPresets {
     public static let qwen3_1_7B = ModelSpec(
         id: "qwen3-1.7b-4bit",
         base: .huggingFace(id: "mlx-community/Qwen3-1.7B-4bit"),
-        contextLength: 4096,
+        contextLength: 40_960,
         displayName: "Qwen3 1.7B",
         description: "軽量かつ多言語対応。日本語もサポート",
         estimatedMemoryBytes: 1000 * mb,
@@ -55,7 +70,7 @@ public enum ModelPresets {
     public static let qwen3_4B = ModelSpec(
         id: "qwen3-4b-instruct-2507-4bit",
         base: .huggingFace(id: "mlx-community/Qwen3-4B-Instruct-2507-4bit"),
-        contextLength: 4096,
+        contextLength: 262_144,
         displayName: "Qwen3 4B",
         description: "多言語対応のバランス型モデル。日本語・コード生成に強い",
         estimatedMemoryBytes: 2300 * mb,
@@ -75,7 +90,7 @@ public enum ModelPresets {
     public static let qwen3_4B_ja = ModelSpec(
         id: "qwen3-4b-ja-4bit",
         base: .huggingFace(id: "taniguchi-kyoichi/Qwen3-4B-Instruct-2507-ja-4bit"),
-        contextLength: 4096,
+        contextLength: 262_144,
         displayName: "Qwen3 4B 日本語",
         description: "日本語データでファインチューニング済み。日本語推論に最適化",
         estimatedMemoryBytes: 2300 * mb,
@@ -95,7 +110,7 @@ public enum ModelPresets {
     public static let qwen3_8B = ModelSpec(
         id: "qwen3-8b-4bit",
         base: .huggingFace(id: "mlx-community/Qwen3-8B-4bit"),
-        contextLength: 4096,
+        contextLength: 40_960,
         displayName: "Qwen3 8B",
         description: "高品質な多言語モデル。日本語対応が特に良好",
         estimatedMemoryBytes: 4700 * mb,
@@ -117,10 +132,10 @@ public enum ModelPresets {
     public static let qwen3_5_0_8B = ModelSpec(
         id: "qwen3.5-0.8b-4bit",
         base: .huggingFace(id: "mlx-community/Qwen3.5-0.8B-4bit"),
-        contextLength: 4096,
+        contextLength: 262_144,
         displayName: "Qwen3.5 0.8B",
         description: "Qwen3.5 の超軽量モデル。ネイティブマルチモーダル対応",
-        estimatedMemoryBytes: 500 * mb,
+        estimatedMemoryBytes: 700 * mb,
         profile: ModelProfile(
             summary: "超軽量マルチモーダル。テスト・プロトタイプ向け",
             modelFamily: "Qwen",
@@ -137,10 +152,10 @@ public enum ModelPresets {
     public static let qwen3_5_2B = ModelSpec(
         id: "qwen3.5-2b-4bit",
         base: .huggingFace(id: "mlx-community/Qwen3.5-2B-4bit"),
-        contextLength: 4096,
+        contextLength: 262_144,
         displayName: "Qwen3.5 2B",
         description: "軽量マルチモーダル。オンデバイス推論に最適",
-        estimatedMemoryBytes: 1200 * mb,
+        estimatedMemoryBytes: 1900 * mb,
         profile: ModelProfile(
             summary: "軽量マルチモーダル。オンデバイス推論向け",
             modelFamily: "Qwen",
@@ -157,10 +172,10 @@ public enum ModelPresets {
     public static let qwen3_5_4B = ModelSpec(
         id: "qwen3.5-4b-optiq-4bit",
         base: .huggingFace(id: "mlx-community/Qwen3.5-4B-OptiQ-4bit"),
-        contextLength: 4096,
+        contextLength: 262_144,
         displayName: "Qwen3.5 4B",
         description: "バランス型マルチモーダル。軽量エージェント向け",
-        estimatedMemoryBytes: 2500 * mb,
+        estimatedMemoryBytes: 4300 * mb,
         profile: ModelProfile(
             summary: "バランス型マルチモーダル。軽量エージェント向け",
             modelFamily: "Qwen",
@@ -177,10 +192,10 @@ public enum ModelPresets {
     public static let qwen3_5_9B = ModelSpec(
         id: "qwen3.5-9b-4bit",
         base: .huggingFace(id: "mlx-community/Qwen3.5-9B-4bit"),
-        contextLength: 4096,
+        contextLength: 262_144,
         displayName: "Qwen3.5 9B",
         description: "高品質マルチモーダル。GPT-OSS-120B 超えの報告あり",
-        estimatedMemoryBytes: 5500 * mb,
+        estimatedMemoryBytes: 6400 * mb,
         profile: ModelProfile(
             summary: "高品質マルチモーダル。小型ながら高性能",
             modelFamily: "Qwen",
@@ -193,11 +208,55 @@ public enum ModelPresets {
         )
     )
 
+    // MARK: - Qwen3.6 Family (Alibaba)
+
+    /// Qwen3.6 27B 4bit — Mac 向け高品質 dense
+    public static let qwen3_6_27B = ModelSpec(
+        id: "qwen3.6-27b-4bit",
+        base: .huggingFace(id: "mlx-community/Qwen3.6-27B-4bit"),
+        contextLength: 262_144,
+        displayName: "Qwen3.6 27B",
+        description: "前世代フラッグシップ超えの dense モデル。32GB+ RAM の Mac 推奨",
+        estimatedMemoryBytes: 17_000 * mb,
+        profile: ModelProfile(
+            summary: "高品質 dense。エージェントタスクに強い",
+            modelFamily: "Qwen",
+            parameterCount: "27B",
+            toolCallSupport: .excellent,
+            japaneseSupport: .good,
+            modalities: [.text, .code],
+            quantization: "4bit",
+            inferenceSpeed: .medium
+        )
+    )
+
+    /// Qwen3.6 35B-A3B 4bit — agentic 特化 MoE
+    public static let qwen3_6_35B_moe = ModelSpec(
+        id: "qwen3.6-35b-a3b-4bit",
+        base: .huggingFace(id: "mlx-community/Qwen3.6-35B-A3B-4bit"),
+        contextLength: 262_144,
+        displayName: "Qwen3.6 35B-A3B",
+        description: "agentic タスク特化の MoE。3B アクティブで高速。32GB+ RAM の Mac 推奨",
+        estimatedMemoryBytes: 22_000 * mb,
+        profile: ModelProfile(
+            summary: "agentic 特化 MoE。3B アクティブで効率的",
+            modelFamily: "Qwen",
+            parameterCount: "35B-A3B",
+            toolCallSupport: .excellent,
+            japaneseSupport: .good,
+            modalities: [.text, .code],
+            quantization: "4bit",
+            inferenceSpeed: .medium
+        )
+    )
+
+    // MARK: - Qwen 2.5 / MoE (Alibaba)
+
     /// Qwen 2.5 14B Instruct 4bit — 大型・高品質
     public static let qwen2_5_14B = ModelSpec(
         id: "qwen2.5-14b-instruct-4bit",
         base: .huggingFace(id: "mlx-community/Qwen2.5-14B-Instruct-4bit"),
-        contextLength: 4096,
+        contextLength: 32_768,
         displayName: "Qwen 2.5 14B",
         description: "高品質な大型モデル。複雑なタスクに対応",
         estimatedMemoryBytes: 8500 * mb,
@@ -217,7 +276,7 @@ public enum ModelPresets {
     public static let qwen3_moe_30B = ModelSpec(
         id: "qwen3-30b-a3b-4bit",
         base: .huggingFace(id: "mlx-community/Qwen3-30B-A3B-4bit"),
-        contextLength: 4096,
+        contextLength: 40_960,
         displayName: "Qwen3 MoE 30B-A3B",
         description: "Mixture-of-Experts。30B パラメータ中 3B をアクティブに使用",
         estimatedMemoryBytes: 18_000 * mb,
@@ -237,7 +296,7 @@ public enum ModelPresets {
     public static let qwen2_5_32B = ModelSpec(
         id: "qwen2.5-32b-instruct-4bit",
         base: .huggingFace(id: "mlx-community/Qwen2.5-32B-Instruct-4bit"),
-        contextLength: 4096,
+        contextLength: 32_768,
         displayName: "Qwen 2.5 32B",
         description: "Mac 向けフラッグシップ。32GB+ RAM 推奨",
         estimatedMemoryBytes: 19_000 * mb,
@@ -257,7 +316,7 @@ public enum ModelPresets {
     public static let qwen2_5_72B = ModelSpec(
         id: "qwen2.5-72b-instruct-4bit",
         base: .huggingFace(id: "mlx-community/Qwen2.5-72B-Instruct-4bit"),
-        contextLength: 4096,
+        contextLength: 32_768,
         displayName: "Qwen 2.5 72B",
         description: "最大級モデル。64GB+ RAM の Mac 専用",
         estimatedMemoryBytes: 42_000 * mb,
@@ -274,20 +333,25 @@ public enum ModelPresets {
     )
 
     // MARK: - Gemma Family (Google)
+    //
+    // Gemma 2/3/3n の chat template には tools 分岐がなく、mlx-swift-lm の
+    // Gemma パーサも Gemma 1 専用のため、ツールコールは二重に非対応。
+    // Gemma 4 はネイティブ function calling 対応だが、`.gemma4` 出力パーサが
+    // mlx-swift-lm 3.31.3 に未収録（main のみ）のため当面 basic。
 
     /// Gemma 3 1B QAT 4bit — 超軽量・高品質 QAT
     public static let gemma3_1B_qat = ModelSpec(
         id: "gemma-3-1b-it-qat-4bit",
         base: .huggingFace(id: "mlx-community/gemma-3-1b-it-qat-4bit"),
-        contextLength: 8192,
+        contextLength: 32_768,
         displayName: "Gemma 3 1B QAT",
-        description: "Google の超軽量モデル。QAT で品質を維持した 4bit 量子化",
+        description: "Google の超軽量モデル。QAT で品質を維持した 4bit 量子化。ツールコール非対応",
         estimatedMemoryBytes: 800 * mb,
         profile: ModelProfile(
             summary: "超軽量・QAT で品質維持",
             modelFamily: "Gemma",
             parameterCount: "1B",
-            toolCallSupport: .basic,
+            toolCallSupport: .unsupported,
             japaneseSupport: .basic,
             modalities: [.text],
             quantization: "QAT-4bit",
@@ -295,102 +359,22 @@ public enum ModelPresets {
         )
     )
 
-    /// Gemma 2 2B Instruct 4bit — 軽量・汎用
-    public static let gemma2_2B = ModelSpec(
-        id: "gemma-2-2b-it-4bit",
-        base: .huggingFace(id: "mlx-community/gemma-2-2b-it-4bit"),
-        contextLength: 8192,
-        displayName: "Gemma 2 2B",
-        description: "Google の軽量汎用モデル。幅広いタスクに対応",
-        estimatedMemoryBytes: 1400 * mb,
-        profile: ModelProfile(
-            summary: "軽量汎用モデル",
-            modelFamily: "Gemma",
-            parameterCount: "2B",
-            toolCallSupport: .basic,
-            japaneseSupport: .basic,
-            modalities: [.text],
-            quantization: "4bit",
-            inferenceSpeed: .medium
-        )
-    )
-
-    /// Gemma 3n E2B 4bit — モバイル特化（2B 相当）
-    public static let gemma3n_e2b = ModelSpec(
-        id: "gemma-3n-e2b-it-lm-4bit",
-        base: .huggingFace(id: "mlx-community/gemma-3n-E2B-it-lm-4bit"),
-        contextLength: 8192,
-        displayName: "Gemma 3n E2B",
-        description: "モバイル特化の Nano バリアント。2B 相当の効率的な推論",
-        estimatedMemoryBytes: 1200 * mb,
-        profile: ModelProfile(
-            summary: "モバイル特化 Nano。2B 相当",
-            modelFamily: "Gemma",
-            parameterCount: "E2B",
-            toolCallSupport: .basic,
-            japaneseSupport: .basic,
-            modalities: [.text],
-            quantization: "4bit",
-            inferenceSpeed: .fast
-        )
-    )
-
-    /// Gemma 3n E4B 4bit — モバイル特化（4B 相当）
-    public static let gemma3n_e4b = ModelSpec(
-        id: "gemma-3n-e4b-it-lm-4bit",
-        base: .huggingFace(id: "mlx-community/gemma-3n-E4B-it-lm-4bit"),
-        contextLength: 8192,
-        displayName: "Gemma 3n E4B",
-        description: "モバイル特化の Nano バリアント。4B 相当の効率的な推論",
-        estimatedMemoryBytes: 2300 * mb,
-        profile: ModelProfile(
-            summary: "モバイル特化 Nano。4B 相当",
-            modelFamily: "Gemma",
-            parameterCount: "E4B",
-            toolCallSupport: .basic,
-            japaneseSupport: .basic,
-            modalities: [.text],
-            quantization: "4bit",
-            inferenceSpeed: .fast
-        )
-    )
-
-    /// Gemma 3 4B QAT 4bit — VLM 対応
+    /// Gemma 3 4B QAT 4bit — 高品質 QAT
     public static let gemma3_4B_qat = ModelSpec(
         id: "gemma-3-4b-it-qat-4bit",
         base: .huggingFace(id: "mlx-community/gemma-3-4b-it-qat-4bit"),
-        contextLength: 8192,
+        contextLength: 131_072,
         displayName: "Gemma 3 4B QAT",
-        description: "Google の QAT 最適化 4B モデル。高品質な推論",
+        description: "Google の QAT 最適化 4B モデル。高品質な推論。ツールコール非対応",
         estimatedMemoryBytes: 2500 * mb,
         profile: ModelProfile(
             summary: "QAT 最適化。高品質な推論",
             modelFamily: "Gemma",
             parameterCount: "4B",
-            toolCallSupport: .good,
+            toolCallSupport: .unsupported,
             japaneseSupport: .basic,
             modalities: [.text],
             quantization: "QAT-4bit",
-            inferenceSpeed: .medium
-        )
-    )
-
-    /// Gemma 2 9B Instruct 4bit — 高品質
-    public static let gemma2_9B = ModelSpec(
-        id: "gemma-2-9b-it-4bit",
-        base: .huggingFace(id: "mlx-community/gemma-2-9b-it-4bit"),
-        contextLength: 8192,
-        displayName: "Gemma 2 9B",
-        description: "Google の高品質 9B モデル。多言語対応",
-        estimatedMemoryBytes: 5300 * mb,
-        profile: ModelProfile(
-            summary: "高品質 9B。多言語対応",
-            modelFamily: "Gemma",
-            parameterCount: "9B",
-            toolCallSupport: .good,
-            japaneseSupport: .basic,
-            modalities: [.text],
-            quantization: "4bit",
             inferenceSpeed: .medium
         )
     )
@@ -399,15 +383,15 @@ public enum ModelPresets {
     public static let gemma3_12B_qat = ModelSpec(
         id: "gemma-3-12b-it-qat-4bit",
         base: .huggingFace(id: "mlx-community/gemma-3-12b-it-qat-4bit"),
-        contextLength: 8192,
+        contextLength: 131_072,
         displayName: "Gemma 3 12B QAT",
-        description: "Google の最新 12B モデル。QAT で高品質を維持",
+        description: "Google の 12B モデル。QAT で高品質を維持。ツールコール非対応",
         estimatedMemoryBytes: 7000 * mb,
         profile: ModelProfile(
             summary: "12B QAT。高品質を維持",
             modelFamily: "Gemma",
             parameterCount: "12B",
-            toolCallSupport: .good,
+            toolCallSupport: .unsupported,
             japaneseSupport: .basic,
             modalities: [.text],
             quantization: "QAT-4bit",
@@ -415,23 +399,65 @@ public enum ModelPresets {
         )
     )
 
-    /// Gemma 3 27B QAT 4bit — Google 最大級
+    /// Gemma 3 27B QAT 4bit — Gemma 3 最大級
     public static let gemma3_27B_qat = ModelSpec(
         id: "gemma-3-27b-it-qat-4bit",
         base: .huggingFace(id: "mlx-community/gemma-3-27b-it-qat-4bit"),
-        contextLength: 8192,
+        contextLength: 131_072,
         displayName: "Gemma 3 27B QAT",
-        description: "Google 最大のオープンモデル。全タスクで高品質",
+        description: "Gemma 3 最大のオープンモデル。全タスクで高品質。ツールコール非対応",
         estimatedMemoryBytes: 16_000 * mb,
         profile: ModelProfile(
-            summary: "Google 最大級。全タスクで高品質",
+            summary: "Gemma 3 最大級。全タスクで高品質",
             modelFamily: "Gemma",
             parameterCount: "27B",
-            toolCallSupport: .good,
+            toolCallSupport: .unsupported,
             japaneseSupport: .basic,
             modalities: [.text, .vision],
             quantization: "QAT-4bit",
             inferenceSpeed: .slow
+        )
+    )
+
+    /// Gemma 4 E2B 4bit — モバイル特化（2B 相当・ネイティブ FC）
+    public static let gemma4_e2b = ModelSpec(
+        id: "gemma-4-e2b-it-4bit",
+        base: .huggingFace(id: "mlx-community/gemma-4-e2b-it-4bit"),
+        contextLength: 131_072,
+        displayName: "Gemma 4 E2B",
+        description: "Gemma 4 のモバイル特化バリアント。2B 相当の効率的な推論。"
+            + "ネイティブ function calling 対応だが mlx-swift-lm のパーサ収録待ち",
+        estimatedMemoryBytes: 3900 * mb,
+        profile: ModelProfile(
+            summary: "Gemma 4 モバイル特化。2B 相当",
+            modelFamily: "Gemma",
+            parameterCount: "E2B",
+            toolCallSupport: .basic,
+            japaneseSupport: .good,
+            modalities: [.text],
+            quantization: "4bit",
+            inferenceSpeed: .fast
+        )
+    )
+
+    /// Gemma 4 E4B 4bit — モバイル特化（4B 相当・ネイティブ FC）
+    public static let gemma4_e4b = ModelSpec(
+        id: "gemma-4-e4b-it-4bit",
+        base: .huggingFace(id: "mlx-community/gemma-4-e4b-it-4bit"),
+        contextLength: 131_072,
+        displayName: "Gemma 4 E4B",
+        description: "Gemma 4 のモバイル特化バリアント。4B 相当の効率的な推論。"
+            + "ネイティブ function calling 対応だが mlx-swift-lm のパーサ収録待ち",
+        estimatedMemoryBytes: 5700 * mb,
+        profile: ModelProfile(
+            summary: "Gemma 4 モバイル特化。4B 相当",
+            modelFamily: "Gemma",
+            parameterCount: "E4B",
+            toolCallSupport: .basic,
+            japaneseSupport: .good,
+            modalities: [.text],
+            quantization: "4bit",
+            inferenceSpeed: .medium
         )
     )
 
@@ -441,7 +467,7 @@ public enum ModelPresets {
     public static let llama3_2_1B = ModelSpec(
         id: "llama-3.2-1b-instruct-4bit",
         base: .huggingFace(id: "mlx-community/Llama-3.2-1B-Instruct-4bit"),
-        contextLength: 8192,
+        contextLength: 131_072,
         displayName: "Llama 3.2 1B",
         description: "Meta の軽量モデル。バランスの良い性能",
         estimatedMemoryBytes: 700 * mb,
@@ -461,7 +487,7 @@ public enum ModelPresets {
     public static let llama3_2_3B = ModelSpec(
         id: "llama-3.2-3b-instruct-4bit",
         base: .huggingFace(id: "mlx-community/Llama-3.2-3B-Instruct-4bit"),
-        contextLength: 8192,
+        contextLength: 131_072,
         displayName: "Llama 3.2 3B",
         description: "Meta の 3B モデル。実用的なオンデバイス性能",
         estimatedMemoryBytes: 1800 * mb,
@@ -481,7 +507,7 @@ public enum ModelPresets {
     public static let llama3_1_8B = ModelSpec(
         id: "llama-3.1-8b-instruct-4bit",
         base: .huggingFace(id: "mlx-community/Meta-Llama-3.1-8B-Instruct-4bit"),
-        contextLength: 8192,
+        contextLength: 131_072,
         displayName: "Llama 3.1 8B",
         description: "Meta の定番 8B モデル。幅広いタスクに対応",
         estimatedMemoryBytes: 4500 * mb,
@@ -501,7 +527,7 @@ public enum ModelPresets {
     public static let llama3_3_70B = ModelSpec(
         id: "llama-3.3-70b-instruct-4bit",
         base: .huggingFace(id: "mlx-community/Llama-3.3-70B-Instruct-4bit"),
-        contextLength: 8192,
+        contextLength: 131_072,
         displayName: "Llama 3.3 70B",
         description: "Meta のフロンティアモデル。64GB+ RAM の Mac 専用",
         estimatedMemoryBytes: 40_000 * mb,
@@ -519,40 +545,40 @@ public enum ModelPresets {
 
     // MARK: - Mistral Family
 
-    /// Mistral 7B Instruct v0.3 4bit — 汎用
-    public static let mistral7B = ModelSpec(
-        id: "mistral-7b-instruct-v03-4bit",
-        base: .huggingFace(id: "mlx-community/Mistral-7B-Instruct-v0.3-4bit"),
-        contextLength: 8192,
-        displayName: "Mistral 7B v0.3",
-        description: "Mistral AI の定番汎用モデル",
-        estimatedMemoryBytes: 4100 * mb,
+    /// Ministral 3 3B Instruct 2512 4bit — ツールコール特化の小型モデル
+    public static let ministral3_3B = ModelSpec(
+        id: "ministral-3-3b-instruct-2512-4bit",
+        base: .huggingFace(id: "mlx-community/Ministral-3-3B-Instruct-2512-4bit"),
+        contextLength: 262_144,
+        displayName: "Ministral 3 3B",
+        description: "Mistral AI の小型エージェントモデル。ネイティブ function calling 対応",
+        estimatedMemoryBytes: 3000 * mb,
         profile: ModelProfile(
-            summary: "定番汎用モデル",
+            summary: "小型エージェントモデル。FC ネイティブ対応",
             modelFamily: "Mistral",
-            parameterCount: "7B",
-            toolCallSupport: .good,
-            japaneseSupport: .basic,
+            parameterCount: "3B",
+            toolCallSupport: .excellent,
+            japaneseSupport: .good,
             modalities: [.text, .code],
             quantization: "4bit",
             inferenceSpeed: .medium
         )
     )
 
-    /// Mistral Small 24B Instruct 4bit — 高品質
-    public static let mistralSmall24B = ModelSpec(
-        id: "mistral-small-24b-instruct-4bit",
-        base: .huggingFace(id: "mlx-community/Mistral-Small-24B-Instruct-2501-4bit"),
-        contextLength: 8192,
-        displayName: "Mistral Small 24B",
-        description: "Mistral AI の効率的な 24B モデル",
-        estimatedMemoryBytes: 14_000 * mb,
+    /// Ministral 3 8B Instruct 2512 4bit — 高品質エージェントモデル
+    public static let ministral3_8B = ModelSpec(
+        id: "ministral-3-8b-instruct-2512-4bit",
+        base: .huggingFace(id: "mlx-community/Ministral-3-8B-Instruct-2512-4bit"),
+        contextLength: 262_144,
+        displayName: "Ministral 3 8B",
+        description: "Mistral AI の 8B エージェントモデル。ネイティブ function calling 対応",
+        estimatedMemoryBytes: 6000 * mb,
         profile: ModelProfile(
-            summary: "効率的な 24B。高品質",
+            summary: "高品質エージェントモデル。FC ネイティブ対応",
             modelFamily: "Mistral",
-            parameterCount: "24B",
-            toolCallSupport: .good,
-            japaneseSupport: .basic,
+            parameterCount: "8B",
+            toolCallSupport: .excellent,
+            japaneseSupport: .good,
             modalities: [.text, .code],
             quantization: "4bit",
             inferenceSpeed: .medium
@@ -565,7 +591,7 @@ public enum ModelPresets {
     public static let deepseekR1_1_5B = ModelSpec(
         id: "deepseek-r1-distill-qwen-1.5b-4bit",
         base: .huggingFace(id: "mlx-community/DeepSeek-R1-Distill-Qwen-1.5B-4bit"),
-        contextLength: 4096,
+        contextLength: 131_072,
         displayName: "DeepSeek R1 1.5B",
         description: "推論能力を蒸留した軽量モデル",
         estimatedMemoryBytes: 900 * mb,
@@ -585,7 +611,7 @@ public enum ModelPresets {
     public static let deepseekR1_7B = ModelSpec(
         id: "deepseek-r1-distill-qwen-7b-4bit",
         base: .huggingFace(id: "mlx-community/DeepSeek-R1-Distill-Qwen-7B-4bit"),
-        contextLength: 4096,
+        contextLength: 131_072,
         displayName: "DeepSeek R1 7B",
         description: "推論能力に優れた 7B モデル",
         estimatedMemoryBytes: 4100 * mb,
@@ -605,7 +631,7 @@ public enum ModelPresets {
     public static let deepseekR1_14B = ModelSpec(
         id: "deepseek-r1-distill-qwen-14b-4bit",
         base: .huggingFace(id: "mlx-community/DeepSeek-R1-Distill-Qwen-14B-4bit"),
-        contextLength: 4096,
+        contextLength: 131_072,
         displayName: "DeepSeek R1 14B",
         description: "高品質な推論特化モデル",
         estimatedMemoryBytes: 8500 * mb,
@@ -621,61 +647,24 @@ public enum ModelPresets {
         )
     )
 
-    /// DeepSeek R1 Distill Llama 70B 4bit — 最大級推論
-    public static let deepseekR1_70B = ModelSpec(
-        id: "deepseek-r1-distill-llama-70b-4bit",
-        base: .huggingFace(id: "mlx-community/DeepSeek-R1-Distill-Llama-70B-4bit"),
-        contextLength: 4096,
-        displayName: "DeepSeek R1 70B",
-        description: "最大級の推論特化モデル。64GB+ RAM の Mac 専用",
-        estimatedMemoryBytes: 40_000 * mb,
-        profile: ModelProfile(
-            summary: "最大級の推論特化。64GB+ RAM 必須",
-            modelFamily: "DeepSeek",
-            parameterCount: "70B",
-            toolCallSupport: .unsupported,
-            japaneseSupport: .basic,
-            modalities: [.text],
-            quantization: "4bit",
-            inferenceSpeed: .slow
-        )
-    )
-
     // MARK: - Phi Family (Microsoft)
 
-    /// Phi-3.5 Mini Instruct 4bit — 小型・推論特化
-    public static let phi3_5_mini = ModelSpec(
-        id: "phi-3.5-mini-instruct-4bit",
-        base: .huggingFace(id: "mlx-community/Phi-3.5-mini-instruct-4bit"),
-        contextLength: 4096,
-        displayName: "Phi-3.5 Mini",
-        description: "Microsoft の小型モデル。推論能力が高い",
+    /// Phi-4 Mini Instruct 4bit — 小型・高推論
+    ///
+    /// chat template は tools 対応だが、出力形式（`<|tool_call|>` functools）の
+    /// パーサが mlx-swift-lm に存在しないためツールコールは非対応。
+    public static let phi4_mini = ModelSpec(
+        id: "phi-4-mini-instruct-4bit",
+        base: .huggingFace(id: "mlx-community/Phi-4-mini-instruct-4bit"),
+        contextLength: 131_072,
+        displayName: "Phi-4 Mini",
+        description: "Microsoft の小型モデル。改良された推論能力。ツールコール非対応",
         estimatedMemoryBytes: 2300 * mb,
         profile: ModelProfile(
             summary: "小型・推論能力が高い",
             modelFamily: "Phi",
             parameterCount: "3.8B",
-            toolCallSupport: .basic,
-            japaneseSupport: .basic,
-            modalities: [.text],
-            quantization: "4bit",
-            inferenceSpeed: .medium
-        )
-    )
-
-    /// Phi-4 Mini Instruct 4bit — 最新・高推論
-    public static let phi4_mini = ModelSpec(
-        id: "phi-4-mini-instruct-4bit",
-        base: .huggingFace(id: "mlx-community/phi-4-mini-instruct-4bit"),
-        contextLength: 4096,
-        displayName: "Phi-4 Mini",
-        description: "Microsoft の最新小型モデル。改良された推論能力",
-        estimatedMemoryBytes: 2300 * mb,
-        profile: ModelProfile(
-            summary: "最新 Phi。改良された推論能力",
-            modelFamily: "Phi",
-            parameterCount: "3.8B",
-            toolCallSupport: .basic,
+            toolCallSupport: .unsupported,
             japaneseSupport: .basic,
             modalities: [.text, .code],
             quantization: "4bit",
@@ -685,39 +674,19 @@ public enum ModelPresets {
 
     // MARK: - SmolLM Family (Hugging Face)
 
-    /// SmolLM2 135M Instruct 4bit — 超軽量・テスト向け
-    public static let smolLM_135M = ModelSpec(
-        id: "smollm2-135m-instruct-4bit",
-        base: .huggingFace(id: "mlx-community/SmolLM2-135M-Instruct-4bit"),
-        contextLength: 2048,
-        displayName: "SmolLM2 135M",
-        description: "超軽量モデル。動作確認やテスト向け",
-        estimatedMemoryBytes: 100 * mb,
-        profile: ModelProfile(
-            summary: "超軽量。テスト・動作確認向け",
-            modelFamily: "SmolLM",
-            parameterCount: "135M",
-            toolCallSupport: .unsupported,
-            japaneseSupport: .unsupported,
-            modalities: [.text],
-            quantization: "4bit",
-            inferenceSpeed: .fast
-        )
-    )
-
     /// SmolLM3 3B 4bit — 軽量効率型
     public static let smolLM3_3B = ModelSpec(
         id: "smollm3-3b-4bit",
         base: .huggingFace(id: "mlx-community/SmolLM3-3B-4bit"),
-        contextLength: 4096,
+        contextLength: 65_536,
         displayName: "SmolLM3 3B",
-        description: "Hugging Face の効率的な 3B モデル",
+        description: "Hugging Face の効率的な 3B モデル。ツールコール対応",
         estimatedMemoryBytes: 1800 * mb,
         profile: ModelProfile(
             summary: "効率的な 3B モデル",
             modelFamily: "SmolLM",
             parameterCount: "3B",
-            toolCallSupport: .unsupported,
+            toolCallSupport: .good,
             japaneseSupport: .unsupported,
             modalities: [.text],
             quantization: "4bit",
@@ -725,21 +694,21 @@ public enum ModelPresets {
         )
     )
 
-    // MARK: - Other Models
+    // MARK: - LFM Family (Liquid AI)
 
-    /// LFM2 1.2B 4bit — 超高速推論
-    public static let lfm2_1_2B = ModelSpec(
-        id: "lfm2-1.2b-4bit",
-        base: .huggingFace(id: "mlx-community/LFM2-1.2B-4bit"),
-        contextLength: 4096,
-        displayName: "LFM2 1.2B",
-        description: "Liquid AI の高速推論モデル。トークン生成が特に高速",
-        estimatedMemoryBytes: 700 * mb,
+    /// LFM2.5 1.2B Instruct 4bit — ツール特化の超高速 SLM
+    public static let lfm2_5_1_2B = ModelSpec(
+        id: "lfm2.5-1.2b-instruct-4bit",
+        base: .huggingFace(id: "mlx-community/LFM2.5-1.2B-Instruct-4bit"),
+        contextLength: 128_000,
+        displayName: "LFM2.5 1.2B",
+        description: "Liquid AI のツール特化 SLM。トークン生成が特に高速",
+        estimatedMemoryBytes: 750 * mb,
         profile: ModelProfile(
-            summary: "超高速推論。Liquid AI",
+            summary: "ツール特化の超高速 SLM",
             modelFamily: "LFM",
             parameterCount: "1.2B",
-            toolCallSupport: .good,
+            toolCallSupport: .excellent,
             japaneseSupport: .basic,
             modalities: [.text],
             quantization: "4bit",
@@ -747,19 +716,66 @@ public enum ModelPresets {
         )
     )
 
+    /// LFM2.5 1.2B 日本語特化 4bit — Liquid AI 公式 MLX 量子化
+    public static let lfm2_5_1_2B_ja = ModelSpec(
+        id: "lfm2.5-1.2b-jp-4bit",
+        base: .huggingFace(id: "LiquidAI/LFM2.5-1.2B-JP-202606-MLX-4bit"),
+        contextLength: 128_000,
+        displayName: "LFM2.5 1.2B 日本語",
+        description: "Liquid AI の日本語特化版。日本語の軽量タスクに最適",
+        estimatedMemoryBytes: 750 * mb,
+        profile: ModelProfile(
+            summary: "日本語特化の超高速 SLM",
+            modelFamily: "LFM",
+            parameterCount: "1.2B",
+            toolCallSupport: .good,
+            japaneseSupport: .excellent,
+            modalities: [.text],
+            quantization: "4bit",
+            inferenceSpeed: .fast
+        )
+    )
+
+    // MARK: - GLM Family (Zhipu AI)
+
+    /// GLM-4.7 Flash 4bit — ローカルコーディング/エージェント特化 MoE
+    public static let glm4_7_flash = ModelSpec(
+        id: "glm-4.7-flash-4bit",
+        base: .huggingFace(id: "mlx-community/GLM-4.7-Flash-4bit"),
+        contextLength: 202_752,
+        displayName: "GLM-4.7 Flash",
+        description: "Zhipu AI の 30B-A3B MoE。コーディング・エージェントに強い。32GB+ RAM の Mac 推奨",
+        estimatedMemoryBytes: 18_000 * mb,
+        profile: ModelProfile(
+            summary: "コーディング/エージェント特化 MoE",
+            modelFamily: "GLM",
+            parameterCount: "30B-A3B",
+            toolCallSupport: .excellent,
+            japaneseSupport: .good,
+            modalities: [.text, .code],
+            quantization: "4bit",
+            inferenceSpeed: .medium
+        )
+    )
+
+    // MARK: - Other Models
+
     /// Granite 3.3 2B Instruct 4bit — エンタープライズ軽量
+    ///
+    /// chat template は tools 対応だが、出力形式（`<|tool_call|>` + JSON リスト）の
+    /// パーサが mlx-swift-lm に存在しないためツールコールは非対応。
     public static let granite3_3_2B = ModelSpec(
         id: "granite-3.3-2b-instruct-4bit",
         base: .huggingFace(id: "mlx-community/granite-3.3-2b-instruct-4bit"),
-        contextLength: 4096,
+        contextLength: 131_072,
         displayName: "Granite 3.3 2B",
-        description: "IBM のエンタープライズ向け軽量モデル",
+        description: "IBM のエンタープライズ向け軽量モデル。ツールコール非対応",
         estimatedMemoryBytes: 1200 * mb,
         profile: ModelProfile(
             summary: "エンタープライズ向け軽量モデル",
             modelFamily: "Granite",
             parameterCount: "2B",
-            toolCallSupport: .good,
+            toolCallSupport: .unsupported,
             japaneseSupport: .basic,
             modalities: [.text],
             quantization: "4bit",
@@ -768,18 +784,21 @@ public enum ModelPresets {
     )
 
     /// GPT-OSS 20B MXFP4-Q8 — OpenAI オープンソース
+    ///
+    /// ツールコールは harmony 形式（`<|channel|>commentary to=functions.x`）で
+    /// 出力されるが、mlx-swift-lm にパーサが存在しないため非対応。
     public static let gptOSS_20B = ModelSpec(
         id: "gpt-oss-20b-mxfp4-q8",
         base: .huggingFace(id: "mlx-community/gpt-oss-20b-MXFP4-Q8"),
-        contextLength: 8192,
+        contextLength: 131_072,
         displayName: "GPT-OSS 20B",
-        description: "OpenAI のオープンソースモデル。高い日本語性能",
+        description: "OpenAI のオープンソースモデル。高い日本語性能。ツールコール非対応",
         estimatedMemoryBytes: 12_000 * mb,
         profile: ModelProfile(
             summary: "OpenAI OSS。高い日本語性能",
             modelFamily: "GPT-OSS",
             parameterCount: "20B",
-            toolCallSupport: .good,
+            toolCallSupport: .unsupported,
             japaneseSupport: .good,
             modalities: [.text, .code],
             quantization: "MXFP4-Q8",
@@ -792,46 +811,45 @@ public enum ModelPresets {
     /// 全モデルプリセット一覧（推定メモリ昇順）
     public static let all: [ModelSpec] = [
         // Tiny (< 1GB)
-        smolLM_135M,
         qwen3_0_6B,
-        qwen3_5_0_8B,
-        lfm2_1_2B,
         llama3_2_1B,
+        qwen3_5_0_8B,
+        lfm2_5_1_2B,
+        lfm2_5_1_2B_ja,
         gemma3_1B_qat,
         deepseekR1_1_5B,
         // Small (1-3GB)
         qwen3_1_7B,
-        gemma3n_e2b,
-        qwen3_5_2B,
         granite3_3_2B,
-        gemma2_2B,
         llama3_2_3B,
         smolLM3_3B,
-        phi3_5_mini,
+        qwen3_5_2B,
         phi4_mini,
         qwen3_4B,
         qwen3_4B_ja,
-        gemma3n_e4b,
         gemma3_4B_qat,
-        qwen3_5_4B,
+        ministral3_3B,
         // Medium (3-8GB)
-        mistral7B,
+        gemma4_e2b,
         deepseekR1_7B,
+        qwen3_5_4B,
         llama3_1_8B,
         qwen3_8B,
+        gemma4_e4b,
+        ministral3_8B,
         qwen3_5_9B,
-        gemma2_9B,
         gemma3_12B_qat,
         // Large (8-20GB)
         deepseekR1_14B,
         qwen2_5_14B,
         gptOSS_20B,
-        mistralSmall24B,
         gemma3_27B_qat,
+        qwen3_6_27B,
+        glm4_7_flash,
         qwen3_moe_30B,
         qwen2_5_32B,
         // Extra Large (20GB+)
-        deepseekR1_70B,
+        qwen3_6_35B_moe,
         llama3_3_70B,
         qwen2_5_72B,
     ]
@@ -842,4 +860,4 @@ public enum ModelPresets {
     private static let mb: UInt64 = 1024 * 1024
 }
 
-// swiftlint:enable type_body_length
+// swiftlint:enable type_body_length file_length

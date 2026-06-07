@@ -12,6 +12,8 @@ On-device LLM inference Swift package for iOS / macOS
 
 - **On-device Inference** - Privacy-preserving AI without cloud API dependency
 - **MLX Backend** - High-performance inference engine optimized for Apple Silicon
+- **Agent Integration** - `LocalAgentClient` conforms to swift-llm-client's `AgentCapableClient`, so local LLMs can run in the same agent loop as cloud providers
+- **Tool Calling** - Native function calling. Per-model capability is tracked via `ModelProfile.toolCallSupport`, and tool requests to unsupported models fail explicitly
 - **Model Management** - Download tracking, resume, and local caching
 - **LoRA Support** - Load adapters from GitHub Releases / HuggingFace / local files
 - **Memory Monitoring** - Automatic model unloading based on device memory
@@ -22,7 +24,7 @@ On-device LLM inference Swift package for iOS / macOS
 ```swift
 // Package.swift
 dependencies: [
-    .package(url: "https://github.com/no-problem-dev/swift-llm-local.git", .upToNextMajor(from: "1.0.0"))
+    .package(url: "https://github.com/no-problem-dev/swift-llm-local.git", .upToNextMajor(from: "2.0.0"))
 ]
 ```
 
@@ -32,8 +34,8 @@ Import only the modules you need:
 
 | Module | Purpose |
 |--------|---------|
-| `LLMLocal` | Umbrella (all modules + LLMLocalService) |
-| `LLMLocalClient` | Protocol layer only (for app abstraction, no external dependencies) |
+| `LLMLocal` | Umbrella (all modules + LLMLocalService + LocalAgentClient) |
+| `LLMLocalClient` | Protocol layer only (for app abstraction) |
 | `LLMLocalMLX` | MLX backend (for app DI configuration) |
 
 ## Quick Start
@@ -44,67 +46,108 @@ import LLMLocal
 // 1. Create service
 let service = LLMLocalService(
     backend: MLXBackend(),
-    modelManager: ModelManager()
+    modelRegistry: ModelRegistry(cacheDirectory: cacheDirectory)
 )
 
 // 2. Generate with preset model (streaming)
-for try await token in service.generate(
-    model: ModelPresets.gemma2B,
-    prompt: "Explain how to create a list in SwiftUI"
+for try await token in await service.generate(
+    model: ModelPresets.qwen3_4B,
+    prompt: "How do I build a list in SwiftUI?"
 ) {
     print(token, terminator: "")
 }
 ```
 
-### Custom Generation Parameters
+### Customizing Generation Parameters
 
 ```swift
+// maxTokens: nil (default) generates until the context limit
 let config = GenerationConfig(
     maxTokens: 512,
     temperature: 0.7,
     topP: 0.9
 )
 
-for try await token in service.generate(
-    model: ModelPresets.gemma2B,
-    prompt: "Write a creative short story",
+for try await token in await service.generate(
+    model: ModelPresets.qwen3_4B,
+    prompt: "Write a short creative story",
     config: config
 ) {
     print(token, terminator: "")
 }
 ```
 
+### Using as an Agent Client
+
+```swift
+import LLMLocal
+
+let client = LocalAgentClient(service: service)
+
+// Inject into the same agent loop as cloud providers,
+// as an AgentCapableClient from swift-llm-client
+let response = try await client.executeAgentStep(
+    messages: [.user("What's the weather in Tokyo?")],
+    model: ModelPresets.qwen3_4B,
+    systemPrompt: "You are a helpful assistant",
+    tools: tools,
+    toolChoice: .auto,
+    responseSchema: nil,
+    thinkingMode: .disabled,
+    reasoningEffort: nil,
+    maxTokens: nil,
+    cachePolicy: .implicit
+)
+```
+
+Tool calling capability is model-dependent. Passing tools to a model whose
+`ModelProfile.toolCallSupport` is `.unsupported` (DeepSeek R1 distills, Gemma 3, etc.)
+throws `LLMLocalError.toolCallsUnsupported`.
+
 ### Using LoRA Adapters
 
 ```swift
 let modelWithAdapter = ModelSpec(
-    id: "gemma-with-lora",
-    base: .huggingFace(id: "mlx-community/gemma-2-2b-it-4bit"),
+    id: "qwen-with-lora",
+    base: .huggingFace(id: "mlx-community/Qwen3-4B-Instruct-2507-4bit"),
     adapter: .huggingFace(id: "your-org/your-adapter"),
-    contextLength: 4096,
-    displayName: "Fine-tuned Gemma",
+    contextLength: 262_144,
+    displayName: "Fine-tuned Qwen",
     description: "Domain-specific fine-tuned model"
+)
+```
+
+### Custom Downloaders
+
+Supports mlx-swift-lm 3.x `Downloader` / `TokenizerLoader` injection.
+The default is the Hugging Face Hub, but you can inject custom retrieval
+strategies such as S3 or in-app bundles.
+
+```swift
+let backend = MLXBackend(
+    downloader: myCustomDownloader,   // defaults to Hugging Face Hub
+    tokenizerLoader: nil              // defaults to swift-transformers AutoTokenizer
 )
 ```
 
 ## Architecture
 
-4-layer architecture for separation of concerns:
+Four-layer structure for separation of concerns:
 
 ```
-Layer 0: LLMLocalClient      Protocol + shared types (no external dependencies)
+Layer 0: LLMLocalClient      Protocols + shared types
 Layer 1: LLMLocalModels       Model management
 Layer 2: LLMLocalMLX          MLX concrete implementation
-Umbrella: LLMLocal            Service + re-exports
+Umbrella: LLMLocal            Service + agent adapter + re-exports
 ```
 
 ## Documentation
 
 See the DocC documentation for detailed guides and API reference.
 
-| Guide | Description |
-|-------|-------------|
-| [API Reference](https://no-problem-dev.github.io/swift-llm-local/documentation/llmlocal/) | Full public API |
+| Guide | Contents |
+|-------|----------|
+| [API Reference](https://no-problem-dev.github.io/swift-llm-local/documentation/llmlocal/) | All public APIs |
 
 ## Requirements
 
@@ -114,8 +157,10 @@ See the DocC documentation for detailed guides and API reference.
 
 ## Dependencies
 
-- [swift-llm-client](https://github.com/no-problem-dev/swift-llm-client) (>= 1.0.0) - LLM client abstraction
-- [mlx-swift-lm](https://github.com/ml-explore/mlx-swift-lm) (>= 2.30.0) - MLX inference framework
+- [swift-llm-client](https://github.com/no-problem-dev/swift-llm-client) (>= 3.4.1) - LLM client abstraction
+- [mlx-swift-lm](https://github.com/ml-explore/mlx-swift-lm) (3.x) - MLX inference framework
+- [swift-huggingface](https://github.com/huggingface/swift-huggingface) - Hugging Face Hub client
+- [swift-transformers](https://github.com/huggingface/swift-transformers) - Tokenizers
 
 ## License
 

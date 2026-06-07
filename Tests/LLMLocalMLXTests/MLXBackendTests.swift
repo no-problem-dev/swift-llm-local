@@ -219,7 +219,7 @@ struct GenerationConfigMLXConversionTests {
         let params = config.mlxParameters
 
         // Assert
-        #expect(params.maxTokens == 1024)
+        #expect(params.maxTokens == nil)
         #expect(params.temperature == 0.7)
         #expect(params.topP == 0.9)
     }

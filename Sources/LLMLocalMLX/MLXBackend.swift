@@ -1,16 +1,25 @@
 import Foundation
+import HuggingFace
 import LLMClient
 import LLMLocalClient
 import LLMTool
 import MLX
+import MLXHuggingFace
 import MLXLLM
 @preconcurrency import MLXLMCommon
+import Tokenizers
 
 /// MLXベースのローカルLLM推論バックエンド
 ///
 /// このアクターは mlx-swift-lm API をラップし、``LLMLocalBackend`` への準拠を提供します。
 /// モデルの読み込み、テキスト生成、GPUキャッシュ設定、
 /// およびオプションのLoRAアダプターマージを管理します。
+///
+/// ## モデルの取得
+///
+/// mlx-swift-lm 3.x はモデル取得を `Downloader` / `TokenizerLoader` として
+/// 消費側が注入する設計です。デフォルトでは Hugging Face Hub からダウンロードしますが、
+/// 独自のダウンロード戦略（S3、アプリ内バンドル等）を注入できます。
 ///
 /// ## アダプターサポート
 ///
@@ -30,6 +39,8 @@ public actor MLXBackend: LLMLocalBackend {
     private var modelContainer: ModelContainer?
     private var loadedSpec: ModelSpec?
     private let gpuCacheLimit: Int
+    private let downloader: any Downloader
+    private let tokenizerLoader: any TokenizerLoader
 
     /// LoRA/QLoRA アダプターのオプションリゾルバー。
     private let adapterResolver: (any AdapterResolving)?
@@ -66,12 +77,20 @@ public actor MLXBackend: LLMLocalBackend {
     ///   - adapterResolver: LoRA/QLoRA アダプターソースをローカルファイルURLに解決する
     ///     オプションの ``AdapterResolving`` インスタンス。`nil` の場合、アダプター付き
     ///     モデルの読み込みは ``LLMLocalError/adapterMergeFailed(reason:)`` をスローします。
+    ///   - downloader: モデルリポジトリのスナップショットを取得するダウンローダー。
+    ///     デフォルトは Hugging Face Hub。
+    ///   - tokenizerLoader: ローカルディレクトリからトークナイザーを読み込むローダー。
+    ///     デフォルトは swift-transformers の `AutoTokenizer`。
     public init(
         gpuCacheLimit: Int = 20 * 1024 * 1024,
-        adapterResolver: (any AdapterResolving)? = nil
+        adapterResolver: (any AdapterResolving)? = nil,
+        downloader: (any Downloader)? = nil,
+        tokenizerLoader: (any TokenizerLoader)? = nil
     ) {
         self.gpuCacheLimit = gpuCacheLimit
         self.adapterResolver = adapterResolver
+        self.downloader = downloader ?? #hubDownloader()
+        self.tokenizerLoader = tokenizerLoader ?? #huggingFaceTokenizerLoader()
     }
 
     // MARK: - LLMLocalBackend
@@ -92,17 +111,13 @@ public actor MLXBackend: LLMLocalBackend {
         _ spec: ModelSpec,
         progressHandler: (@Sendable (DownloadProgress) -> Void)?
     ) async throws {
-        print("[MLXBackend] performLoad started: \(spec.id)")
-
         // If same model already loaded, skip
         if loadedSpec == spec {
-            print("[MLXBackend] model already loaded, skipping")
             return
         }
 
         // If another load is in progress, throw
         guard !isLoading else {
-            print("[MLXBackend] ERROR: another load is in progress")
             throw LLMLocalError.loadInProgress
         }
 
@@ -121,27 +136,16 @@ public actor MLXBackend: LLMLocalBackend {
 
         MLX.Memory.cacheLimit = gpuCacheLimit
 
-        let hfID: String
-        switch spec.base {
-        case .huggingFace(let id):
-            hfID = id
-            print("[MLXBackend] loading HuggingFace model: \(id)")
-        case .local(let path):
-            hfID = path.path()
-            print("[MLXBackend] loading local model: \(hfID)")
-        }
-
         do {
-            // Load base model (with or without progress tracking)
             let modelContainer: ModelContainer
-            if let progressHandler {
-                print("[MLXBackend] loading with progress handler, hfID=\(hfID)")
-                let config = ModelConfiguration(id: hfID)
+            switch spec.base {
+            case .huggingFace(let id):
                 modelContainer = try await LLMModelFactory.shared.loadContainer(
-                    configuration: config,
+                    from: downloader,
+                    using: tokenizerLoader,
+                    configuration: ModelConfiguration(id: id),
                     progressHandler: { progress in
-                        print("[MLXBackend] download progress: \(progress.fractionCompleted) (\(progress.completedUnitCount)/\(progress.totalUnitCount))")
-                        progressHandler(DownloadProgress(
+                        progressHandler?(DownloadProgress(
                             fraction: progress.fractionCompleted,
                             completedBytes: progress.completedUnitCount,
                             totalBytes: progress.totalUnitCount,
@@ -149,36 +153,30 @@ public actor MLXBackend: LLMLocalBackend {
                         ))
                     }
                 )
-            } else {
-                print("[MLXBackend] loading without progress handler")
-                modelContainer = try await MLXLMCommon.loadModelContainer(id: hfID)
+            case .local(let path):
+                modelContainer = try await LLMModelFactory.shared.loadContainer(
+                    from: path,
+                    using: tokenizerLoader
+                )
             }
-
-            print("[MLXBackend] model container loaded successfully")
 
             // Apply adapter if resolved
             if let adapterURL {
-                print("[MLXBackend] applying adapter from: \(adapterURL)")
-                let adapterConfig = ModelConfiguration(directory: adapterURL)
                 let adapter = try await ModelAdapterFactory.shared.load(
-                    configuration: adapterConfig
+                    from: downloader,
+                    configuration: ModelConfiguration(directory: adapterURL)
                 )
                 try await modelContainer.perform { context in
                     try context.model.load(adapter: adapter)
                 }
-                print("[MLXBackend] adapter applied successfully")
             }
 
             self.modelContainer = modelContainer
             chatSession = ChatSession(modelContainer, instructions: _systemPrompt)
             loadedSpec = spec
-            print("[MLXBackend] performLoad completed successfully for \(spec.id)")
         } catch let error as LLMLocalError {
-            print("[MLXBackend] LLMLocalError: \(error)")
             throw error
         } catch {
-            print("[MLXBackend] ERROR loading model \(spec.id): \(error)")
-            print("[MLXBackend] ERROR type: \(type(of: error))")
             throw LLMLocalError.loadFailed(
                 modelId: spec.id,
                 reason: error.localizedDescription
@@ -349,13 +347,8 @@ public actor MLXBackend: LLMLocalBackend {
                 to: prompt, images: [], videos: []
             ) {
                 try Task.checkCancellation()
-                switch generation {
-                case .chunk(let text):
-                    continuation.yield(.text(text))
-                case .toolCall(let toolCall):
-                    continuation.yield(.toolCall(LLMTool.ToolCall(from: toolCall)))
-                case .info:
-                    break
+                if let output = GenerationOutput(generation) {
+                    continuation.yield(output)
                 }
             }
             continuation.finish()
@@ -414,13 +407,8 @@ public actor MLXBackend: LLMLocalBackend {
 
                 for await generation in stream {
                     guard !Task.isCancelled else { break }
-                    switch generation {
-                    case .chunk(let text):
-                        continuation.yield(.text(text))
-                    case .toolCall(let toolCall):
-                        continuation.yield(.toolCall(LLMTool.ToolCall(from: toolCall)))
-                    case .info:
-                        break
+                    if let output = GenerationOutput(generation) {
+                        continuation.yield(output)
                     }
                 }
             }
@@ -459,8 +447,8 @@ public actor MLXBackend: LLMLocalBackend {
                         "arguments": argsString,
                     ] as [String: any Sendable],
                 ])
-            case .toolResult(let callId, _, let content, _):
-                toolResults.append((callId: callId, content: content))
+            case .toolResult(let callId, _, let content):
+                toolResults.append((callId: callId, content: content.contentValue))
             case .image, .audio, .video:
                 break
             case .thinking(let text, _):
@@ -498,5 +486,30 @@ public actor MLXBackend: LLMLocalBackend {
         }
 
         return result
+    }
+}
+
+// MARK: - MLX Generation → GenerationOutput
+
+extension GenerationOutput {
+    /// MLX の ``MLXLMCommon.Generation`` イベントを ``GenerationOutput`` に変換します。
+    ///
+    /// 対応するイベントがない場合（未知のケース）は `nil` を返します。
+    init?(_ generation: Generation) {
+        switch generation {
+        case .chunk(let text):
+            self = .text(text)
+        case .toolCall(let toolCall):
+            self = .toolCall(LLMTool.ToolCall(from: toolCall))
+        case .info(let info):
+            self = .info(GenerationInfo(
+                promptTokenCount: info.promptTokenCount,
+                generationTokenCount: info.generationTokenCount,
+                tokensPerSecond: info.generateTime > 0
+                    ? Double(info.generationTokenCount) / info.generateTime : 0
+            ))
+        @unknown default:
+            return nil
+        }
     }
 }

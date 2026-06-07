@@ -1,3 +1,4 @@
+import LLMClient
 import LLMLocalClient
 
 /// A mock backend for testing LLMLocalService without requiring real MLX inference.
@@ -5,11 +6,15 @@ actor MockBackend: LLMLocalBackend {
     var loadModelCalled = false
     var generateCalled = false
     var generateWithToolsCalled = false
+    var generateFromMessagesCalled = false
     var unloadCalled = false
     var shouldThrow: LLMLocalError?
     var mockTokens: [String] = ["Hello", " ", "World"]
     var mockToolOutputs: [GenerationOutput]?
     var lastToolDefinitions: [ToolDefinition]?
+    var lastMessages: [LLMMessage]?
+    var lastSystemPrompt: String?
+    var lastConfig: GenerationConfig?
     private var _isLoaded = false
     private var _currentModel: ModelSpec?
 
@@ -26,15 +31,17 @@ actor MockBackend: LLMLocalBackend {
     ) -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
             Task {
-                await self.performGenerate(continuation: continuation)
+                await self.performGenerate(config: config, continuation: continuation)
             }
         }
     }
 
     private func performGenerate(
+        config: GenerationConfig,
         continuation: AsyncThrowingStream<String, Error>.Continuation
     ) {
         generateCalled = true
+        lastConfig = config
         if let error = shouldThrow {
             continuation.finish(throwing: error)
             return
@@ -52,18 +59,42 @@ actor MockBackend: LLMLocalBackend {
     ) -> AsyncThrowingStream<GenerationOutput, Error> {
         AsyncThrowingStream { continuation in
             Task {
-                await self.performGenerateWithTools(
-                    tools: tools, continuation: continuation
-                )
+                await self.performToolOutputs(
+                    config: config, tools: tools, continuation: continuation
+                ) {
+                    await self.markGenerateWithToolsCalled()
+                }
             }
         }
     }
 
-    private func performGenerateWithTools(
+    nonisolated func generateFromMessages(
+        messages: [LLMMessage],
+        systemPrompt: String?,
+        config: GenerationConfig,
+        tools: [ToolDefinition]
+    ) -> AsyncThrowingStream<GenerationOutput, Error> {
+        AsyncThrowingStream { continuation in
+            Task {
+                await self.performToolOutputs(
+                    config: config, tools: tools, continuation: continuation
+                ) {
+                    await self.markGenerateFromMessagesCalled(
+                        messages: messages, systemPrompt: systemPrompt
+                    )
+                }
+            }
+        }
+    }
+
+    private func performToolOutputs(
+        config: GenerationConfig,
         tools: [ToolDefinition],
-        continuation: AsyncThrowingStream<GenerationOutput, Error>.Continuation
-    ) {
-        generateWithToolsCalled = true
+        continuation: AsyncThrowingStream<GenerationOutput, Error>.Continuation,
+        mark: () async -> Void
+    ) async {
+        await mark()
+        lastConfig = config
         lastToolDefinitions = tools
         if let error = shouldThrow {
             continuation.finish(throwing: error)
@@ -91,6 +122,19 @@ actor MockBackend: LLMLocalBackend {
     var currentModel: ModelSpec? { _currentModel }
 
     // MARK: - Test Helpers
+
+    private func markGenerateWithToolsCalled() {
+        generateWithToolsCalled = true
+    }
+
+    private func markGenerateFromMessagesCalled(
+        messages: [LLMMessage],
+        systemPrompt: String?
+    ) {
+        generateFromMessagesCalled = true
+        lastMessages = messages
+        lastSystemPrompt = systemPrompt
+    }
 
     func resetLoadModelCalled() {
         loadModelCalled = false

@@ -6,10 +6,10 @@ struct GenerationConfigTests {
 
     // MARK: - Default values
 
-    @Test("default config has maxTokens 1024")
+    @Test("default config has nil maxTokens (no cap)")
     func defaultMaxTokens() {
         let config = GenerationConfig.default
-        #expect(config.maxTokens == 1024)
+        #expect(config.maxTokens == nil)
     }
 
     @Test("default config has temperature 0.7")
@@ -29,7 +29,7 @@ struct GenerationConfigTests {
     @Test("init without arguments uses default values")
     func initWithoutArguments() {
         let config = GenerationConfig()
-        #expect(config.maxTokens == 1024)
+        #expect(config.maxTokens == nil)
         #expect(config.temperature == 0.7)
         #expect(config.topP == 0.9)
     }
@@ -47,7 +47,7 @@ struct GenerationConfigTests {
     @Test("init with custom temperature")
     func customTemperature() {
         let config = GenerationConfig(temperature: 0.5)
-        #expect(config.maxTokens == 1024)
+        #expect(config.maxTokens == nil)
         #expect(config.temperature == 0.5)
         #expect(config.topP == 0.9)
     }
@@ -55,7 +55,7 @@ struct GenerationConfigTests {
     @Test("init with custom topP")
     func customTopP() {
         let config = GenerationConfig(topP: 0.95)
-        #expect(config.maxTokens == 1024)
+        #expect(config.maxTokens == nil)
         #expect(config.temperature == 0.7)
         #expect(config.topP == 0.95)
     }
@@ -85,7 +85,7 @@ struct GenerationConfigTests {
 
     @Test("config is Sendable")
     func sendableCheck() async {
-        let config = GenerationConfig()
+        let config = GenerationConfig(maxTokens: 1024)
         // If this compiles, GenerationConfig conforms to Sendable.
         let result = await sendAcrossBoundary(config)
         #expect(result.maxTokens == 1024)

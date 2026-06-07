@@ -107,12 +107,24 @@ extension LLMLocalBackend {
         try await loadModel(spec)
     }
 
-    /// ツールを無視し、各トークンを `.text` としてラップするデフォルト実装。
+    /// ツールコール非対応バックエンドのデフォルト実装。
+    ///
+    /// ツールが渡された場合は ``LLMLocalError/toolCallsUnsupported(modelId:)`` で失敗します。
+    /// ツールを黙って捨てると呼び出し側が「ツール不要の応答」と誤解釈するためです。
+    /// ツールが空の場合は `generate` に委譲し、各トークンを `.text` としてラップします。
     public func generateWithTools(
         prompt: String,
         config: GenerationConfig,
         tools: [ToolDefinition]
     ) -> AsyncThrowingStream<GenerationOutput, Error> {
+        guard tools.isEmpty else {
+            return makeCancellableStream { continuation in
+                Task {
+                    let modelId = await currentModel?.id ?? "unknown"
+                    continuation.finish(throwing: LLMLocalError.toolCallsUnsupported(modelId: modelId))
+                }
+            }
+        }
         let stream = generate(prompt: prompt, config: config)
         return makeCancellableStream { continuation in
             Task {

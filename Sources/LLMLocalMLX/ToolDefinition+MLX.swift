@@ -42,6 +42,12 @@ extension JSONSchema {
         if let maxItems { dict["maxItems"] = maxItems }
         if let minimum { dict["minimum"] = minimum }
         if let maximum { dict["maximum"] = maximum }
+        if let exclusiveMinimum { dict["exclusiveMinimum"] = exclusiveMinimum }
+        if let exclusiveMaximum { dict["exclusiveMaximum"] = exclusiveMaximum }
+        if let minLength { dict["minLength"] = minLength }
+        if let maxLength { dict["maxLength"] = maxLength }
+        if let pattern { dict["pattern"] = pattern }
+        if let format { dict["format"] = format }
         if let `enum` { dict["enum"] = `enum` }
 
         return dict

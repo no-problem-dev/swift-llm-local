@@ -28,7 +28,7 @@ struct Phase2IntegrationTests {
     func downloadProgressStreamProgresses() async throws {
         // Arrange
         let modelRegistry = ModelRegistry()
-        let spec = ModelPresets.gemma2_2B
+        let spec = ModelPresets.qwen3_0_6B
 
         // Act
         var progressValues: [Double] = []
@@ -66,7 +66,7 @@ struct Phase2IntegrationTests {
         )
 
         // Load model
-        try await backend.loadModel(ModelPresets.gemma2_2B)
+        try await backend.loadModel(ModelPresets.qwen3_0_6B)
         let loadedBefore = await backend.isLoaded
         #expect(loadedBefore == true, "Model should be loaded before memory warning")
 
@@ -102,7 +102,7 @@ struct Phase2IntegrationTests {
         // AdapterResolving (Layer 0). In integration tests we test them
         // independently.
         let backend = MLXBackend()
-        let specWithoutAdapter = ModelPresets.gemma2_2B
+        let specWithoutAdapter = ModelPresets.qwen3_0_6B
 
         // Act
         try await backend.loadModel(specWithoutAdapter)
@@ -129,7 +129,7 @@ struct Phase2IntegrationTests {
         // Act
         var tokens: [String] = []
         let stream = await service.generate(
-            model: ModelPresets.gemma2_2B,
+            model: ModelPresets.qwen3_0_6B,
             prompt: "Hello",
             config: config
         )
