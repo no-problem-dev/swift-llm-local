@@ -17,14 +17,11 @@ let package = Package(
     ],
     dependencies: [
         // Canonical LLM types (ToolDefinition, ToolCall, JSONSchema)
-        .package(path: "../swift-llm-client"),
+        .package(url: "https://github.com/no-problem-dev/swift-llm-client.git", from: "3.4.2"),
         // Persistence abstractions (RegistryStore)
         .package(url: "https://github.com/no-problem-dev/swift-persistence.git", .upToNextMajor(from: "2.0.0")),
         // MLX LLM inference
-        // タグ 3.31.3 は swift-syntax < 601 を要求し swift-llm-client（602 要求）と衝突するため、
-        // 制約が 600..<604 に緩和された main の特定リビジョンに固定。
-        // 3.31.4 以降のリリースで `from:` 指定に切り替えること。
-        .package(url: "https://github.com/ml-explore/mlx-swift-lm", revision: "a47894a1e7e963b24bd48c030f5fc1d1627e60e9"),
+        .package(url: "https://github.com/ml-explore/mlx-swift-lm", from: "3.31.3"),
         // Hugging Face Hub download / tokenizer (mlx-swift-lm 3.x は Downloader/TokenizerLoader を消費側が注入する設計)
         .package(url: "https://github.com/huggingface/swift-huggingface.git", from: "0.9.0"),
         .package(url: "https://github.com/huggingface/swift-transformers.git", from: "1.3.0"),

@@ -9,6 +9,15 @@
 
 なし
 
+## [2.0.1] - 2026-06-08
+
+### 変更
+- リモート消費（`url` + バージョン指定）を可能に:
+  - swift-llm-client をパス依存から `url` + `from: 3.4.2` に変更
+  - mlx-swift-lm を revision 固定からタグ `from: 3.31.3` に変更
+    （swift-llm-client 3.4.2 の swift-syntax 緩和により versioned グラフが成立）
+  - 2.0.0 はパス依存/revision 依存を含むためリモートからは解決不能（ローカル専用）
+
 ## [2.0.0] - 2026-06-08
 
 swift-llm-client 3.4.1 / mlx-swift-lm 3.x への全面追従。エージェント委譲
