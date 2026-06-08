@@ -9,6 +9,20 @@
 
 なし
 
+## [2.0.2] - 2026-06-08
+
+### 修正
+- **iOS でのモデルダウンロード失敗を修正**: swift-huggingface のキャッシュ経路
+  （`#hubDownloader()` = `downloadSnapshot(returnCachePath: true)`）は、iOS
+  サンドボックスの `Caches/huggingface/hub` 上で LFS 大ファイル（`model.safetensors`
+  等）のパス解決に失敗し `cachedPathResolutionFailed` を投げていた。
+  明示 destination 方式の `DestinationHubDownloader` を新設し MLXBackend の既定に。
+  Application Support 配下（バックアップ除外）へ配置し、スナップショット完備を
+  検出して再ダウンロードを回避する
+- **`LLMLocalError` を `LocalizedError` 準拠に**: 未準拠だと `localizedDescription` が
+  "...LLMLocalError error N." となり `reason` 等の associated value が握り潰されていた。
+  各ケースを人間可読な文言に展開
+
 ## [2.0.1] - 2026-06-08
 
 ### 変更
@@ -78,6 +92,7 @@ swift-llm-client 3.4.1 / mlx-swift-lm 3.x への全面追従。エージェン�
 - **LLMLocalClient** - プロトコル層（バックエンド抽象化・共有型）
 - **LLMLocalMLX** - MLX バックエンド実装
 
-[未リリース]: https://github.com/no-problem-dev/swift-llm-local/compare/2.0.0...HEAD
+[未リリース]: https://github.com/no-problem-dev/swift-llm-local/compare/2.0.2...HEAD
+[2.0.2]: https://github.com/no-problem-dev/swift-llm-local/compare/2.0.1...2.0.2
 [2.0.0]: https://github.com/no-problem-dev/swift-llm-local/compare/1.7.2...2.0.0
 [1.0.0]: https://github.com/no-problem-dev/swift-llm-local/releases/tag/v1.0.0

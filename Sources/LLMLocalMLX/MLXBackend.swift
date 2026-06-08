@@ -89,7 +89,9 @@ public actor MLXBackend: LLMLocalBackend {
     ) {
         self.gpuCacheLimit = gpuCacheLimit
         self.adapterResolver = adapterResolver
-        self.downloader = downloader ?? #hubDownloader()
+        // swift-huggingface のキャッシュ経路（#hubDownloader）は iOS で LFS 大ファイルの
+        // パス解決に失敗するため、明示 destination 方式の DestinationHubDownloader を既定にする。
+        self.downloader = downloader ?? DestinationHubDownloader()
         self.tokenizerLoader = tokenizerLoader ?? #huggingFaceTokenizerLoader()
     }
 

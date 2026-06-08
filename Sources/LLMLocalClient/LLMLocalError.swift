@@ -1,3 +1,5 @@
+import Foundation
+
 /// ローカルLLM操作で発生しうるエラー
 public enum LLMLocalError: Error, Sendable, Equatable {
     /// モデルのダウンロードに失敗。
@@ -47,4 +49,38 @@ public enum LLMLocalError: Error, Sendable, Equatable {
     /// 誤解釈してターンを終了してしまうため、明示的にエラーにします。
     /// - Parameter modelId: ツールコール非対応のモデルの識別子。
     case toolCallsUnsupported(modelId: String)
+}
+
+// MARK: - LocalizedError
+
+extension LLMLocalError: LocalizedError {
+    /// 人間可読なエラー説明。
+    ///
+    /// `LocalizedError` 未準拠だと `localizedDescription` が
+    /// "...LLMLocalError error N." という不透明な文言になり、`reason` 等の
+    /// associated value が握り潰される。各ケースの内容を文言に展開する。
+    public var errorDescription: String? {
+        switch self {
+        case .downloadFailed(let modelId, let reason):
+            "モデル '\(modelId)' のダウンロードに失敗しました: \(reason)"
+        case .loadFailed(let modelId, let reason):
+            "モデル '\(modelId)' の読み込みに失敗しました: \(reason)"
+        case .insufficientMemory(let required, let available):
+            "メモリ不足です（必要: \(required) バイト / 利用可能: \(available) バイト）"
+        case .insufficientStorage(let required, let available):
+            "ストレージ不足です（必要: \(required) バイト / 利用可能: \(available) バイト）"
+        case .modelNotLoaded:
+            "モデルが読み込まれていません"
+        case .loadInProgress:
+            "モデルの読み込みが既に進行中です"
+        case .cancelled:
+            "操作がキャンセルされました"
+        case .adapterMergeFailed(let reason):
+            "アダプターのマージに失敗しました: \(reason)"
+        case .unsupportedModelFormat(let format):
+            "サポートされていないモデル形式です: \(format)"
+        case .toolCallsUnsupported(let modelId):
+            "モデル '\(modelId)' はツールコールに対応していません"
+        }
+    }
 }
