@@ -32,6 +32,12 @@ public struct ModelSpec: Sendable, Hashable, Codable {
     /// ツールコール対応度、日本語力、量子化情報などを含みます。
     public let profile: ModelProfile?
 
+    /// このモデルの推奨生成設定（サンプリング・KV キャッシュ・思考モード）。
+    ///
+    /// モデルカードの推奨サンプリングや、エージェント用途での速度優先設定をここに持たせ、
+    /// 呼び出し側はこれを基準に `maxTokens` などだけを上書きする。
+    public let recommendedGeneration: GenerationConfig
+
     /// 新しいモデル仕様を作成します。
     /// - Parameters:
     ///   - id: このモデル仕様の一意識別子。
@@ -42,6 +48,7 @@ public struct ModelSpec: Sendable, Hashable, Codable {
     ///   - description: モデルの人間可読な説明文。
     ///   - estimatedMemoryBytes: 推定メモリ使用量（バイト単位）。
     ///   - profile: モデルの特性プロファイル。デフォルトは `nil`。
+    ///   - recommendedGeneration: 推奨生成設定。デフォルトは ``GenerationConfig/default``。
     public init(
         id: String,
         base: ModelSource,
@@ -50,7 +57,8 @@ public struct ModelSpec: Sendable, Hashable, Codable {
         displayName: String,
         description: String,
         estimatedMemoryBytes: UInt64,
-        profile: ModelProfile? = nil
+        profile: ModelProfile? = nil,
+        recommendedGeneration: GenerationConfig = .default
     ) {
         self.id = id
         self.base = base
@@ -60,6 +68,7 @@ public struct ModelSpec: Sendable, Hashable, Codable {
         self.description = description
         self.estimatedMemoryBytes = estimatedMemoryBytes
         self.profile = profile
+        self.recommendedGeneration = recommendedGeneration
     }
 }
 

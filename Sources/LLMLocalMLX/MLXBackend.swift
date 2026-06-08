@@ -315,6 +315,7 @@ public actor MLXBackend: LLMLocalBackend {
         }
 
         session.generateParameters = config.mlxParameters
+        session.additionalContext = config.chatTemplateContext
 
         do {
             for try await text in session.streamResponse(to: prompt) {
@@ -343,6 +344,7 @@ public actor MLXBackend: LLMLocalBackend {
 
         session.tools = tools.map { $0.toolSpec }
         session.generateParameters = config.mlxParameters
+        session.additionalContext = config.chatTemplateContext
 
         do {
             for try await generation in session.streamDetails(
@@ -394,10 +396,12 @@ public actor MLXBackend: LLMLocalBackend {
         let parameters = config.mlxParameters
 
         do {
+            let additionalContext = config.chatTemplateContext
             try await container.perform { context in
                 let tokens = try context.tokenizer.applyChatTemplate(
                     messages: mlxMessages,
-                    tools: toolSpecs
+                    tools: toolSpecs,
+                    additionalContext: additionalContext
                 )
                 let input = LMInput(tokens: MLXArray(tokens))
 

@@ -83,7 +83,8 @@ public enum ModelPresets {
             modalities: [.text, .code],
             quantization: "4bit",
             inferenceSpeed: .medium
-        )
+        ),
+        recommendedGeneration: qwenAgentic
     )
 
     /// Qwen3 4B 日本語ファインチューニング済み 4bit
@@ -165,7 +166,8 @@ public enum ModelPresets {
             modalities: [.text, .vision, .code],
             quantization: "4bit",
             inferenceSpeed: .fast
-        )
+        ),
+        recommendedGeneration: qwenAgentic
     )
 
     /// Qwen3.5 4B OptiQ 4bit — バランス型マルチモーダル
@@ -185,7 +187,8 @@ public enum ModelPresets {
             modalities: [.text, .vision, .code],
             quantization: "OptiQ-4bit",
             inferenceSpeed: .medium
-        )
+        ),
+        recommendedGeneration: qwenAgentic
     )
 
     /// Qwen3.5 9B 4bit — 高品質マルチモーダル
@@ -562,7 +565,8 @@ public enum ModelPresets {
             modalities: [.text, .code],
             quantization: "4bit",
             inferenceSpeed: .medium
-        )
+        ),
+        recommendedGeneration: mistralAgentic
     )
 
     /// Ministral 3 8B Instruct 2512 4bit — 高品質エージェントモデル
@@ -713,7 +717,8 @@ public enum ModelPresets {
             modalities: [.text],
             quantization: "4bit",
             inferenceSpeed: .fast
-        )
+        ),
+        recommendedGeneration: lfmAgentic
     )
 
     /// LFM2.5 1.2B 日本語特化 4bit — Liquid AI 公式 MLX 量子化
@@ -853,6 +858,27 @@ public enum ModelPresets {
         llama3_3_70B,
         qwen2_5_72B,
     ]
+
+    // MARK: - Recommended Generation（家族別の推奨生成設定）
+    //
+    // エージェント（ツールコール）用途向け。思考モードは OFF（高速化）、サンプリングは
+    // 各モデルカードの推奨値に寄せる。呼び出し側は maxTokens / temperature だけ上書きする。
+
+    /// Qwen 系: Qwen 推奨サンプリング（topP 0.8 / topK 20）+ 思考 OFF。
+    /// Qwen3.5 は思考デフォルト ON なので、OFF にすると 4B でも軽快に動く。
+    private static let qwenAgentic = GenerationConfig(
+        temperature: 0.7, topP: 0.8, topK: 20, enableThinking: false
+    )
+
+    /// LFM2 系（Liquid AI 推奨: 低温・min_p・繰り返しペナルティ）。
+    private static let lfmAgentic = GenerationConfig(
+        temperature: 0.3, minP: 0.15, repetitionPenalty: 1.05, enableThinking: false
+    )
+
+    /// Mistral / Ministral 系: 関数呼び出しは低温が安定。
+    private static let mistralAgentic = GenerationConfig(
+        temperature: 0.15, topP: 1.0, enableThinking: false
+    )
 
     // MARK: - Private Helpers
 

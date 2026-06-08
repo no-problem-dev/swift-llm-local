@@ -9,6 +9,23 @@
 
 なし
 
+## [2.1.0] - 2026-06-08
+
+### 追加
+- **`GenerationConfig` に MLX の全ツマミを公開**: `topK` / `minP` / `repetitionPenalty` /
+  `repetitionContextSize`（サンプリング）、`kvBits` / `maxKVSize` / `kvGroupSize`
+  （KV キャッシュ量子化＝長コンテキストのメモリ削減）、`prefillStepSize`、
+  `enableThinking`（思考モード抑制）。すべて `GenerateParameters` / チャットテンプレートへ伝搬
+- **思考モード制御 `enableThinking`**: `false` で空の `<think></think>` を注入し思考生成を
+  スキップ。Qwen3.5 4B など思考デフォルト ON のモデルのレイテンシを大幅に削減
+- **`ModelSpec.recommendedGeneration`**: モデルごとの推奨生成設定。`LocalAgentClient` は
+  これを基準にし、呼び出し側の `maxTokens` / `temperature` だけ上書きする。
+  プリセットに家族別の推奨値を設定（Qwen: topP 0.8/topK 20/思考 OFF、LFM2: 低温・min_p・
+  繰り返しペナルティ、Mistral: 低温）
+
+### 変更
+- `GenerationConfig` が `Hashable` / `Codable` に準拠（`ModelSpec` への埋め込みのため）
+
 ## [2.0.2] - 2026-06-08
 
 ### 修正
@@ -92,7 +109,8 @@ swift-llm-client 3.4.1 / mlx-swift-lm 3.x への全面追従。エージェン�
 - **LLMLocalClient** - プロトコル層（バックエンド抽象化・共有型）
 - **LLMLocalMLX** - MLX バックエンド実装
 
-[未リリース]: https://github.com/no-problem-dev/swift-llm-local/compare/2.0.2...HEAD
+[未リリース]: https://github.com/no-problem-dev/swift-llm-local/compare/2.1.0...HEAD
+[2.1.0]: https://github.com/no-problem-dev/swift-llm-local/compare/2.0.2...2.1.0
 [2.0.2]: https://github.com/no-problem-dev/swift-llm-local/compare/2.0.1...2.0.2
 [2.0.0]: https://github.com/no-problem-dev/swift-llm-local/compare/1.7.2...2.0.0
 [1.0.0]: https://github.com/no-problem-dev/swift-llm-local/releases/tag/v1.0.0

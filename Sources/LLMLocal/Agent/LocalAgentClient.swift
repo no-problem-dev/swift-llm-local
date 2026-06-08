@@ -238,10 +238,11 @@ extension LocalAgentClient {
         maxTokens: Int?,
         onDelta: (@Sendable (StreamDelta) -> Void)? = nil
     ) async throws -> GenerationOutcome {
-        let config = GenerationConfig(
-            maxTokens: maxTokens,
-            temperature: temperature.map(Float.init) ?? GenerationConfig.default.temperature
-        )
+        // モデルの推奨生成設定（サンプリング・KV・思考モード）を基準に、
+        // 呼び出し側が明示した maxTokens / temperature だけを上書きする。
+        var config = model.recommendedGeneration
+        config.maxTokens = maxTokens
+        if let temperature { config.temperature = Float(temperature) }
 
         var parser = ThinkTagParser()
         var outcome = GenerationOutcome()
