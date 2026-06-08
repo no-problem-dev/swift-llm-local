@@ -149,14 +149,15 @@ public enum ModelPresets {
         )
     )
 
-    /// Qwen3.5 2B 4bit — 軽量・オンデバイス推論
+    /// Qwen3.5 2B 6bit — 軽量・オンデバイス推論
+    /// 小型モデルは 4bit の量子化劣化が大きいため、品質/サイズのバランスで 6bit を採用。
     public static let qwen3_5_2B = ModelSpec(
-        id: "qwen3.5-2b-4bit",
-        base: .huggingFace(id: "mlx-community/Qwen3.5-2B-4bit"),
+        id: "qwen3.5-2b-6bit",
+        base: .huggingFace(id: "mlx-community/Qwen3.5-2B-6bit"),
         contextLength: 262_144,
         displayName: "Qwen3.5 2B",
         description: "軽量マルチモーダル。オンデバイス推論に最適",
-        estimatedMemoryBytes: 1900 * mb,
+        estimatedMemoryBytes: 2200 * mb,
         profile: ModelProfile(
             summary: "軽量マルチモーダル。オンデバイス推論向け",
             modelFamily: "Qwen",
@@ -164,20 +165,21 @@ public enum ModelPresets {
             toolCallSupport: .excellent,
             japaneseSupport: .good,
             modalities: [.text, .vision, .code],
-            quantization: "4bit",
+            quantization: "6bit",
             inferenceSpeed: .fast
         ),
         recommendedGeneration: qwenAgentic
     )
 
-    /// Qwen3.5 4B OptiQ 4bit — バランス型マルチモーダル
+    /// Qwen3.5 4B 6bit — バランス型マルチモーダル
+    /// 旧 OptiQ-4bit（素性不明・4.0GB）から標準 6bit（4.1GB・ほぼ同サイズで高品質）へ。
     public static let qwen3_5_4B = ModelSpec(
-        id: "qwen3.5-4b-optiq-4bit",
-        base: .huggingFace(id: "mlx-community/Qwen3.5-4B-OptiQ-4bit"),
+        id: "qwen3.5-4b-6bit",
+        base: .huggingFace(id: "mlx-community/Qwen3.5-4B-6bit"),
         contextLength: 262_144,
         displayName: "Qwen3.5 4B",
         description: "バランス型マルチモーダル。軽量エージェント向け",
-        estimatedMemoryBytes: 4300 * mb,
+        estimatedMemoryBytes: 4100 * mb,
         profile: ModelProfile(
             summary: "バランス型マルチモーダル。軽量エージェント向け",
             modelFamily: "Qwen",
@@ -185,7 +187,7 @@ public enum ModelPresets {
             toolCallSupport: .excellent,
             japaneseSupport: .good,
             modalities: [.text, .vision, .code],
-            quantization: "OptiQ-4bit",
+            quantization: "6bit",
             inferenceSpeed: .medium
         ),
         recommendedGeneration: qwenAgentic

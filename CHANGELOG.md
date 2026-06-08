@@ -9,6 +9,16 @@
 
 なし
 
+## [2.1.1] - 2026-06-08
+
+### 変更
+- **Qwen3.5 プリセットの量子化を見直し**: 小型モデルは 4bit の劣化が大きいため、
+  mlx-community 標準の **6bit ライン**へ統一（品質/サイズのスイートスポット）。
+  - `qwen3_5_2B`: `Qwen3.5-2B-4bit` → `Qwen3.5-2B-6bit`（+0.5GB で品質向上）
+  - `qwen3_5_4B`: `Qwen3.5-4B-OptiQ-4bit`（素性不明・4.0GB）→ `Qwen3.5-4B-6bit`
+    （4.1GB・ほぼ同サイズで標準量子化・高品質）。OptiQ は同サイズで 4bit 品質の
+    悪手だった
+
 ## [2.1.0] - 2026-06-08
 
 ### 追加
@@ -109,7 +119,8 @@ swift-llm-client 3.4.1 / mlx-swift-lm 3.x への全面追従。エージェン�
 - **LLMLocalClient** - プロトコル層（バックエンド抽象化・共有型）
 - **LLMLocalMLX** - MLX バックエンド実装
 
-[未リリース]: https://github.com/no-problem-dev/swift-llm-local/compare/2.1.0...HEAD
+[未リリース]: https://github.com/no-problem-dev/swift-llm-local/compare/2.1.1...HEAD
+[2.1.1]: https://github.com/no-problem-dev/swift-llm-local/compare/2.1.0...2.1.1
 [2.1.0]: https://github.com/no-problem-dev/swift-llm-local/compare/2.0.2...2.1.0
 [2.0.2]: https://github.com/no-problem-dev/swift-llm-local/compare/2.0.1...2.0.2
 [2.0.0]: https://github.com/no-problem-dev/swift-llm-local/compare/1.7.2...2.0.0
