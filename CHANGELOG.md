@@ -9,6 +9,20 @@
 
 なし
 
+## [2.2.0] - 2026-06-09
+
+### 追加
+- **`lfm2_5_8B_a1b` プリセット**: LFM2.5 8B-A1B（MoE・1B アクティブ）。1.2B 並の速度で
+  8B 級の品質。`mlx-community/LFM2.5-8B-A1B-MLX-4bit`（4.76GB、iPhone 枠ギリ）
+
+### 変更
+- **量子化バリアントを HF 一次情報で監査し最適化**（2026-06-09 / mlx-community 実測）:
+  - `lfm2_5_1_2B`: 4bit(0.66GB) → **6bit(0.95GB)**。1.2B は 4bit 劣化が相対的に大きい
+  - `qwen3_4B`: `Qwen3-4B-Instruct-2507-4bit` → **`...-4bit-DWQ-2510`**（同 2.3GB で蒸留量子化＝高精度・無コスト）
+  - `ministral3_3B`: 4bit(2.75GB) → **6bit(3.61GB)**。FC 特化は量子化劣化が tool-call 精度に直結
+  - `qwen3_5_2B` / `qwen3_5_4B` は 6bit が iPhone 枠内の最適（8bit は枠超過）で据え置き
+  - 監査で除外確認: Gemma 4 / Granite 4 は mlx-swift-lm 3.31.3 にツールコール出力パーサが
+    無く agent 用途で失格（ロード自体は可）
 ## [2.1.1] - 2026-06-08
 
 ### 変更
@@ -119,7 +133,8 @@ swift-llm-client 3.4.1 / mlx-swift-lm 3.x への全面追従。エージェン�
 - **LLMLocalClient** - プロトコル層（バックエンド抽象化・共有型）
 - **LLMLocalMLX** - MLX バックエンド実装
 
-[未リリース]: https://github.com/no-problem-dev/swift-llm-local/compare/2.1.1...HEAD
+[未リリース]: https://github.com/no-problem-dev/swift-llm-local/compare/2.2.0...HEAD
+[2.2.0]: https://github.com/no-problem-dev/swift-llm-local/compare/2.1.1...2.2.0
 [2.1.1]: https://github.com/no-problem-dev/swift-llm-local/compare/2.1.0...2.1.1
 [2.1.0]: https://github.com/no-problem-dev/swift-llm-local/compare/2.0.2...2.1.0
 [2.0.2]: https://github.com/no-problem-dev/swift-llm-local/compare/2.0.1...2.0.2

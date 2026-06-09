@@ -66,14 +66,15 @@ public enum ModelPresets {
         )
     )
 
-    /// Qwen3 4B Instruct 2507 4bit — バランス型・多言語
+    /// Qwen3 4B Instruct 2507 4bit-DWQ — バランス型・多言語
+    /// DWQ（蒸留量子化）は同サイズ（2.3GB）で素の 4bit より高精度。
     public static let qwen3_4B = ModelSpec(
-        id: "qwen3-4b-instruct-2507-4bit",
-        base: .huggingFace(id: "mlx-community/Qwen3-4B-Instruct-2507-4bit"),
+        id: "qwen3-4b-instruct-2507-4bit-dwq",
+        base: .huggingFace(id: "mlx-community/Qwen3-4B-Instruct-2507-4bit-DWQ-2510"),
         contextLength: 262_144,
         displayName: "Qwen3 4B",
         description: "多言語対応のバランス型モデル。日本語・コード生成に強い",
-        estimatedMemoryBytes: 2300 * mb,
+        estimatedMemoryBytes: 2400 * mb,
         profile: ModelProfile(
             summary: "バランス型。日本語・コード生成に強い",
             modelFamily: "Qwen",
@@ -81,7 +82,7 @@ public enum ModelPresets {
             toolCallSupport: .excellent,
             japaneseSupport: .good,
             modalities: [.text, .code],
-            quantization: "4bit",
+            quantization: "4bit-DWQ",
             inferenceSpeed: .medium
         ),
         recommendedGeneration: qwenAgentic
@@ -550,14 +551,15 @@ public enum ModelPresets {
 
     // MARK: - Mistral Family
 
-    /// Ministral 3 3B Instruct 2512 4bit — ツールコール特化の小型モデル
+    /// Ministral 3 3B Instruct 2512 6bit — ツールコール特化の小型モデル
+    /// FC 特化モデルは量子化劣化が tool-call 精度に直結するため 6bit を採用。
     public static let ministral3_3B = ModelSpec(
-        id: "ministral-3-3b-instruct-2512-4bit",
-        base: .huggingFace(id: "mlx-community/Ministral-3-3B-Instruct-2512-4bit"),
+        id: "ministral-3-3b-instruct-2512-6bit",
+        base: .huggingFace(id: "mlx-community/Ministral-3-3B-Instruct-2512-6bit"),
         contextLength: 262_144,
         displayName: "Ministral 3 3B",
         description: "Mistral AI の小型エージェントモデル。ネイティブ function calling 対応",
-        estimatedMemoryBytes: 3000 * mb,
+        estimatedMemoryBytes: 3700 * mb,
         profile: ModelProfile(
             summary: "小型エージェントモデル。FC ネイティブ対応",
             modelFamily: "Mistral",
@@ -565,7 +567,7 @@ public enum ModelPresets {
             toolCallSupport: .excellent,
             japaneseSupport: .good,
             modalities: [.text, .code],
-            quantization: "4bit",
+            quantization: "6bit",
             inferenceSpeed: .medium
         ),
         recommendedGeneration: mistralAgentic
@@ -704,16 +706,37 @@ public enum ModelPresets {
 
     /// LFM2.5 1.2B Instruct 4bit — ツール特化の超高速 SLM
     public static let lfm2_5_1_2B = ModelSpec(
-        id: "lfm2.5-1.2b-instruct-4bit",
-        base: .huggingFace(id: "mlx-community/LFM2.5-1.2B-Instruct-4bit"),
+        id: "lfm2.5-1.2b-instruct-6bit",
+        base: .huggingFace(id: "mlx-community/LFM2.5-1.2B-Instruct-6bit"),
         contextLength: 128_000,
         displayName: "LFM2.5 1.2B",
         description: "Liquid AI のツール特化 SLM。トークン生成が特に高速",
-        estimatedMemoryBytes: 750 * mb,
+        estimatedMemoryBytes: 1000 * mb,
         profile: ModelProfile(
             summary: "ツール特化の超高速 SLM",
             modelFamily: "LFM",
             parameterCount: "1.2B",
+            toolCallSupport: .excellent,
+            japaneseSupport: .basic,
+            modalities: [.text],
+            quantization: "6bit",
+            inferenceSpeed: .fast
+        ),
+        recommendedGeneration: lfmAgentic
+    )
+
+    /// LFM2.5 8B-A1B 4bit — MoE（1B アクティブ）。1.2B 並の速度で 8B 級の品質。
+    public static let lfm2_5_8B_a1b = ModelSpec(
+        id: "lfm2.5-8b-a1b-4bit",
+        base: .huggingFace(id: "mlx-community/LFM2.5-8B-A1B-MLX-4bit"),
+        contextLength: 128_000,
+        displayName: "LFM2.5 8B-A1B",
+        description: "Liquid AI の MoE。1B アクティブで高速ながら 8B 級の知識・ツール性能",
+        estimatedMemoryBytes: 4900 * mb,
+        profile: ModelProfile(
+            summary: "MoE。1.2B 速度で 8B 級品質",
+            modelFamily: "LFM",
+            parameterCount: "8B-A1B",
             toolCallSupport: .excellent,
             japaneseSupport: .basic,
             modalities: [.text],
@@ -821,32 +844,30 @@ public enum ModelPresets {
         qwen3_0_6B,
         llama3_2_1B,
         qwen3_5_0_8B,
-        lfm2_5_1_2B,
         lfm2_5_1_2B_ja,
         gemma3_1B_qat,
         deepseekR1_1_5B,
-        // Small (1-3GB)
+        lfm2_5_1_2B,
         qwen3_1_7B,
         granite3_3_2B,
         llama3_2_3B,
         smolLM3_3B,
         qwen3_5_2B,
         phi4_mini,
-        qwen3_4B,
         qwen3_4B_ja,
+        qwen3_4B,
         gemma3_4B_qat,
         ministral3_3B,
-        // Medium (3-8GB)
         gemma4_e2b,
         deepseekR1_7B,
         qwen3_5_4B,
         llama3_1_8B,
         qwen3_8B,
+        lfm2_5_8B_a1b,
         gemma4_e4b,
         ministral3_8B,
         qwen3_5_9B,
         gemma3_12B_qat,
-        // Large (8-20GB)
         deepseekR1_14B,
         qwen2_5_14B,
         gptOSS_20B,
@@ -855,7 +876,6 @@ public enum ModelPresets {
         glm4_7_flash,
         qwen3_moe_30B,
         qwen2_5_32B,
-        // Extra Large (20GB+)
         qwen3_6_35B_moe,
         llama3_3_70B,
         qwen2_5_72B,
