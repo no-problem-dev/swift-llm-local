@@ -373,21 +373,26 @@ struct MemoryMonitorModelCompatibilityTests {
 @Suite("MemoryMonitor maxAllowedModelMemory")
 struct MemoryMonitorMaxAllowedModelMemoryTests {
 
-    @Test("maxAllowedModelMemory returns 80 percent of total")
+    @Test("maxAllowedModelMemory returns 80 percent of the platform budget")
     func maxAllowedModelMemoryReturns80Percent() async {
         // Arrange
         let totalMem: UInt64 = 16 * 1024 * 1024 * 1024
+        let availableMem: UInt64 = 8 * 1024 * 1024 * 1024
         let provider = MockMemoryProvider(
             totalMemory: totalMem,
-            availableMemory: 8 * 1024 * 1024 * 1024
+            availableMemory: availableMem
         )
         let monitor = MemoryMonitor(memoryProvider: provider)
 
         // Act
         let maxMemory = await monitor.maxAllowedModelMemory()
 
-        // Assert
+        // Assert: iOS は jetsam 制約のため利用可能メモリ基準、macOS は物理総量基準。
+        #if os(iOS) || os(tvOS) || os(watchOS)
+        let expected = UInt64(Double(availableMem) * 0.8)
+        #else
         let expected = UInt64(Double(totalMem) * 0.8)
+        #endif
         #expect(maxMemory == expected)
     }
 }

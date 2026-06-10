@@ -11,12 +11,17 @@ extension GenerationConfig {
             maxKVSize: maxKVSize,
             kvBits: kvBits,
             kvGroupSize: kvGroupSize,
+            quantizedKVStart: quantizedKVStart,
             temperature: temperature,
             topP: topP,
             topK: topK,
             minP: minP,
             repetitionPenalty: repetitionPenalty,
             repetitionContextSize: repetitionContextSize,
+            presencePenalty: presencePenalty,
+            presenceContextSize: presenceContextSize,
+            frequencyPenalty: frequencyPenalty,
+            frequencyContextSize: frequencyContextSize,
             prefillStepSize: prefillStepSize
         )
     }

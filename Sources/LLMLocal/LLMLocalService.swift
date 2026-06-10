@@ -66,6 +66,18 @@ public actor LLMLocalService {
     /// 読み込まれます。生成統計は追跡され、ストリーム完了後に
     /// ``lastGenerationStats`` で参照できます。
     ///
+    /// > Important: このメソッドは**会話継続（ステートフル）API** です。内部の
+    /// > `ChatSession` を使い回すため、連続して呼び出すと過去のプロンプト・応答が
+    /// > 履歴として蓄積されます（チャット用途ではこれが望ましい）。
+    /// > 各呼び出しを**独立した one-shot** として扱いたい場合は、呼び出し前に
+    /// > ``resetChatSession()`` で履歴をクリアするか、会話配列を明示的に渡せて
+    /// > 履歴が累積しない ``generateFromMessages(model:messages:systemPrompt:config:tools:)``
+    /// > を使用してください。
+    ///
+    /// > Note: この経路の ``GenerationStats/tokensPerSecond`` は、バックエンドが
+    /// > 実測トークン統計を流さないためテキストチャンク数による近似値です。実測値が
+    /// > 必要な場合は ``generateWithTools`` / ``generateFromMessages`` を使用してください。
+    ///
     /// - Parameters:
     ///   - model: 生成に使用するモデル仕様。
     ///   - prompt: 生成元の入力プロンプト。
@@ -131,7 +143,10 @@ public actor LLMLocalService {
     /// モデルがバックエンドに現在読み込まれていない場合、生成開始前に自動的に
     /// 読み込まれます。生成統計は追跡され、ストリーム完了後に
     /// ``lastGenerationStats`` で参照できます。
-    /// テキストチャンクのみがトークン数にカウントされます。
+    ///
+    /// > Important: ``generate(model:prompt:config:)`` と同様に**会話継続
+    /// > （ステートフル）API** です。独立した呼び出しにしたい場合は事前に
+    /// > ``resetChatSession()`` を呼ぶか、``generateFromMessages`` を使用してください。
     ///
     /// - Parameters:
     ///   - model: 生成に使用するモデル仕様。
@@ -192,6 +207,11 @@ public actor LLMLocalService {
     /// チャットテンプレートは内部で1回だけ適用されます。
     /// `MessageFormatter` 等で事前フォーマットした文字列を `generate()` に渡す場合と異なり、
     /// 二重テンプレート適用を回避します。
+    ///
+    /// 履歴は累積しない（毎回フルメッセージ配列を受け取る）ステートレス API です。
+    /// 一方でバックエンド（MLX）は直前ターンと共通するプロンプト接頭辞の KV キャッシュを
+    /// 再利用するため、エージェントループのように会話が伸びても prefill コストは差分のみに
+    /// 抑えられます。
     ///
     /// - Parameters:
     ///   - model: 生成に使用するモデル仕様。

@@ -147,20 +147,32 @@ public actor MemoryMonitor {
 
     /// 指定されたモデルがこのデバイスで実行可能かを判定します。
     ///
-    /// 判定基準: モデルの推定メモリ使用量 ≤ デバイス総メモリ × 0.8
+    /// 判定基準はモデルの推定メモリ使用量 ≤ ``maxAllowedModelMemory()``。
     ///
     /// - Parameter spec: 確認するモデル仕様。
     /// - Returns: モデルが実行可能な場合は `true`。
     public func isModelCompatible(_ spec: ModelSpec) -> Bool {
-        Double(spec.estimatedMemoryBytes) <= Double(memoryProvider.totalMemoryBytes()) * 0.8
+        Double(spec.estimatedMemoryBytes) <= Double(maxAllowedModelMemory())
     }
 
     /// デバイスで実行可能なモデルの最大メモリ量をバイト単位で返します。
     ///
-    /// デバイス総メモリの 80% を上限とします。
+    /// プラットフォームによって拘束条件が異なるため、基準を切り替えます:
+    /// - **iOS/tvOS/watchOS**: アプリは物理 RAM の手前で jetsam により強制終了されるため、
+    ///   物理総量ではなく**現在プロセスが利用可能なメモリ**（`os_proc_available_memory()`）を
+    ///   基準にする。重みに加えて KV キャッシュ・活性値・ランタイムの余地を残すため 0.8 を掛ける。
+    /// - **macOS**: ユニファイドメモリで余裕が大きく jetsam 制約も実質ないため、
+    ///   従来どおり物理総メモリの 80% を上限とする。
+    ///
     /// - Returns: 最大許容メモリ量のバイト数。
     public func maxAllowedModelMemory() -> UInt64 {
-        UInt64(Double(memoryProvider.totalMemoryBytes()) * 0.8)
+        #if os(iOS) || os(tvOS) || os(watchOS)
+        // 利用可能メモリは実行時に変動するため、呼び出し時点の値で判定する。
+        // 物理総量基準だと 8GB 機でも 4〜5GB のモデルを「可」と誤判定し実機クラッシュを招く。
+        return UInt64(Double(memoryProvider.availableMemoryBytes()) * 0.8)
+        #else
+        return UInt64(Double(memoryProvider.totalMemoryBytes()) * 0.8)
+        #endif
     }
 
     /// メモリ警告の監視を開始します。

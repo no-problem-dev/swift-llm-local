@@ -42,6 +42,17 @@ public actor MLXBackend: LLMLocalBackend {
     private let downloader: any Downloader
     private let tokenizerLoader: any TokenizerLoader
 
+    /// `generateFromMessages` 経路のプロンプト（KV）キャッシュ。
+    ///
+    /// ターン間でプロンプトの共通接頭辞を再利用し、毎回フルプロンプトを
+    /// 再 prefill するコストを避けるための保持領域。`ChatSession` の KV 再利用
+    /// と同等の仕組みを、ステートレス API（毎回フルメッセージ配列を受け取る）に
+    /// 適用するために、トークン列を比較して接頭辞一致分のキャッシュを再利用する。
+    ///
+    /// 同一バックエンドに対する生成は直列実行される前提（``ChatSession`` 共有と
+    /// 同じ制約）であり、並行生成はサポートしない。
+    private let promptCacheStore = PromptCacheStore()
+
     /// LoRA/QLoRA アダプターのオプションリゾルバー。
     private let adapterResolver: (any AdapterResolving)?
 
@@ -230,6 +241,7 @@ public actor MLXBackend: LLMLocalBackend {
         chatSession = nil
         modelContainer = nil
         loadedSpec = nil
+        promptCacheStore.reset()
     }
 
     public var isLoaded: Bool { chatSession != nil }
@@ -246,6 +258,8 @@ public actor MLXBackend: LLMLocalBackend {
     public func resetSession() {
         guard let container = modelContainer else { return }
         chatSession = ChatSession(container, instructions: _systemPrompt)
+        // generateFromMessages 経路の KV キャッシュも会話リセットで破棄する。
+        promptCacheStore.reset()
     }
 
     public nonisolated func generateFromMessages(
@@ -397,32 +411,74 @@ public actor MLXBackend: LLMLocalBackend {
 
         do {
             let additionalContext = config.chatTemplateContext
+            let cacheStore = promptCacheStore
             try await container.perform { context in
                 let tokens = try context.tokenizer.applyChatTemplate(
                     messages: mlxMessages,
                     tools: toolSpecs,
                     additionalContext: additionalContext
                 )
-                let input = LMInput(tokens: MLXArray(tokens))
+                guard !tokens.isEmpty else { return }
+
+                // 直前のターンとの共通接頭辞を再利用し、差分（接尾辞）だけを
+                // prefill する。再利用不能な場合は新規キャッシュで全量 prefill する。
+                let (cache, suffixStart) = cacheStore.prepare(for: tokens) {
+                    context.model.newCache(parameters: parameters)
+                }
+                let suffix = Array(tokens[suffixStart...])
+                let input = LMInput(tokens: MLXArray(suffix))
 
                 let stream = try MLXLMCommon.generate(
                     input: input,
+                    cache: cache,
                     parameters: parameters,
                     context: context
                 )
 
                 for await generation in stream {
                     guard !Task.isCancelled else { break }
-                    if let output = GenerationOutput(generation) {
+                    if let output = Self.mapGeneration(
+                        generation, fullPromptTokenCount: tokens.count
+                    ) {
                         continuation.yield(output)
                     }
                 }
+
+                // 次ターンの接頭辞再利用のため、投入したプロンプトと
+                // 生成後のキャッシュ状態を記録する。
+                cacheStore.commit(tokens: tokens, cache: cache)
             }
             continuation.finish()
         } catch is CancellationError {
             continuation.finish(throwing: LLMLocalError.cancelled)
         } catch {
             continuation.finish(throwing: error)
+        }
+    }
+
+    /// MLX の生成イベントを ``GenerationOutput`` に変換します。
+    ///
+    /// プロンプトキャッシュ再利用時は MLX に投入されるトークンが接尾辞のみになるため、
+    /// `.info` の `promptTokenCount` を「テンプレート適用後の完全なプロンプト長」で
+    /// 上書きし、usage 報告の意味（入力トークン総数）を保ちます。
+    private static func mapGeneration(
+        _ generation: Generation,
+        fullPromptTokenCount: Int
+    ) -> GenerationOutput? {
+        switch generation {
+        case .chunk(let text):
+            return .text(text)
+        case .toolCall(let toolCall):
+            return .toolCall(LLMTool.ToolCall(from: toolCall))
+        case .info(let info):
+            return .info(GenerationInfo(
+                promptTokenCount: fullPromptTokenCount,
+                generationTokenCount: info.generationTokenCount,
+                tokensPerSecond: info.generateTime > 0
+                    ? Double(info.generationTokenCount) / info.generateTime : 0
+            ))
+        @unknown default:
+            return nil
         }
     }
 
@@ -457,10 +513,13 @@ public actor MLXBackend: LLMLocalBackend {
                 toolResults.append((callId: callId, content: content.contentValue))
             case .image, .audio, .video:
                 break
-            case .thinking(let text, _):
-                // マルチターン時にモデルが自身の推論を参照できるよう
-                // <think> タグで再ラップしてメッセージに含める
-                textContent += "<think>\(text)</think>"
+            case .thinking:
+                // 過去ターンの思考（reasoning）は履歴に含めない。
+                // Qwen3 系をはじめ thinking 対応モデルの公式ガイダンスは
+                // 「マルチターンの履歴にはモデルの最終出力のみを残し、思考内容は
+                // 含めない」こと。再注入するとコンテキストを浪費し、チャット
+                // テンプレートの思考区間処理と二重化して出力品質を下げるため破棄する。
+                break
             }
         }
 
@@ -492,6 +551,88 @@ public actor MLXBackend: LLMLocalBackend {
         }
 
         return result
+    }
+}
+
+// MARK: - Prompt (KV) Cache Reuse
+
+/// `generateFromMessages` 経路でターン間の KV キャッシュを再利用する保持領域。
+///
+/// `applyChatTemplate` 後のトークン列を直前ターンと比較し、共通接頭辞分の
+/// キャッシュを温存して差分だけを prefill させる（標準的なプロンプトキャッシュ手法）。
+///
+/// ## スレッド安全性
+///
+/// 本クラスへのアクセスは ``MLXBackend`` がすべて `ModelContainer.perform`
+/// （actor で直列化）の内側から行うため、`@unchecked Sendable` とする。
+/// `MLXLMCommon.KVCache` が `Sendable` でないため Swift の検査は通せないが、
+/// 直列実行の不変条件で安全性を担保する。並行生成はサポートしない。
+final class PromptCacheStore: @unchecked Sendable {
+    /// 現在キャッシュが表現するトークン列（直近に投入した完全プロンプト）。
+    private var tokens: [Int] = []
+    /// 直近の生成で構築・更新された KV キャッシュ。
+    private var cache: [KVCache]?
+
+    /// キャッシュを破棄します（モデル切替・会話リセット・アンロード時）。
+    func reset() {
+        tokens = []
+        cache = nil
+    }
+
+    /// 新しい完全プロンプト `newTokens` に対し、再利用すべきキャッシュと
+    /// prefill を開始する接尾辞位置を返します。
+    ///
+    /// - 再利用不能（初回・接頭辞不一致・トリム不可）なら新規キャッシュ + 位置 0。
+    /// - 再利用可能なら共通接頭辞 `p` までトリムしたキャッシュ + 位置 `p`。
+    ///   モデルがロジットを出すため最低 1 トークンは必ず投入する。
+    func prepare(
+        for newTokens: [Int],
+        makeCache: () -> [KVCache]
+    ) -> (cache: [KVCache], suffixStart: Int) {
+        guard let existing = cache, !tokens.isEmpty else {
+            return (freshCache(makeCache), 0)
+        }
+
+        var prefix = Self.commonPrefixLength(tokens, newTokens)
+        // 最低 1 トークンは prefill する必要がある。
+        if prefix >= newTokens.count { prefix = newTokens.count - 1 }
+        guard prefix > 0 else {
+            return (freshCache(makeCache), 0)
+        }
+
+        // 既存キャッシュには「前回プロンプト + 前回生成分」が入っている。
+        // 先頭 `prefix` トークンだけを残すよう末尾をトリムする。
+        let offset = existing.first?.offset ?? 0
+        let trimCount = offset - prefix
+        if trimCount > 0 {
+            guard canTrimPromptCache(existing),
+                  trimPromptCache(existing, numTokens: trimCount) == trimCount
+            else {
+                return (freshCache(makeCache), 0)
+            }
+        }
+        return (existing, prefix)
+    }
+
+    /// 生成完了後、次ターンの再利用に備えて状態を記録します。
+    func commit(tokens: [Int], cache: [KVCache]) {
+        self.tokens = tokens
+        self.cache = cache
+    }
+
+    private func freshCache(_ makeCache: () -> [KVCache]) -> [KVCache] {
+        let fresh = makeCache()
+        cache = fresh
+        tokens = []
+        return fresh
+    }
+
+    /// 2 つのトークン列の共通接頭辞長を返します。
+    static func commonPrefixLength(_ a: [Int], _ b: [Int]) -> Int {
+        let limit = min(a.count, b.count)
+        var i = 0
+        while i < limit, a[i] == b[i] { i += 1 }
+        return i
     }
 }
 

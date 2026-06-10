@@ -9,6 +9,34 @@
 
 なし
 
+## [2.2.1] - 2026-06-11
+
+### 修正
+- **マルチターン履歴に過去の思考（reasoning）を再注入しないように修正**: Qwen3 系をはじめ
+  thinking 対応モデルの公式ガイダンス（履歴には最終出力のみ・思考内容は含めない）に反して
+  `<think>…</think>` を履歴へ戻していた。コンテキスト浪費とテンプレートの思考区間処理との
+  二重化による品質劣化を解消。
+- **iOS のモデル互換判定を「プロセス利用可能メモリ」基準へ**
+  （`MemoryMonitor.isModelCompatible` / `maxAllowedModelMemory`）: iOS/tvOS/watchOS では
+  jetsam により物理 RAM の手前でアプリが強制終了されるため、`os_proc_available_memory()`
+  の 80% を上限に判定する。従来は 8GB 機で 4〜5GB モデルを「可」と誤判定し実機クラッシュ
+  を招き得た。macOS は従来どおり物理総量の 80%。
+- **プロンプトキャッシュ再利用時の usage 報告を補正**: 接尾辞のみ prefill する際も
+  `GenerationInfo.promptTokenCount` をテンプレート適用後の完全なプロンプト長で報告する。
+
+### 改善
+- **`generateFromMessages` 経路のプロンプト（KV）キャッシュ再利用**: ターン間で
+  プロンプトの共通接頭辞を検出し、差分（接尾辞）だけを prefill するようにした。
+  エージェントループのように会話が伸びても prefill コストが差分のみに抑えられ、
+  オンデバイスの体感レイテンシが改善する。再利用不能時は新規キャッシュで全量 prefill に
+  安全フォールバック（`MLXLMCommon` の `trimPromptCache` を使用）。
+
+### 追加
+- **`GenerationConfig` に KV 量子化開始位置とペナルティ系を追加**（既定値ありで後方互換）:
+  - `quantizedKVStart`: `kvBits` 指定時に量子化を開始するトークン位置
+  - `presencePenalty` / `presenceContextSize` / `frequencyPenalty` / `frequencyContextSize`:
+    OpenAI 互換ペナルティ（mlx-swift-lm 3.x の `GenerateParameters` に追従）
+
 ## [2.2.0] - 2026-06-09
 
 ### 追加

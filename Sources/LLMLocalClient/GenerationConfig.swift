@@ -24,6 +24,14 @@ public struct GenerationConfig: Sendable, Hashable, Codable {
     public var repetitionPenalty: Float?
     /// 繰り返しペナルティが参照する直近トークン数。
     public var repetitionContextSize: Int
+    /// 直近コンテキストに出現したトークンへの加算ペナルティ（OpenAI 互換）。`nil` で無効。
+    public var presencePenalty: Float?
+    /// presence ペナルティが参照する直近トークン数。
+    public var presenceContextSize: Int
+    /// 出現頻度に比例する加算ペナルティ（OpenAI 互換）。`nil` で無効。
+    public var frequencyPenalty: Float?
+    /// frequency ペナルティが参照する直近トークン数。
+    public var frequencyContextSize: Int
 
     // MARK: - KV Cache（メモリ・長コンテキスト）
 
@@ -34,6 +42,10 @@ public struct GenerationConfig: Sendable, Hashable, Codable {
     public var maxKVSize: Int?
     /// KV 量子化のグループサイズ。
     public var kvGroupSize: Int
+    /// KV 量子化を開始するトークン位置（`kvBits` 指定時のみ有効）。
+    /// 先頭トークンほど後続の注意に効くため、序盤を非量子化のまま残すと
+    /// メモリ削減と精度のバランスが取りやすい。`0` で全トークン量子化。
+    public var quantizedKVStart: Int
 
     // MARK: - Prefill
 
@@ -55,9 +67,14 @@ public struct GenerationConfig: Sendable, Hashable, Codable {
         minP: Float = 0,
         repetitionPenalty: Float? = nil,
         repetitionContextSize: Int = 20,
+        presencePenalty: Float? = nil,
+        presenceContextSize: Int = 20,
+        frequencyPenalty: Float? = nil,
+        frequencyContextSize: Int = 20,
         kvBits: Int? = nil,
         maxKVSize: Int? = nil,
         kvGroupSize: Int = 64,
+        quantizedKVStart: Int = 0,
         prefillStepSize: Int = 512,
         enableThinking: Bool = true
     ) {
@@ -68,9 +85,14 @@ public struct GenerationConfig: Sendable, Hashable, Codable {
         self.minP = minP
         self.repetitionPenalty = repetitionPenalty
         self.repetitionContextSize = repetitionContextSize
+        self.presencePenalty = presencePenalty
+        self.presenceContextSize = presenceContextSize
+        self.frequencyPenalty = frequencyPenalty
+        self.frequencyContextSize = frequencyContextSize
         self.kvBits = kvBits
         self.maxKVSize = maxKVSize
         self.kvGroupSize = kvGroupSize
+        self.quantizedKVStart = quantizedKVStart
         self.prefillStepSize = prefillStepSize
         self.enableThinking = enableThinking
     }
