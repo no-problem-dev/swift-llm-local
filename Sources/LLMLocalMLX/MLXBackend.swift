@@ -49,9 +49,14 @@ public actor MLXBackend: LLMLocalBackend {
     /// と同等の仕組みを、ステートレス API（毎回フルメッセージ配列を受け取る）に
     /// 適用するために、トークン列を比較して接頭辞一致分のキャッシュを再利用する。
     ///
-    /// 同一バックエンドに対する生成は直列実行される前提（``ChatSession`` 共有と
-    /// 同じ制約）であり、並行生成はサポートしない。
+    /// 単一会話・直列生成のときだけ共有される。`delegate_async` 等で同一バックエンドを
+    /// 複数の会話（host + ワーカー）が並行共有する場合、進行中の生成があれば後続の生成は
+    /// 共有キャッシュに触れず専用の使い捨てキャッシュで回す（``cacheBusy`` で判定）。
     private let promptCacheStore = PromptCacheStore()
+
+    /// 共有プロンプトキャッシュが現在いずれかの生成に占有されているか。
+    /// 占有中に始まった別の生成は、KV 文脈の会話間漏れを避けるため共有キャッシュを使わない。
+    private var cacheBusy = false
 
     /// LoRA/QLoRA アダプターのオプションリゾルバー。
     private let adapterResolver: (any AdapterResolving)?
@@ -409,6 +414,12 @@ public actor MLXBackend: LLMLocalBackend {
             ? nil : tools.map { $0.toolSpec }
         let parameters = config.mlxParameters
 
+        // 別の生成が進行中なら共有キャッシュを使わない（並行する別会話との KV 文脈漏れを防ぐ）。
+        // 単一会話の直列生成のときだけ共有キャッシュで prefill を再利用する。
+        let useSharedCache = !cacheBusy
+        if useSharedCache { cacheBusy = true }
+        defer { if useSharedCache { cacheBusy = false } }
+
         do {
             let additionalContext = config.chatTemplateContext
             let cacheStore = promptCacheStore
@@ -420,10 +431,17 @@ public actor MLXBackend: LLMLocalBackend {
                 )
                 guard !tokens.isEmpty else { return }
 
-                // 直前のターンとの共通接頭辞を再利用し、差分（接尾辞）だけを
-                // prefill する。再利用不能な場合は新規キャッシュで全量 prefill する。
-                let (cache, suffixStart) = cacheStore.prepare(for: tokens) {
-                    context.model.newCache(parameters: parameters)
+                let cache: [KVCache]
+                let suffixStart: Int
+                if useSharedCache {
+                    // 直前のターンとの共通接頭辞を再利用し、差分（接尾辞）だけを prefill する。
+                    (cache, suffixStart) = cacheStore.prepare(for: tokens) {
+                        context.model.newCache(parameters: parameters)
+                    }
+                } else {
+                    // 並行生成: 共有キャッシュを汚さないよう専用キャッシュで全量 prefill する。
+                    cache = context.model.newCache(parameters: parameters)
+                    suffixStart = 0
                 }
                 let suffix = Array(tokens[suffixStart...])
                 let input = LMInput(tokens: MLXArray(suffix))
@@ -444,9 +462,10 @@ public actor MLXBackend: LLMLocalBackend {
                     }
                 }
 
-                // 次ターンの接頭辞再利用のため、投入したプロンプトと
-                // 生成後のキャッシュ状態を記録する。
-                cacheStore.commit(tokens: tokens, cache: cache)
+                // 共有キャッシュを使った場合のみ、次ターンの接頭辞再利用のため状態を記録する。
+                if useSharedCache {
+                    cacheStore.commit(tokens: tokens, cache: cache)
+                }
             }
             continuation.finish()
         } catch is CancellationError {
