@@ -35,6 +35,9 @@ public actor LLMLocalService {
     private let modelRegistry: ModelRegistry
     private let memoryMonitor: MemoryMonitor?
     private let modelSwitcher: ModelSwitcher?
+    /// ディスク上のダウンロード済みモデルを問い合わせる在庫。
+    /// インメモリのレジストリと異なり、アプリ再起動後も実体を正しく反映する。
+    private let inventory: LocalModelInventory
 
     /// 最新の完了した生成の統計情報。まだ生成が完了していない場合は `nil`。
     private(set) public var lastGenerationStats: GenerationStats?
@@ -52,12 +55,14 @@ public actor LLMLocalService {
         backend: any LLMLocalBackend,
         modelRegistry: ModelRegistry,
         memoryMonitor: MemoryMonitor? = nil,
-        modelSwitcher: ModelSwitcher? = nil
+        modelSwitcher: ModelSwitcher? = nil,
+        inventory: LocalModelInventory = LocalModelInventory()
     ) {
         self.backend = backend
         self.modelRegistry = modelRegistry
         self.memoryMonitor = memoryMonitor
         self.modelSwitcher = modelSwitcher
+        self.inventory = inventory
     }
 
     /// 指定されたモデルを使用してプロンプトからテキストを生成します。
@@ -306,12 +311,45 @@ public actor LLMLocalService {
         await backend.setSystemPrompt(prompt)
     }
 
-    /// 指定されたモデルがキャッシュされている（ダウンロード済み）かを確認します。
+    // MARK: - Downloaded Models (disk truth)
+
+    /// 指定モデルがディスク上に**完全な形でダウンロード済み**かを返します。
     ///
-    /// - Parameter spec: 確認するモデル仕様。
-    /// - Returns: モデルがキャッシュに登録されている場合は `true`。
-    public func isModelCached(_ spec: ModelSpec) async -> Bool {
-        await modelRegistry.isCached(spec)
+    /// ダウンロード状態の唯一の真実はディスクの実体（完全なスナップショット）です。
+    /// アプリ再起動後も正しく判定できます。エンジン選択 UI の「DL 済みのみ選択可」判定や
+    /// 一覧画面のバッジ表示はこれを使ってください。
+    public func isDownloaded(_ spec: ModelSpec) -> Bool {
+        inventory.isDownloaded(spec)
+    }
+
+    /// 候補のうちダウンロード済みのものを ``DownloadedModel``（実サイズ・DL 時刻込み）で返します。
+    public func downloadedModels(among specs: [ModelSpec]) -> [DownloadedModel] {
+        inventory.downloadedModels(among: specs)
+    }
+
+    /// 指定モデルのディスク実サイズ（バイト単位）。未ダウンロードなら `nil`。
+    public func downloadSize(of spec: ModelSpec) -> Int64? {
+        inventory.diskSize(of: spec)
+    }
+
+    /// 候補のうちダウンロード済みモデルの合計ディスク使用量（バイト単位）。
+    public func totalDownloadedSize(among specs: [ModelSpec]) -> Int64 {
+        inventory.totalDiskSize(among: specs)
+    }
+
+    /// 指定モデルのダウンロード済みファイルをディスクから削除します（容量解放）。
+    ///
+    /// 現在ロード中のモデルを削除する場合は、先に ``backend`` をアンロードしてください。
+    /// `.local` 指定のモデルは外部所有のため削除しません。
+    ///
+    /// - Parameter spec: 削除するモデル仕様。
+    /// - Throws: ディレクトリ削除に失敗した場合。
+    public func deleteDownload(_ spec: ModelSpec) async throws {
+        // 削除対象が現在ロード中なら、ファイルを掴んだままにしないようアンロードする。
+        if await backend.currentModel == spec {
+            await backend.unloadModel()
+        }
+        try inventory.delete(spec)
     }
 
     /// 指定されたモデルをバックエンドにプリロードします。

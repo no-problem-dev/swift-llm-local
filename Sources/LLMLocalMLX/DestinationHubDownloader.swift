@@ -26,7 +26,7 @@ public struct DestinationHubDownloader: Downloader {
     ///     Application Support 配下（バックアップ対象外に設定）。
     public init(hub: HubClient = HubClient(), baseDirectory: URL? = nil) {
         self.hub = hub
-        self.baseDirectory = baseDirectory ?? Self.defaultBaseDirectory()
+        self.baseDirectory = baseDirectory ?? ModelStorageLayout.defaultBaseDirectory()
     }
 
     public func download(
@@ -40,12 +40,10 @@ public struct DestinationHubDownloader: Downloader {
             throw LLMLocalError.downloadFailed(modelId: id, reason: "Invalid repository id: \(id)")
         }
 
-        let destination = baseDirectory
-            .appendingPathComponent(repoID.namespace, isDirectory: true)
-            .appendingPathComponent(repoID.name, isDirectory: true)
+        let destination = ModelStorageLayout.destination(for: repoID, base: baseDirectory)
 
         // 既にスナップショットが揃っていれば再ダウンロードしない（useLatest 指定時を除く）。
-        if !useLatest, Self.hasCompleteSnapshot(at: destination) {
+        if !useLatest, ModelStorageLayout.hasCompleteSnapshot(at: destination) {
             let progress = Progress(totalUnitCount: 1)
             progress.completedUnitCount = 1
             progressHandler(progress)
@@ -70,36 +68,4 @@ public struct DestinationHubDownloader: Downloader {
         }
     }
 
-    // MARK: - Snapshot Completeness
-
-    /// destination に「設定 + 重み」が揃っているかを判定します。
-    ///
-    /// 重みは単一（`model.safetensors`）と分割（`*.index.json`）の両方を許容します。
-    static func hasCompleteSnapshot(at directory: URL) -> Bool {
-        let fileManager = FileManager.default
-        let config = directory.appendingPathComponent("config.json")
-        guard fileManager.fileExists(atPath: config.path) else { return false }
-
-        guard let contents = try? fileManager.contentsOfDirectory(atPath: directory.path) else {
-            return false
-        }
-        let hasWeights = contents.contains { name in
-            name.hasSuffix(".safetensors") || name.hasSuffix(".safetensors.index.json")
-        }
-        return hasWeights
-    }
-
-    // MARK: - Default Directory
-
-    private static func defaultBaseDirectory() -> URL {
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? FileManager.default.temporaryDirectory
-        var base = support.appendingPathComponent("swift-llm-local/models", isDirectory: true)
-        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        // 数 GB のモデルは再取得可能なので iCloud バックアップから除外する。
-        var values = URLResourceValues()
-        values.isExcludedFromBackup = true
-        try? base.setResourceValues(values)
-        return base
-    }
 }

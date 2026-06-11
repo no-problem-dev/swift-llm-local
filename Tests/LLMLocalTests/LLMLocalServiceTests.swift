@@ -135,50 +135,6 @@ struct LLMLocalServiceTests {
         }
     }
 
-    // MARK: - isModelCached
-
-    @Suite("isModelCached")
-    struct IsModelCachedTests {
-
-        @Test("returns false when model is not registered")
-        func returnsFalseWhenNotRegistered() async throws {
-            // Arrange
-            let dir = try LLMLocalServiceTests.makeTempDir()
-            defer { LLMLocalServiceTests.removeTempDir(dir) }
-            let backend = MockBackend()
-            let modelRegistry = ModelRegistry(cacheDirectory: dir)
-            let service = LLMLocalService(backend: backend, modelRegistry: modelRegistry)
-            let spec = LLMLocalServiceTests.sampleSpec()
-
-            // Act
-            let result = await service.isModelCached(spec)
-
-            // Assert
-            #expect(result == false)
-        }
-
-        @Test("returns true when model is registered")
-        func returnsTrueWhenRegistered() async throws {
-            // Arrange
-            let dir = try LLMLocalServiceTests.makeTempDir()
-            defer { LLMLocalServiceTests.removeTempDir(dir) }
-            let backend = MockBackend()
-            let modelRegistry = ModelRegistry(cacheDirectory: dir)
-            try await modelRegistry.registerModel(
-                LLMLocalServiceTests.sampleSpec(),
-                sizeInBytes: 1_000_000
-            )
-            let service = LLMLocalService(backend: backend, modelRegistry: modelRegistry)
-            let spec = LLMLocalServiceTests.sampleSpec()
-
-            // Act
-            let result = await service.isModelCached(spec)
-
-            // Assert
-            #expect(result == true)
-        }
-    }
-
     // MARK: - prefetch
 
     @Suite("prefetch")
