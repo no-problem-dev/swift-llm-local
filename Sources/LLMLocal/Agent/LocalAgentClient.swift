@@ -1,6 +1,7 @@
 import Foundation
 import LLMClient
 import LLMTool
+import LLMAgentStep
 import LLMLocalClient
 
 /// `LLMLocalService` を `AgentCapableClient` に適合させるアダプター
