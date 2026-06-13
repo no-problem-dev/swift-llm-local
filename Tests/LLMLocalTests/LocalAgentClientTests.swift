@@ -3,6 +3,7 @@ import Testing
 import LLMClient
 import LLMTool
 import LLMLocalClient
+import LLMAgentStep
 @testable import LLMLocal
 
 // MARK: - Test Fixtures

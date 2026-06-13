@@ -94,7 +94,11 @@ let package = Package(
         ),
         .testTarget(
             name: "LLMLocalTests",
-            dependencies: ["LLMLocal", "LLMLocalClient"],
+            dependencies: [
+                "LLMLocal",
+                "LLMLocalClient",
+                .product(name: "LLMAgentStep", package: "swift-llm-client"),
+            ],
             path: "Tests/LLMLocalTests"
         ),
     ]

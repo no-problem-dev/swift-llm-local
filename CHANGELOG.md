@@ -9,6 +9,42 @@
 
 なし
 
+## [2.2.5] - 2026-06-13
+
+### 修正
+- **全プリセットに family 別の `recommendedGeneration` を明示付与し、思考モードの取りこぼしを解消**:
+  従来は `recommendedGeneration` 未設定のプリセット（Qwen3.6 27B / 30B-A3B / 35B-A3B MoE、
+  Qwen2.5 14B/32B/72B、Qwen3 8B/9B ほか計 32 個）が `GenerationConfig.default`
+  （`enableThinking: true`・generic サンプリング）にフォールバックしていた。Qwen3 系の
+  チャットテンプレートは `enable_thinking` 未指定だと `<think>` を開いたまま毎ターン
+  推論を強制生成するため、これらをエージェント／オーケストレータに使うとツールコール毎に
+  長大な思考が走り極端に遅くなっていた。全モデルに family 別の明示設定を当て、思考が本体の
+  推論モデル（DeepSeek-R1 / GPT-OSS）以外は思考 OFF を既定にした。
+
+### 追加
+- **family 別の推奨生成プリセット**（公式モデルカードのサンプリング値に準拠）:
+  `gemmaAgentic`（temp 1.0 / topK 64 / topP 0.95）、`llamaAgentic`（0.6 / 0.9）、
+  `phiAgentic`（0.8 / 0.95）、`smolAgentic`（0.6 / 0.95・思考 OFF）、
+  `glmAgentic`（0.6 / 0.95）、`graniteAgentic`（0.7 / 0.95）、
+  `deepseekReasoning`（0.6 / 0.95・思考 ON）、`gptOssReasoning`（1.0 / 1.0・思考 ON）。
+- **回帰防止テスト**: 「全プリセットが `GenerationConfig.default` 以外を持つ」「推論モデル
+  以外は `enableThinking == false`」を `ModelPresetsTests` で恒久的に検証する。
+
+## [2.2.4] - 2026-06-13
+
+### 修正
+- agent-step 契約の import 元を `LLMAgentStep` に追従。
+
+## [2.2.3] - 2026-06-11
+
+### 追加
+- ダウンロード済みモデルの在庫 API（ディスクを真実とする照会）。
+
+## [2.2.2] - 2026-06-11
+
+### 修正
+- 共有バックエンドの並行生成でプロンプト KV キャッシュが会話間で漏れる問題を修正。
+
 ## [2.2.1] - 2026-06-11
 
 ### 修正

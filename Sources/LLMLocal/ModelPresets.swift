@@ -43,7 +43,8 @@ public enum ModelPresets {
             modalities: [.text, .code],
             quantization: "4bit",
             inferenceSpeed: .fast
-        )
+        ),
+        recommendedGeneration: qwenAgentic
     )
 
     /// Qwen3 1.7B 4bit — 軽量・多言語対応
@@ -63,7 +64,8 @@ public enum ModelPresets {
             modalities: [.text, .code],
             quantization: "4bit",
             inferenceSpeed: .medium
-        )
+        ),
+        recommendedGeneration: qwenAgentic
     )
 
     /// Qwen3 4B Instruct 2507 4bit-DWQ — バランス型・多言語
@@ -105,7 +107,8 @@ public enum ModelPresets {
             modalities: [.text, .code],
             quantization: "4bit",
             inferenceSpeed: .medium
-        )
+        ),
+        recommendedGeneration: qwenAgentic
     )
 
     /// Qwen3 8B 4bit — 高品質・多言語
@@ -125,7 +128,8 @@ public enum ModelPresets {
             modalities: [.text, .code],
             quantization: "4bit",
             inferenceSpeed: .medium
-        )
+        ),
+        recommendedGeneration: qwenAgentic
     )
 
     // MARK: - Qwen3.5 Family (Alibaba)
@@ -147,7 +151,8 @@ public enum ModelPresets {
             modalities: [.text, .vision, .code],
             quantization: "4bit",
             inferenceSpeed: .fast
-        )
+        ),
+        recommendedGeneration: qwenAgentic
     )
 
     /// Qwen3.5 2B 6bit — 軽量・オンデバイス推論
@@ -211,7 +216,8 @@ public enum ModelPresets {
             modalities: [.text, .vision, .code],
             quantization: "4bit",
             inferenceSpeed: .medium
-        )
+        ),
+        recommendedGeneration: qwenAgentic
     )
 
     // MARK: - Qwen3.6 Family (Alibaba)
@@ -233,7 +239,8 @@ public enum ModelPresets {
             modalities: [.text, .code],
             quantization: "4bit",
             inferenceSpeed: .medium
-        )
+        ),
+        recommendedGeneration: qwenAgentic
     )
 
     /// Qwen3.6 35B-A3B 4bit — agentic 特化 MoE
@@ -253,7 +260,8 @@ public enum ModelPresets {
             modalities: [.text, .code],
             quantization: "4bit",
             inferenceSpeed: .medium
-        )
+        ),
+        recommendedGeneration: qwenAgentic
     )
 
     // MARK: - Qwen 2.5 / MoE (Alibaba)
@@ -275,7 +283,8 @@ public enum ModelPresets {
             modalities: [.text, .code],
             quantization: "4bit",
             inferenceSpeed: .medium
-        )
+        ),
+        recommendedGeneration: qwenAgentic
     )
 
     /// Qwen3 MoE 30B-A3B 4bit — MoE 高品質（3B アクティブ）
@@ -295,7 +304,8 @@ public enum ModelPresets {
             modalities: [.text, .code],
             quantization: "4bit",
             inferenceSpeed: .medium
-        )
+        ),
+        recommendedGeneration: qwenAgentic
     )
 
     /// Qwen 2.5 32B Instruct 4bit — Mac 向けフラッグシップ
@@ -315,7 +325,8 @@ public enum ModelPresets {
             modalities: [.text, .code],
             quantization: "4bit",
             inferenceSpeed: .medium
-        )
+        ),
+        recommendedGeneration: qwenAgentic
     )
 
     /// Qwen 2.5 72B Instruct 4bit — 最大級
@@ -335,7 +346,8 @@ public enum ModelPresets {
             modalities: [.text, .code],
             quantization: "4bit",
             inferenceSpeed: .slow
-        )
+        ),
+        recommendedGeneration: qwenAgentic
     )
 
     // MARK: - Gemma Family (Google)
@@ -362,7 +374,8 @@ public enum ModelPresets {
             modalities: [.text],
             quantization: "QAT-4bit",
             inferenceSpeed: .fast
-        )
+        ),
+        recommendedGeneration: gemmaAgentic
     )
 
     /// Gemma 3 4B QAT 4bit — 高品質 QAT
@@ -382,7 +395,8 @@ public enum ModelPresets {
             modalities: [.text],
             quantization: "QAT-4bit",
             inferenceSpeed: .medium
-        )
+        ),
+        recommendedGeneration: gemmaAgentic
     )
 
     /// Gemma 3 12B QAT 4bit — 大型・高品質
@@ -402,7 +416,8 @@ public enum ModelPresets {
             modalities: [.text],
             quantization: "QAT-4bit",
             inferenceSpeed: .medium
-        )
+        ),
+        recommendedGeneration: gemmaAgentic
     )
 
     /// Gemma 3 27B QAT 4bit — Gemma 3 最大級
@@ -422,7 +437,8 @@ public enum ModelPresets {
             modalities: [.text, .vision],
             quantization: "QAT-4bit",
             inferenceSpeed: .slow
-        )
+        ),
+        recommendedGeneration: gemmaAgentic
     )
 
     /// Gemma 4 E2B 4bit — モバイル特化（2B 相当・ネイティブ FC）
@@ -443,7 +459,8 @@ public enum ModelPresets {
             modalities: [.text],
             quantization: "4bit",
             inferenceSpeed: .fast
-        )
+        ),
+        recommendedGeneration: gemmaAgentic
     )
 
     /// Gemma 4 E4B 4bit — モバイル特化（4B 相当・ネイティブ FC）
@@ -464,7 +481,8 @@ public enum ModelPresets {
             modalities: [.text],
             quantization: "4bit",
             inferenceSpeed: .medium
-        )
+        ),
+        recommendedGeneration: gemmaAgentic
     )
 
     // MARK: - Llama Family (Meta)
@@ -486,7 +504,8 @@ public enum ModelPresets {
             modalities: [.text],
             quantization: "4bit",
             inferenceSpeed: .fast
-        )
+        ),
+        recommendedGeneration: llamaAgentic
     )
 
     /// Llama 3.2 3B Instruct 4bit — 実用的
@@ -506,7 +525,8 @@ public enum ModelPresets {
             modalities: [.text],
             quantization: "4bit",
             inferenceSpeed: .medium
-        )
+        ),
+        recommendedGeneration: llamaAgentic
     )
 
     /// Llama 3.1 8B Instruct 4bit — 定番
@@ -526,7 +546,8 @@ public enum ModelPresets {
             modalities: [.text, .code],
             quantization: "4bit",
             inferenceSpeed: .medium
-        )
+        ),
+        recommendedGeneration: llamaAgentic
     )
 
     /// Llama 3.3 70B Instruct 4bit — フロンティア
@@ -546,7 +567,8 @@ public enum ModelPresets {
             modalities: [.text, .code],
             quantization: "4bit",
             inferenceSpeed: .slow
-        )
+        ),
+        recommendedGeneration: llamaAgentic
     )
 
     // MARK: - Mistral Family
@@ -590,7 +612,8 @@ public enum ModelPresets {
             modalities: [.text, .code],
             quantization: "4bit",
             inferenceSpeed: .medium
-        )
+        ),
+        recommendedGeneration: mistralAgentic
     )
 
     // MARK: - DeepSeek Family
@@ -612,7 +635,8 @@ public enum ModelPresets {
             modalities: [.text],
             quantization: "4bit",
             inferenceSpeed: .fast
-        )
+        ),
+        recommendedGeneration: deepseekReasoning
     )
 
     /// DeepSeek R1 Distill Qwen 7B 4bit — 推論特化
@@ -632,7 +656,8 @@ public enum ModelPresets {
             modalities: [.text],
             quantization: "4bit",
             inferenceSpeed: .medium
-        )
+        ),
+        recommendedGeneration: deepseekReasoning
     )
 
     /// DeepSeek R1 Distill Qwen 14B 4bit — 高品質推論
@@ -652,7 +677,8 @@ public enum ModelPresets {
             modalities: [.text],
             quantization: "4bit",
             inferenceSpeed: .medium
-        )
+        ),
+        recommendedGeneration: deepseekReasoning
     )
 
     // MARK: - Phi Family (Microsoft)
@@ -677,7 +703,8 @@ public enum ModelPresets {
             modalities: [.text, .code],
             quantization: "4bit",
             inferenceSpeed: .medium
-        )
+        ),
+        recommendedGeneration: phiAgentic
     )
 
     // MARK: - SmolLM Family (Hugging Face)
@@ -699,7 +726,8 @@ public enum ModelPresets {
             modalities: [.text],
             quantization: "4bit",
             inferenceSpeed: .fast
-        )
+        ),
+        recommendedGeneration: smolAgentic
     )
 
     // MARK: - LFM Family (Liquid AI)
@@ -763,7 +791,8 @@ public enum ModelPresets {
             modalities: [.text],
             quantization: "4bit",
             inferenceSpeed: .fast
-        )
+        ),
+        recommendedGeneration: lfmAgentic
     )
 
     // MARK: - GLM Family (Zhipu AI)
@@ -785,7 +814,8 @@ public enum ModelPresets {
             modalities: [.text, .code],
             quantization: "4bit",
             inferenceSpeed: .medium
-        )
+        ),
+        recommendedGeneration: glmAgentic
     )
 
     // MARK: - Other Models
@@ -810,7 +840,8 @@ public enum ModelPresets {
             modalities: [.text],
             quantization: "4bit",
             inferenceSpeed: .medium
-        )
+        ),
+        recommendedGeneration: graniteAgentic
     )
 
     /// GPT-OSS 20B MXFP4-Q8 — OpenAI オープンソース
@@ -833,7 +864,8 @@ public enum ModelPresets {
             modalities: [.text, .code],
             quantization: "MXFP4-Q8",
             inferenceSpeed: .slow
-        )
+        ),
+        recommendedGeneration: gptOssReasoning
     )
 
     // MARK: - All Models
@@ -900,6 +932,57 @@ public enum ModelPresets {
     /// Mistral / Ministral 系: 関数呼び出しは低温が安定。
     private static let mistralAgentic = GenerationConfig(
         temperature: 0.15, topP: 1.0, enableThinking: false
+    )
+
+    /// Gemma 3/4 系: Google 公式推奨（temp 1.0 / topK 64 / topP 0.95）。
+    /// Gemma に思考モードはないため `enableThinking` は無効（false のまま統一）。
+    private static let gemmaAgentic = GenerationConfig(
+        temperature: 1.0, topP: 0.95, topK: 64, enableThinking: false
+    )
+
+    /// Llama 3.x 系: Meta 公式 generation_config（temp 0.6 / topP 0.9）。思考モードなし。
+    private static let llamaAgentic = GenerationConfig(
+        temperature: 0.6, topP: 0.9, enableThinking: false
+    )
+
+    /// Phi 系（Microsoft）: temp 0.8 / topP 0.95。Phi-4-mini に思考モードはない。
+    private static let phiAgentic = GenerationConfig(
+        temperature: 0.8, topP: 0.95, enableThinking: false
+    )
+
+    /// SmolLM3: HF 推奨（temp 0.6 / topP 0.95）。ハイブリッド思考はデフォルト ON のため
+    /// `/no_think` 相当の OFF をエージェント用途の既定にする。
+    private static let smolAgentic = GenerationConfig(
+        temperature: 0.6, topP: 0.95, enableThinking: false
+    )
+
+    /// GLM 系（Zhipu）: temp 0.6 / topP 0.95。思考モードは OFF。
+    private static let glmAgentic = GenerationConfig(
+        temperature: 0.6, topP: 0.95, enableThinking: false
+    )
+
+    /// Granite 系（IBM）: 低温で安定。思考モードは OFF。
+    private static let graniteAgentic = GenerationConfig(
+        temperature: 0.7, topP: 0.95, enableThinking: false
+    )
+
+    // MARK: - Recommended Generation（推論モデル）
+    //
+    // 以下は「思考が本体」の推論特化モデル。思考を切ると性能が出ないため
+    // `enableThinking` は ON のまま、公式推奨サンプリングだけを当てる。
+    // どのプリセットも `GenerationConfig.default` には落とさない方針なので、
+    // 推論モデルにも明示の推奨設定を持たせる。
+
+    /// DeepSeek-R1 系: 公式推奨（temp 0.6 / topP 0.95）。R1 テンプレートに思考抑制分岐は
+    /// なく、思考は常時生成される（system prompt なしが公式推奨だが、それは呼び出し側の責務）。
+    private static let deepseekReasoning = GenerationConfig(
+        temperature: 0.6, topP: 0.95, enableThinking: true
+    )
+
+    /// GPT-OSS（harmony）: 推論深度は reasoning effort をシステムメッセージで制御する設計で、
+    /// `enable_thinking` 分岐はテンプレートに存在しない。サンプリングは公式既定寄り。
+    private static let gptOssReasoning = GenerationConfig(
+        temperature: 1.0, topP: 1.0, enableThinking: true
     )
 
     // MARK: - Private Helpers
