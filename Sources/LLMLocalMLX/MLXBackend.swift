@@ -530,7 +530,7 @@ public actor MLXBackend: LLMLocalBackend {
                 ])
             case .toolResult(let callId, _, let content):
                 toolResults.append((callId: callId, content: content.contentValue))
-            case .image, .audio, .video:
+            case .image, .audio, .video, .document:
                 break
             case .thinking:
                 // 過去ターンの思考（reasoning）は履歴に含めない。
