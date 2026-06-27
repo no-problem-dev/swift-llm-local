@@ -21,6 +21,11 @@ public struct GenerationInfo: Sendable, Equatable {
     /// 生成スループット（トークン/秒）。
     public let tokensPerSecond: Double
 
+    /// 生成統計を初期化します。
+    /// - Parameters:
+    ///   - promptTokenCount: 入力プロンプトのトークン数。
+    ///   - generationTokenCount: 生成されたトークン数。
+    ///   - tokensPerSecond: 生成スループット（トークン/秒）。
     public init(promptTokenCount: Int, generationTokenCount: Int, tokensPerSecond: Double) {
         self.promptTokenCount = promptTokenCount
         self.generationTokenCount = generationTokenCount

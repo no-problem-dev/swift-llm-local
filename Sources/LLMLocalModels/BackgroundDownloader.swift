@@ -6,15 +6,19 @@ import LLMLocalClient
 /// バックグラウンドダウンロードの追跡に使用する内部状態
 public enum DownloadState: Sendable {
     /// ダウンロードが進行中。
+    /// - Note: このケースは URLSession のタスクが開始直後に設定されます。
     case downloading
 
     /// レジュームデータを保存してダウンロードが一時停止中。
+    /// - Parameter resumeData: 中断時点の再開用データ。
     case paused(resumeData: Data)
 
     /// ダウンロードが正常に完了。
+    /// - Parameter localURL: ダウンロードされたファイルが保存されたローカルURL。
     case completed(localURL: URL)
 
     /// ダウンロードがエラーで失敗。
+    /// - Parameter error: 失敗の原因となったエラー。
     case failed(error: any Error)
 }
 
@@ -22,13 +26,14 @@ public enum DownloadState: Sendable {
 
 /// バックグラウンドダウンロード操作固有のエラー
 public enum BackgroundDownloadError: Error, Sendable, Equatable {
-    /// 要求されたURLのレジュームデータが存在しない。
+    /// `resume(url:)` 呼び出し時に、対象URLのレジュームデータが存在しなかった。
     case noResumeData
 
-    /// 要求されたURLは現在ダウンロード中ではない。
+    /// `pause(url:)` 呼び出し時に、対象URLがアクティブダウンロード中でなかった。
     case notDownloading
 
-    /// レジュームデータの永続化に失敗。
+    /// レジュームデータのディスク保存に失敗。
+    /// - Parameter reason: 失敗の人間可読な説明。
     case resumeDataPersistenceFailed(reason: String)
 }
 
@@ -73,24 +78,24 @@ public protocol BackgroundDownloadDelegate: Sendable {
 ///
 /// カスタムデリゲートが提供されない場合のデフォルトデリゲートとして使用されます。
 /// ダウンロードURLの最終パスコンポーネントに基づくシミュレートされたローカルファイルURLを返します。
-public struct StubBackgroundDownloadDelegate: BackgroundDownloadDelegate, Sendable {
+struct StubBackgroundDownloadDelegate: BackgroundDownloadDelegate, Sendable {
 
-    public init() {}
+    init() {}
 
-    public func startDownload(url: URL, resumeData: Data?) async throws -> URL {
+    func startDownload(url: URL, resumeData: Data?) async throws -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent(url.lastPathComponent)
     }
 
-    public func canResume(for url: URL) -> Bool {
+    func canResume(for url: URL) -> Bool {
         false
     }
 
-    public func resumeData(for url: URL) -> Data? {
+    func resumeData(for url: URL) -> Data? {
         nil
     }
 
-    public func cancelDownload(for url: URL) async throws -> Data? {
+    func cancelDownload(for url: URL) async throws -> Data? {
         nil
     }
 }
@@ -271,11 +276,11 @@ public actor BackgroundDownloader {
 
     /// URLをアクティブダウンロード中としてマークします。
     ///
-    /// テスト目的で公開されており、一時停止やキャンセルが可能な
+    /// テスト目的のヘルパー。一時停止やキャンセルが可能な
     /// 進行中のダウンロードをシミュレートします。
     ///
     /// - Parameter url: ダウンロード中としてマークするURL。
-    public func markAsDownloading(_ url: URL) {
+    func markAsDownloading(_ url: URL) {
         activeDownloads[url] = .downloading
     }
 }

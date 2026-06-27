@@ -24,6 +24,13 @@ public struct CachedModelInfo: Sendable, Codable {
     public let modelFilesPath: URL?
 
     /// 新しいキャッシュモデル情報を作成します。
+    /// - Parameters:
+    ///   - modelId: キャッシュされたモデルの一意識別子。
+    ///   - displayName: 人間可読な表示名。
+    ///   - sizeInBytes: キャッシュされたモデルのサイズ（バイト単位）。
+    ///   - downloadedAt: モデルがダウンロードされた日時。
+    ///   - localPath: このモデルのローカルキャッシュディレクトリへのパス。
+    ///   - modelFilesPath: モデル実ファイルのパス。削除時に使用します。デフォルトは `nil`。
     public init(
         modelId: String,
         displayName: String,

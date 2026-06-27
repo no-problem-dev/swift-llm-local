@@ -25,8 +25,8 @@ public protocol DownloadProgressDelegate: Sendable {
 
 /// ネットワークアクセスなしで完了済みダウンロードをシミュレートするデフォルトスタブデリゲート
 ///
-/// Phase 2 のスタブです。将来のフェーズで実際の HuggingFace Hub
-/// ダウンロード統合に置き換えられます。
+/// 実際のダウンロードが行われない場合のデフォルトデリゲートです。
+/// カスタムの ``DownloadProgressDelegate`` を注入することで動作を差し替えられます。
 struct StubDownloadDelegate: DownloadProgressDelegate {
     /// スタブダウンロードが返す固定サイズ。
     static let stubSize: Int64 = 1_000_000

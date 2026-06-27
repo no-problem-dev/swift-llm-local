@@ -31,10 +31,9 @@ public protocol AdapterNetworkDelegate: Sendable {
 
 // MARK: - StubAdapterNetworkDelegate
 
-/// Phase 2 用スタブデリゲート — ネットワークアクセスなしでプレースホルダーファイルを作成します。
+/// ネットワークアクセスなしでプレースホルダーファイルを作成するスタブデリゲート。
 ///
 /// 実際のネットワークデリゲートが提供されない場合のデフォルトとして使用されます。
-/// Phase 3 で実際のダウンロード実装に置き換えられます。
 struct StubAdapterNetworkDelegate: AdapterNetworkDelegate {
     func downloadGitHubRelease(
         repo: String, tag: String, asset: String, destination: URL
