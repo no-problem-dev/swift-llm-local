@@ -33,7 +33,8 @@ jobs:
         run: |
           swift package --allow-writing-to-directory ./docs \
             generate-documentation \
-            --target LLMLocal \
+            --enable-experimental-combined-documentation \
+            --target LLMLocal --target LLMLocalClient --target LLMLocalMLX \
             --disable-indexing \
             --transform-for-static-hosting \
             --hosting-base-path swift-llm-local \
