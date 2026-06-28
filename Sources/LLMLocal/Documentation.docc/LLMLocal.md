@@ -1,34 +1,26 @@
 # ``LLMLocal``
 
-iOS / macOS デバイス上でローカル LLM 推論を実現する Swift パッケージ。
+Apple Silicon デバイス上でオンデバイス LLM 推論を実現する Swift パッケージ全体のエントリポイント。
 
 ## Overview
 
-`LLMLocal` は Apple Silicon デバイス向けのオンデバイス LLM 推論ライブラリです。
+`swift-llm-local` は iOS / macOS 向けのオンデバイス LLM 推論パッケージです。
 クラウド API に依存せず、プライバシーを守りながら LLM をアプリに組み込めます。
+Qwen3・Llama などの主要オープンモデルを Apple MLX フレームワーク経由で動かします。
 
-ライブラリは 4 層のアーキテクチャで構成されています。
+パッケージは次の 3 つの公開ライブラリターゲットで構成されています。
 
-```
-LLMLocalClient   プロトコル + 共有型（LLMLocalBackend, ModelSpec, GenerationConfig …）
-LLMLocalModels   モデル管理（ModelRegistry, BackgroundDownloader …）
-LLMLocalMLX      MLX 推論バックエンド（MLXBackend）
-LLMLocal         アンブレラ（LLMLocalService, ModelPresets, LocalAgentClient）
-```
-
-アプリは通常、アンブレラの `LLMLocal` を 1 つインポートするだけで全機能を使えます。
-抽象化層のみが必要な場合は `LLMLocalClient`、バックエンドの DI 設定には `LLMLocalMLX` だけをインポートすることもできます。
+- **LLMLocal**（このモジュール）: ``LLMLocalService``・``ModelPresets``・``LocalAgentClient`` を含むアンブレラ。アプリ開発のほとんどのケースはこれ 1 つをインポートするだけで完結します。
+- **LLMLocalClient**: `LLMLocalBackend` プロトコル・`ModelSpec`・`GenerationConfig` などのプロトコル層と共有型。バックエンドを切り替えたい場合や、ライブラリコード（テスト含む）でバックエンドに依存させたくない場合に単体でインポートします。
+- **LLMLocalMLX**: `MLXBackend` の実装モジュール。バックエンドを DI で差し込む設定箇所や、アダプター（LoRA）管理が必要な箇所でインポートします。
 
 ### 基本的な使い方
 
 ```swift
 import LLMLocal
 
-// サービスを作成
-let service = LLMLocalService(
-    backend: MLXBackend(),
-    modelRegistry: ModelRegistry()
-)
+// サービスを作成（MLXBackend は LLMLocal が内包）
+let service = LLMLocalService()
 
 // プリセットモデルでテキストを生成（ストリーミング）
 for try await token in await service.generate(
@@ -39,6 +31,9 @@ for try await token in await service.generate(
 }
 ```
 
+依存を最小化したいライブラリターゲットでは `LLMLocalClient` のみをインポートし、
+DI コンテナで `MLXBackend`（`LLMLocalMLX`）を注入するパターンを使います。
+
 詳しいセットアップ手順は <doc:GettingStarted> を参照してください。
 
 ## Topics
@@ -46,6 +41,11 @@ for try await token in await service.generate(
 ### Essentials
 
 - <doc:GettingStarted>
+
+### モジュール構成
+
+- ``LLMLocalClient``
+- ``LLMLocalMLX``
 
 ### サービス
 
