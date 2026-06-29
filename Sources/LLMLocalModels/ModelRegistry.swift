@@ -6,9 +6,9 @@ import PersistenceFileSystem
 /// モデルキャッシュのメタデータ管理とキャッシュ操作を提供するアクター
 ///
 /// `ModelRegistry` はローカルにダウンロード・キャッシュされたモデルを追跡し、
-/// ``RegistryStore`` 経由でメタデータを永続化します。
+/// ``RegistryStore`` 経由でメタデータを永続化する。
 /// 実際のモデル重みは MLX バックエンドが Hugging Face Hub キャッシュ経由で管理し、
-/// このアクターはメタデータレジストリのみを管理します。
+/// このアクターはメタデータレジストリのみを管理する。
 public actor ModelRegistry {
 
     /// レジストリファイルとアダプターファイルを保存するディレクトリ。
@@ -31,22 +31,22 @@ public actor ModelRegistry {
 
     /// レジューム可能なバックグラウンドモデルダウンロードを管理するダウンローダー。
     ///
-    /// バックグラウンドモデルダウンロードの開始・一時停止・再開・キャンセルに使用します。
+    /// バックグラウンドモデルダウンロードの開始・一時停止・再開・キャンセルに使用する。
     public var backgroundDownloader: BackgroundDownloader {
         _backgroundDownloader
     }
 
-    /// 新しいモデルレジストリを作成します。
+    /// 新しいモデルレジストリを作成する。
     ///
     /// - Parameters:
     ///   - cacheDirectory: レジストリとアダプターファイルを保存するディレクトリ。
     ///     デフォルトは `~/Library/Application Support/LLMLocal/models`。
     ///   - registryStore: レジストリの永続化ストア。
-    ///     `nil` の場合、キャッシュディレクトリの `registry.json` を使用します。
+    ///     `nil` の場合、キャッシュディレクトリの `registry.json` を使用する。
     ///   - downloadDelegate: ダウンロードを実行するオプションのデリゲート。
-    ///     `nil` の場合、即座のダウンロードをシミュレートするスタブデリゲートが使用されます。
+    ///     `nil` の場合、即座のダウンロードをシミュレートするスタブデリゲートを使用する。
     ///   - backgroundDownloader: オプションのバックグラウンドダウンローダーインスタンス。
-    ///     `nil` の場合、キャッシュディレクトリを使用してデフォルトの ``BackgroundDownloader`` が作成されます。
+    ///     `nil` の場合、キャッシュディレクトリを使用してデフォルトの ``BackgroundDownloader`` を作成する。
     public init(
         cacheDirectory: URL? = nil,
         registryStore: (any RegistryStore<CachedModelInfo>)? = nil,
@@ -69,7 +69,7 @@ public actor ModelRegistry {
 
     // MARK: - Private Helpers
 
-    /// ストアからのデータが未ロードの場合、非同期でロードします。
+    /// ストアからのデータが未ロードの場合、非同期でロードする。
     private func ensureLoaded() async {
         guard !isLoaded else { return }
         cachedMetadata = await cache.load()
@@ -78,7 +78,7 @@ public actor ModelRegistry {
 
     // MARK: - Public API
 
-    /// すべてのキャッシュ済みモデルの一覧を返します。
+    /// すべてのキャッシュ済みモデルの一覧を返す。
     ///
     /// - Returns: 登録済みの全モデルの ``CachedModelInfo`` 配列。
     public func cachedModels() async -> [CachedModelInfo] {
@@ -86,7 +86,7 @@ public actor ModelRegistry {
         return Array(cachedMetadata.values)
     }
 
-    /// 指定されたモデル仕様がキャッシュに登録されているかを確認します。
+    /// 指定されたモデル仕様がキャッシュに登録されているかを確認する。
     ///
     /// - Parameter spec: 確認するモデル仕様。
     /// - Returns: モデルがキャッシュに登録されている場合は `true`。
@@ -95,19 +95,19 @@ public actor ModelRegistry {
         return cachedMetadata[spec.id] != nil
     }
 
-    /// すべてのキャッシュ済みモデルの合計サイズをバイト単位で返します。
+    /// すべてのキャッシュ済みモデルの合計サイズをバイト単位で返す。
     ///
     /// - Returns: 全登録モデルの `sizeInBytes` の合計。
-    /// - Throws: 現在はスローしませんが、将来のファイルシステムベースのサイズ計算に対応するシグネチャです。
+    /// - Throws: 現在はスローしないが、将来のファイルシステムベースのサイズ計算に対応するシグネチャ。
     public func totalCacheSize() async throws -> Int64 {
         await ensureLoaded()
         return cachedMetadata.values.reduce(0) { $0 + $1.sizeInBytes }
     }
 
-    /// 特定モデルのキャッシュメタデータエントリを削除し、モデルファイルも除去します。
+    /// 特定モデルのキャッシュメタデータエントリを削除し、モデルファイルも除去する。
     ///
-    /// モデルがキャッシュされていない場合、このメソッドは何も行いません。
-    /// `modelFilesPath` が設定されている場合、そのディレクトリを削除してディスク容量を解放します。
+    /// モデルがキャッシュされていない場合、このメソッドは何も行わない。
+    /// `modelFilesPath` が設定されている場合、そのディレクトリを削除してディスク容量を解放する。
     ///
     /// - Parameter spec: 削除するモデル仕様。
     /// - Throws: レジストリの永続化に失敗した場合。
@@ -120,7 +120,7 @@ public actor ModelRegistry {
         try await cache.save(cachedMetadata)
     }
 
-    /// すべてのキャッシュ済みモデルメタデータを削除し、モデルファイルも除去します。
+    /// すべてのキャッシュ済みモデルメタデータを削除し、モデルファイルも除去する。
     ///
     /// - Throws: レジストリの永続化に失敗した場合。
     public func clearAllCache() async throws {
@@ -134,17 +134,17 @@ public actor ModelRegistry {
         try await cache.save(cachedMetadata)
     }
 
-    /// モデルをキャッシュメタデータに登録します。
+    /// モデルをキャッシュメタデータに登録する。
     ///
-    /// 指定されたサイズと現在のタイムスタンプでメタデータエントリを作成します。
-    /// 実際のダウンロードは MLX バックエンドが処理します。
+    /// 指定されたサイズと現在のタイムスタンプでメタデータエントリを作成する。
+    /// 実際のダウンロードは MLX バックエンドが処理する。
     ///
-    /// 同じIDのモデルが既に登録されている場合は上書きされます（upsert）。
+    /// 同じIDのモデルが既に登録されている場合は上書きされる（upsert）。
     ///
     /// - Parameters:
     ///   - spec: 登録するモデル仕様。
     ///   - sizeInBytes: モデルのサイズ（バイト単位）。
-    ///   - modelFilesPath: モデル実ファイルのパス。削除時にこのパスを使用してファイルを除去します。
+    ///   - modelFilesPath: モデル実ファイルのパス。削除時にこのパスを使用してファイルを除去する。
     /// - Throws: レジストリの永続化に失敗した場合。
     public func registerModel(
         _ spec: ModelSpec,
@@ -166,15 +166,11 @@ public actor ModelRegistry {
 
     // MARK: - Download with Progress
 
-    /// 進捗報告付きでモデルをダウンロードします。
+    /// 進捗報告付きでモデルをダウンロードする。
     ///
     /// ダウンロードの進行に応じて ``DownloadProgress`` の更新を生成する
-    /// `AsyncThrowingStream` を返します。ダウンロードが完了しモデルがキャッシュに
-    /// 登録されるとストリームが完了します。
-    ///
-    /// ダウンロードの進行に応じて ``DownloadProgress`` の更新を生成する
-    /// `AsyncThrowingStream` を返します。ダウンロードが完了しモデルがキャッシュに
-    /// 登録されるとストリームが完了します。
+    /// `AsyncThrowingStream` を返す。ダウンロードが完了しモデルがキャッシュに
+    /// 登録されるとストリームが完了する。
     ///
     /// - Parameter spec: ダウンロードするモデル仕様。
     /// - Returns: ``DownloadProgress`` 値の ``AsyncThrowingStream``。

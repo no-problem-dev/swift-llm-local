@@ -46,7 +46,7 @@ public enum LLMLocalError: Error, Sendable, Equatable {
     /// ツールコール非対応のモデルにツールが渡された。
     ///
     /// ツールを黙って無視すると、エージェントループが「ツール不要」と
-    /// 誤解釈してターンを終了してしまうため、明示的にエラーにします。
+    /// 誤解釈してターンを終了してしまうため、明示的にエラーにする。
     /// - Parameter modelId: ツールコール非対応のモデルの識別子。
     case toolCallsUnsupported(modelId: String)
 }

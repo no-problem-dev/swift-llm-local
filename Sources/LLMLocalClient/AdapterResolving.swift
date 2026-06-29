@@ -3,8 +3,8 @@ import Foundation
 /// ``AdapterSource`` をローカルファイルURLに解決するプロトコル
 ///
 /// Layer 2（MLXBackend）が Layer 1（AdapterRegistry）に直接依存せずに
-/// アダプターソースを解決できるようにするプロトコルです。
-/// Layer 1 の型がこのプロトコルに準拠し、Layer 2 は依存性注入で受け取ります。
+/// アダプターソースを解決できるようにするプロトコル。
+/// Layer 1 の型がこのプロトコルに準拠し、Layer 2 は依存性注入で受け取る。
 ///
 /// ## Usage
 ///
@@ -16,11 +16,11 @@ import Foundation
 /// let backend = MLXBackend(adapterResolver: resolver)
 /// ```
 public protocol AdapterResolving: Sendable {
-    /// アダプターソースをローカルファイルURLに解決します。
+    /// アダプターソースをローカルファイルURLに解決する。
     ///
-    /// ローカルソースの場合、パスの検証と返却のみを行います。
+    /// ローカルソースの場合、パスの検証と返却のみを行う。
     /// リモートソース（GitHub Releases、HuggingFace）の場合、
-    /// キャッシュされていなければアダプターをダウンロードします。
+    /// キャッシュされていなければアダプターをダウンロードする。
     ///
     /// - Parameter source: 解決するアダプターソース。
     /// - Returns: アダプターの重みファイルを指すローカルファイルURL。

@@ -34,7 +34,7 @@ public struct DownloadedModel: Sendable, Hashable, Codable, Identifiable {
 }
 
 extension DownloadedModel {
-    /// 実サイズを人間可読な文字列で返します（例: "2.3 GB"）。不明なら "—"。
+    /// 実サイズを人間可読な文字列で返す（例: "2.3 GB"）。不明なら "—"。
     public var formattedSize: String {
         guard let sizeInBytes else { return "—" }
         let formatter = ByteCountFormatter()

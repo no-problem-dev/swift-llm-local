@@ -4,14 +4,14 @@
 
 ## Overview
 
-`LLMLocalClient` はパッケージのプロトコル・共有型モジュールです。
+`LLMLocalClient` はパッケージのプロトコル・共有型モジュール。
 バックエンド実装（`LLMLocalMLX`）と上位のアンブレラ（`LLMLocal`）の両方が依存する、
-パッケージ内の最も下位に位置するライブラリターゲットです。
+パッケージ内の最も下位に位置するライブラリターゲット。
 
 このモジュールだけをインポートすることで、バックエンドの具体的な実装に依存せず
-抽象化された `LLMLocalBackend` プロトコルに対してコードを書けます。
+抽象化された `LLMLocalBackend` プロトコルに対してコードを書ける。
 テスト用のモックバックエンドを注入したい場合や、
-SPM マルチモジュール構成で依存グラフを最小化したい場合に有効です。
+SPM マルチモジュール構成で依存グラフを最小化したい場合に有効。
 
 ```swift
 import LLMLocalClient
@@ -31,8 +31,8 @@ func configure(backend: any LLMLocalBackend) async throws {
 ```
 
 このモジュールは `LLMClient` と `LLMTool`（`swift-llm-client` パッケージ）を
-`@_exported import` で再エクスポートしています。
-`LLMLocalClient` をインポートするだけで `ToolDefinition`・`LLMMessage` などの型も使えます。
+`@_exported import` で再エクスポートしている。
+`LLMLocalClient` をインポートするだけで `ToolDefinition`・`LLMMessage` などの型も使える。
 
 ## Topics
 

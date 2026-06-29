@@ -2,8 +2,8 @@ import Foundation
 
 /// ダウンロード進捗情報
 ///
-/// モデルダウンロードの現在の状態を報告します。
-/// バイト単位の進捗と現在ダウンロード中のファイル名を含みます。
+/// モデルダウンロードの現在の状態を報告する。
+/// バイト単位の進捗と現在ダウンロード中のファイル名を含む。
 public struct DownloadProgress: Sendable {
     /// 進捗率（0.0〜1.0）。
     public let fraction: Double
@@ -17,7 +17,7 @@ public struct DownloadProgress: Sendable {
     /// 現在ダウンロード中のファイル名（不明な場合は nil）。
     public let currentFile: String?
 
-    /// 新しいダウンロード進捗値を生成します。
+    /// 新しいダウンロード進捗値を生成する。
     ///
     /// - Parameters:
     ///   - fraction: 進捗率（0.0〜1.0）。

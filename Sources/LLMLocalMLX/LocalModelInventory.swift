@@ -26,7 +26,7 @@ public struct LocalModelInventory: Sendable {
         self.baseDirectory = baseDirectory ?? ModelStorageLayout.defaultBaseDirectory()
     }
 
-    /// 指定モデルがディスク上に**完全な形で**ダウンロード済みかを返します。
+    /// 指定モデルがディスク上に**完全な形で**ダウンロード済みかを返す。
     ///
     /// - Parameter spec: 確認するモデル仕様。
     /// - Returns: 設定 + 重みが揃っていれば `true`。
@@ -37,7 +37,7 @@ public struct LocalModelInventory: Sendable {
         return ModelStorageLayout.hasCompleteSnapshot(at: dir)
     }
 
-    /// 候補のうちダウンロード済みのものだけを ``DownloadedModel`` として返します。
+    /// 候補のうちダウンロード済みのものだけを ``DownloadedModel`` として返す。
     ///
     /// 実サイズ・DL 時刻の近似（ディレクトリ mtime）込み。HF Hub のスナップショットは
     /// アプリ側のモデル ID と独立に保存されるため、列挙には候補リスト（プリセット等）を渡す。
@@ -72,10 +72,10 @@ public struct LocalModelInventory: Sendable {
         downloadedModels(among: specs).reduce(0) { $0 + ($1.sizeInBytes ?? 0) }
     }
 
-    /// 指定モデルのダウンロード済みファイルをディスクから削除します（容量解放）。
+    /// 指定モデルのダウンロード済みファイルをディスクから削除する（容量解放）。
     ///
-    /// `.local` 指定のモデルは外部所有のため削除しません（no-op）。
-    /// 未ダウンロードの場合も何もしません。
+    /// `.local` 指定のモデルは外部所有のため削除しない（no-op）。
+    /// 未ダウンロードの場合も何もしない。
     ///
     /// - Parameter spec: 削除するモデル仕様。
     /// - Throws: ディレクトリ削除に失敗した場合。

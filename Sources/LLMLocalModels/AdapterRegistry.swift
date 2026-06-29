@@ -8,9 +8,9 @@ import PersistenceFileSystem
 /// リモートソースからアダプターファイルをダウンロードするプロトコル
 ///
 /// GitHub Releases や Hugging Face Hub からのアダプターファイル取得に関する
-/// 実際のネットワーク操作を処理します。テスト用の依存性注入を可能にするプロトコルです。
+/// 実際のネットワーク操作を処理する。テスト用の依存性注入を可能にするプロトコル。
 public protocol AdapterNetworkDelegate: Sendable {
-    /// GitHub Release からアダプターをダウンロードします。
+    /// GitHub Release からアダプターをダウンロードする。
     ///
     /// - Parameters:
     ///   - repo: GitHub リポジトリ（例: "owner/repo"）。
@@ -21,7 +21,7 @@ public protocol AdapterNetworkDelegate: Sendable {
         repo: String, tag: String, asset: String, destination: URL
     ) async throws
 
-    /// Hugging Face Hub からアダプターをダウンロードします。
+    /// Hugging Face Hub からアダプターをダウンロードする。
     ///
     /// - Parameters:
     ///   - id: Hugging Face のモデル/アダプター識別子（例: "user/adapter"）。
@@ -33,7 +33,7 @@ public protocol AdapterNetworkDelegate: Sendable {
 
 /// ネットワークアクセスなしでプレースホルダーファイルを作成するスタブデリゲート。
 ///
-/// 実際のネットワークデリゲートが提供されない場合のデフォルトとして使用されます。
+/// 実際のネットワークデリゲートが提供されない場合のデフォルトとして使用される。
 struct StubAdapterNetworkDelegate: AdapterNetworkDelegate {
     func downloadGitHubRelease(
         repo: String, tag: String, asset: String, destination: URL
@@ -59,7 +59,7 @@ struct StubAdapterNetworkDelegate: AdapterNetworkDelegate {
 /// キャッシュされたアダプターの情報
 ///
 /// ローカルにダウンロード・キャッシュされたアダプターのバージョン、ソース、
-/// ダウンロード日時、ローカルファイルパスを追跡します。
+/// ダウンロード日時、ローカルファイルパスを追跡する。
 public struct AdapterInfo: Sendable, Codable {
     /// アダプターソースから導出された一意のキャッシュキー。
     public let key: String
@@ -76,7 +76,7 @@ public struct AdapterInfo: Sendable, Codable {
     /// ローカルにキャッシュされたアダプターファイルのパス。
     public let localPath: URL
 
-    /// 新しいアダプター情報を作成します。
+    /// 新しいアダプター情報を作成する。
     ///
     /// - Parameters:
     ///   - key: 一意のキャッシュキー。
@@ -104,7 +104,7 @@ public struct AdapterInfo: Sendable, Codable {
 /// LoRA アダプターのダウンロード・バージョン管理・ローカルストレージを管理するアクター
 ///
 /// `AdapterRegistry` は各種ソース（GitHub Releases、HuggingFace、ローカルパス）
-/// からのアダプターダウンロードと、バージョン追跡によるローカルキャッシュ管理を行います。
+/// からのアダプターダウンロードと、バージョン追跡によるローカルキャッシュ管理を行う。
 ///
 /// ## Usage
 ///
@@ -127,7 +127,7 @@ public actor AdapterRegistry {
     private let adapterDirectory: URL
 
     /// ダウンロード済みアダプターのインメモリレジストリ。
-    /// AdapterSource から導出された一意のキーをキーとします。
+    /// AdapterSource から導出された一意のキーをキーとする。
     private var adapterRegistry: [String: AdapterInfo] = [:]
 
     /// ストアからの初回ロードが完了しているかどうか。
@@ -139,15 +139,15 @@ public actor AdapterRegistry {
     /// アダプターダウンロード用のネットワークデリゲート（テスト用に注入可能）。
     private let networkDelegate: any AdapterNetworkDelegate
 
-    /// 新しいアダプターレジストリを作成します。
+    /// 新しいアダプターレジストリを作成する。
     ///
     /// - Parameters:
     ///   - adapterDirectory: アダプターファイルとレジストリを保存するディレクトリ。
     ///     デフォルトは `~/Library/Application Support/LLMLocal/adapters`。
     ///   - registryStore: レジストリの永続化ストア。
-    ///     `nil` の場合、アダプターディレクトリの `adapter-registry.json` を使用します。
+    ///     `nil` の場合、アダプターディレクトリの `adapter-registry.json` を使用する。
     ///   - networkDelegate: ダウンロードを実行するオプションのデリゲート。
-    ///     `nil` の場合、プレースホルダーファイルを作成するスタブデリゲートが使用されます。
+    ///     `nil` の場合、プレースホルダーファイルを作成するスタブデリゲートを使用する。
     public init(
         adapterDirectory: URL? = nil,
         registryStore: (any RegistryStore<AdapterInfo>)? = nil,
@@ -171,7 +171,7 @@ public actor AdapterRegistry {
 
     // MARK: - Private Helpers
 
-    /// ストアからのデータが未ロードの場合、非同期でロードします。
+    /// ストアからのデータが未ロードの場合、非同期でロードする。
     private func ensureLoaded() async {
         guard !isLoaded else { return }
         adapterRegistry = await cache.load()
@@ -180,10 +180,10 @@ public actor AdapterRegistry {
 
     // MARK: - Public API
 
-    /// AdapterSource をローカルファイルURLに解決します。
+    /// AdapterSource をローカルファイルURLに解決する。
     ///
-    /// まだキャッシュされていない場合はアダプターをダウンロードします。
-    /// ローカルソースの場合はファイルの存在を検証し、パスを直接返します。
+    /// まだキャッシュされていない場合はアダプターをダウンロードする。
+    /// ローカルソースの場合はファイルの存在を検証し、パスを直接返す。
     ///
     /// - Parameter source: 解決するアダプターソース。
     /// - Returns: アダプターを指すローカルファイルURL。
@@ -244,7 +244,7 @@ public actor AdapterRegistry {
         }
     }
 
-    /// すべてのキャッシュ済みアダプターを返します。
+    /// すべてのキャッシュ済みアダプターを返す。
     ///
     /// - Returns: キャッシュされた全アダプターの ``AdapterInfo`` 配列。
     public func cachedAdapters() async -> [AdapterInfo] {
@@ -252,7 +252,7 @@ public actor AdapterRegistry {
         return Array(adapterRegistry.values)
     }
 
-    /// アダプターがキャッシュされているか確認します。
+    /// アダプターがキャッシュされているか確認する。
     ///
     /// - Parameter source: 確認するアダプターソース。
     /// - Returns: アダプターがダウンロード・キャッシュ済みの場合は `true`。
@@ -262,9 +262,9 @@ public actor AdapterRegistry {
         return adapterRegistry[key] != nil
     }
 
-    /// キャッシュされたアダプターのレジストリエントリを削除します。
+    /// キャッシュされたアダプターのレジストリエントリを削除する。
     ///
-    /// アダプターがキャッシュされていない場合、このメソッドは何もしません。
+    /// アダプターがキャッシュされていない場合、このメソッドは何もしない。
     ///
     /// - Parameter source: 削除するアダプターソース。
     /// - Throws: レジストリの永続化に失敗した場合のエラー。
@@ -275,7 +275,7 @@ public actor AdapterRegistry {
         try await cache.save(adapterRegistry)
     }
 
-    /// すべてのキャッシュ済みアダプターレジストリエントリを削除します。
+    /// すべてのキャッシュ済みアダプターレジストリエントリを削除する。
     ///
     /// - Throws: レジストリの永続化に失敗した場合のエラー。
     public func clearAll() async throws {
@@ -284,10 +284,10 @@ public actor AdapterRegistry {
         try await cache.save(adapterRegistry)
     }
 
-    /// キャッシュされたアダプターの新しいバージョンが利用可能か確認します。
+    /// キャッシュされたアダプターの新しいバージョンが利用可能か確認する。
     ///
     /// アダプターがキャッシュされていないか、キャッシュされたバージョンが
-    /// 指定された最新タグと異なる場合に `true` を返します。
+    /// 指定された最新タグと異なる場合に `true` を返す。
     ///
     /// - Parameters:
     ///   - source: 確認するアダプターソース。
@@ -304,9 +304,9 @@ public actor AdapterRegistry {
 
     // MARK: - Internal Helpers
 
-    /// アダプターソースの一意のキャッシュキーを生成します。
+    /// アダプターソースの一意のキャッシュキーを生成する。
     ///
-    /// キーのフォーマットはソースタイプにより異なります:
+    /// キーのフォーマットはソースタイプにより異なる:
     /// - GitHub Release: `gh--{owner}--{repo}--{tag}--{asset}`
     /// - HuggingFace: `hf--{/ を -- に置換した id}`
     /// - Local: `local--{filename}`

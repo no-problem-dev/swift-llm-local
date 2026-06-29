@@ -7,7 +7,7 @@
 public struct GenerationConfig: Sendable, Hashable, Codable {
     // MARK: - Length
 
-    /// 生成する最大トークン数。`nil` の場合はコンテキスト上限まで生成します。
+    /// 生成する最大トークン数。`nil` の場合はコンテキスト上限まで生成する。
     public var maxTokens: Int?
 
     // MARK: - Sampling

@@ -2,9 +2,9 @@ import LLMLocalClient
 import MLXLMCommon
 
 extension GenerationConfig {
-    /// この ``GenerationConfig`` を MLX の ``GenerateParameters`` に変換します。
+    /// この ``GenerationConfig`` を MLX の ``GenerateParameters`` に変換する。
     /// 思考モード（``enableThinking``）はサンプリングではなくチャットテンプレートの
-    /// 制御なので、ここではなく `applyChatTemplate` の additionalContext で扱います。
+    /// 制御なので、ここではなく `applyChatTemplate` の additionalContext で扱う。
     var mlxParameters: GenerateParameters {
         GenerateParameters(
             maxTokens: maxTokens,

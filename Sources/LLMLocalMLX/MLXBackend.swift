@@ -11,21 +11,21 @@ import Tokenizers
 
 /// MLXベースのローカルLLM推論バックエンド
 ///
-/// このアクターは mlx-swift-lm API をラップし、``LLMLocalBackend`` への準拠を提供します。
+/// このアクターは mlx-swift-lm API をラップし、``LLMLocalBackend`` への準拠を提供する。
 /// モデルの読み込み、テキスト生成、GPUキャッシュ設定、
-/// およびオプションのLoRAアダプターマージを管理します。
+/// およびオプションのLoRAアダプターマージを管理する。
 ///
 /// ## モデルの取得
 ///
 /// mlx-swift-lm 3.x はモデル取得を `Downloader` / `TokenizerLoader` として
-/// 消費側が注入する設計です。デフォルトでは Hugging Face Hub からダウンロードしますが、
-/// 独自のダウンロード戦略（S3、アプリ内バンドル等）を注入できます。
+/// 消費側が注入する設計。デフォルトでは Hugging Face Hub からダウンロードするが、
+/// 独自のダウンロード戦略（S3、アプリ内バンドル等）を注入できる。
 ///
 /// ## アダプターサポート
 ///
 /// ``ModelSpec`` が ``AdapterSource`` を含む場合、バックエンドは
 /// ``AdapterResolving`` インスタンスを介してアダプターをローカルURLに解決し、
-/// アダプターパスをMLXモデル読み込みパイプラインに渡します。
+/// アダプターパスをMLXモデル読み込みパイプラインに渡す。
 ///
 /// ```swift
 /// let backend = MLXBackend(adapterResolver: adapterManager)
@@ -63,21 +63,21 @@ public actor MLXBackend: LLMLocalBackend {
 
     /// loadModel 中にキャプチャされた直近の解決済みアダプターURL。
     /// アダプター解決が期待されるURLを生成し、モデル読み込みパイプラインに
-    /// 渡されることを検証するためにテスト用に公開されています。
+    /// 渡されることを検証するためにテスト用に公開されている。
     private(set) var lastResolvedAdapterURL: URL?
 
     /// 新規および既存のチャットセッションに適用されるシステムプロンプト。
     private var _systemPrompt: String?
 
-    /// モデルの読み込みが現在進行中かを追跡します（排他制御用）。
+    /// モデルの読み込みが現在進行中かを追跡する（排他制御用）。
     private var isLoading: Bool = false
 
     // MARK: - Test Accessors
 
-    /// テスト目的でGPUキャッシュ制限を公開します。
+    /// テスト目的でGPUキャッシュ制限を公開する。
     var gpuCacheLimitValue: Int { gpuCacheLimit }
 
-    /// テスト目的でロード状態を公開します。
+    /// テスト目的でロード状態を公開する。
     var isLoadingValue: Bool { isLoading }
 
     /// アダプターリゾルバーが設定されているかどうか。
@@ -85,14 +85,14 @@ public actor MLXBackend: LLMLocalBackend {
 
     // MARK: - Initialization
 
-    /// 指定されたGPUキャッシュ制限とオプションのアダプターリゾルバーで新しい MLXBackend を作成します。
+    /// 指定されたGPUキャッシュ制限とオプションのアダプターリゾルバーで新しい MLXBackend を作成する。
     ///
     /// - Parameters:
     ///   - gpuCacheLimit: GPUキャッシュの最大サイズ（バイト単位）。
     ///     デフォルトは 20 MB（20 * 1024 * 1024）。
     ///   - adapterResolver: LoRA/QLoRA アダプターソースをローカルファイルURLに解決する
     ///     オプションの ``AdapterResolving`` インスタンス。`nil` の場合、アダプター付き
-    ///     モデルの読み込みは ``LLMLocalError/adapterMergeFailed(reason:)`` をスローします。
+    ///     モデルの読み込みは ``LLMLocalError/adapterMergeFailed(reason:)`` をスローする。
     ///   - downloader: モデルリポジトリのスナップショットを取得するダウンローダー。
     ///     デフォルトは Hugging Face Hub。
     ///   - tokenizerLoader: ローカルディレクトリからトークナイザーを読み込むローダー。
@@ -292,13 +292,13 @@ public actor MLXBackend: LLMLocalBackend {
 
     // MARK: - Internal Helpers
 
-    /// アダプターが指定されている場合、アダプターソースをローカルURLに解決します。
+    /// アダプターが指定されている場合、アダプターソースをローカルURLに解決する。
     ///
-    /// spec にアダプターがない場合は `nil` を返します。spec にアダプターがあるが
-    /// リゾルバーが設定されていない場合、または解決に失敗した場合はスローします。
+    /// spec にアダプターがない場合は `nil` を返す。spec にアダプターがあるが
+    /// リゾルバーが設定されていない場合、または解決に失敗した場合はスローする。
     ///
-    /// テスト容易性のために別メソッドとして抽出されています。
-    /// GPU/Metal アクセスなしで呼び出すことができます。
+    /// テスト容易性のために別メソッドとして抽出されている。
+    /// GPU/Metal アクセスなしで呼び出せる。
     func resolveAdapter(for spec: ModelSpec) async throws -> URL? {
         guard let adapterSource = spec.adapter else { return nil }
 
@@ -321,8 +321,8 @@ public actor MLXBackend: LLMLocalBackend {
 
     // MARK: - Private Helpers
 
-    /// アクターの分離コンテキスト内で実際の生成処理を実行します。
-    /// Sendable でない `ChatSession` が分離境界を越えて送信されることを回避します。
+    /// アクターの分離コンテキスト内で実際の生成処理を実行する。
+    /// Sendable でない `ChatSession` が分離境界を越えて送信されることを回避する。
     private func performGenerate(
         prompt: String,
         config: GenerationConfig,
@@ -349,7 +349,7 @@ public actor MLXBackend: LLMLocalBackend {
         }
     }
 
-    /// アクターの分離コンテキスト内でツール呼び出し付き生成処理を実行します。
+    /// アクターの分離コンテキスト内でツール呼び出し付き生成処理を実行する。
     private func performGenerateWithTools(
         prompt: String,
         config: GenerationConfig,
@@ -382,10 +382,10 @@ public actor MLXBackend: LLMLocalBackend {
         }
     }
 
-    /// 構造化メッセージ配列からレスポンスを生成します。
+    /// 構造化メッセージ配列からレスポンスを生成する。
     ///
     /// `ChatSession` を経由せず、トークナイザーの `applyChatTemplate` を直接使用して
-    /// チャットテンプレートを1回だけ適用します。
+    /// チャットテンプレートを1回だけ適用する。
     private func performGenerateFromMessages(
         messages: [LLMMessage],
         systemPrompt: String?,
@@ -475,11 +475,11 @@ public actor MLXBackend: LLMLocalBackend {
         }
     }
 
-    /// MLX の生成イベントを ``GenerationOutput`` に変換します。
+    /// MLX の生成イベントを ``GenerationOutput`` に変換する。
     ///
     /// プロンプトキャッシュ再利用時は MLX に投入されるトークンが接尾辞のみになるため、
     /// `.info` の `promptTokenCount` を「テンプレート適用後の完全なプロンプト長」で
-    /// 上書きし、usage 報告の意味（入力トークン総数）を保ちます。
+    /// 上書きし、usage 報告の意味（入力トークン総数）を保つ。
     private static func mapGeneration(
         _ generation: Generation,
         fullPromptTokenCount: Int
@@ -503,10 +503,10 @@ public actor MLXBackend: LLMLocalBackend {
 
     // MARK: - LLMMessage → MLX Format Conversion
 
-    /// `LLMMessage` を MLX 互換のメッセージディクショナリに変換します。
+    /// `LLMMessage` を MLX 互換のメッセージディクショナリに変換する。
     ///
-    /// 1つの `LLMMessage` が複数の MLX メッセージに変換される場合があります
-    /// （例: ツール結果は個別の "tool" ロールメッセージになります）。
+    /// 1つの `LLMMessage` が複数の MLX メッセージに変換される場合がある
+    /// （例: ツール結果は個別の "tool" ロールメッセージになる）。
     private static func convertToMLXFormat(_ message: LLMMessage) -> [[String: any Sendable]] {
         var result: [[String: any Sendable]] = []
 
@@ -592,14 +592,14 @@ final class PromptCacheStore: @unchecked Sendable {
     /// 直近の生成で構築・更新された KV キャッシュ。
     private var cache: [KVCache]?
 
-    /// キャッシュを破棄します（モデル切替・会話リセット・アンロード時）。
+    /// キャッシュを破棄する（モデル切替・会話リセット・アンロード時）。
     func reset() {
         tokens = []
         cache = nil
     }
 
     /// 新しい完全プロンプト `newTokens` に対し、再利用すべきキャッシュと
-    /// prefill を開始する接尾辞位置を返します。
+    /// prefill を開始する接尾辞位置を返す。
     ///
     /// - 再利用不能（初回・接頭辞不一致・トリム不可）なら新規キャッシュ + 位置 0。
     /// - 再利用可能なら共通接頭辞 `p` までトリムしたキャッシュ + 位置 `p`。
@@ -633,7 +633,7 @@ final class PromptCacheStore: @unchecked Sendable {
         return (existing, prefix)
     }
 
-    /// 生成完了後、次ターンの再利用に備えて状態を記録します。
+    /// 生成完了後、次ターンの再利用に備えて状態を記録する。
     func commit(tokens: [Int], cache: [KVCache]) {
         self.tokens = tokens
         self.cache = cache
@@ -646,7 +646,7 @@ final class PromptCacheStore: @unchecked Sendable {
         return fresh
     }
 
-    /// 2 つのトークン列の共通接頭辞長を返します。
+    /// 2 つのトークン列の共通接頭辞長を返す。
     static func commonPrefixLength(_ a: [Int], _ b: [Int]) -> Int {
         let limit = min(a.count, b.count)
         var i = 0
@@ -658,9 +658,9 @@ final class PromptCacheStore: @unchecked Sendable {
 // MARK: - MLX Generation → GenerationOutput
 
 extension GenerationOutput {
-    /// MLX の ``MLXLMCommon.Generation`` イベントを ``GenerationOutput`` に変換します。
+    /// MLX の ``MLXLMCommon.Generation`` イベントを ``GenerationOutput`` に変換する。
     ///
-    /// 対応するイベントがない場合（未知のケース）は `nil` を返します。
+    /// 対応するイベントがない場合（未知のケース）は `nil` を返す。
     init?(_ generation: Generation) {
         switch generation {
         case .chunk(let text):

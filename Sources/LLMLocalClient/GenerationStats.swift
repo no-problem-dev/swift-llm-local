@@ -7,7 +7,7 @@ public struct GenerationStats: Sendable {
     /// 生成の実時間（ウォールクロック）。
     public let duration: Duration
 
-    /// 新しい生成統計レコードを作成します。
+    /// 新しい生成統計レコードを作成する。
     /// - Parameters:
     ///   - tokenCount: 生成されたトークン数。
     ///   - tokensPerSecond: 生成スループット（トークン/秒）。

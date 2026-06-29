@@ -3,7 +3,7 @@ import LLMLocalClient
 import MLXLMCommon
 
 extension ToolDefinition {
-    /// このツール定義を MLX 互換の ``ToolSpec`` ディクショナリに変換します。
+    /// このツール定義を MLX 互換の ``ToolSpec`` ディクショナリに変換する。
     var toolSpec: [String: any Sendable] {
         [
             "type": "function",
@@ -19,7 +19,7 @@ extension ToolDefinition {
 // MARK: - JSONSchema → Dictionary
 
 extension JSONSchema {
-    /// JSONSchema を再帰的に `[String: any Sendable]` に変換します。
+    /// JSONSchema を再帰的に `[String: any Sendable]` に変換する。
     func toDictionary() -> [String: any Sendable] {
         var dict: [String: any Sendable] = ["type": type.rawValue]
 
@@ -57,7 +57,7 @@ extension JSONSchema {
 // MARK: - MLX ToolCall → LLMTool.ToolCall
 
 extension LLMTool.ToolCall {
-    /// MLX の ``MLXLMCommon.ToolCall`` から ``LLMTool.ToolCall`` を作成します。
+    /// MLX の ``MLXLMCommon.ToolCall`` から ``LLMTool.ToolCall`` を作成する。
     init(from mlxToolCall: MLXLMCommon.ToolCall) {
         let jsonObject = mlxToolCall.function.arguments.mapValues { $0.anyValue }
         let jsonData = (try? JSONSerialization.data(withJSONObject: jsonObject)) ?? Data()

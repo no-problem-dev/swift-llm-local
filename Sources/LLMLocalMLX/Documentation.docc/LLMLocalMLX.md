@@ -4,13 +4,13 @@ Apple MLX フレームワークを使った Apple Silicon 向けローカル LLM
 
 ## Overview
 
-`LLMLocalMLX` は `LLMLocalBackend` プロトコルの具体実装モジュールです。
+`LLMLocalMLX` は `LLMLocalBackend` プロトコルの具体実装モジュール。
 `mlx-swift-lm` ライブラリをラップし、Hugging Face Hub からのモデルダウンロード、
-GPU へのモデルロード、テキスト生成・ツールコール・プロンプトキャッシュ再利用を提供します。
+GPU へのモデルロード、テキスト生成・ツールコール・プロンプトキャッシュ再利用を提供する。
 
-通常はアンブレラの `LLMLocal` ターゲットを通じて利用しますが、
+通常はアンブレラの `LLMLocal` ターゲットを通じて利用するが、
 バックエンドを DI で差し込む構成では `LLMLocalMLX` を直接インポートして
-`MLXBackend` のインスタンスを生成します。
+`MLXBackend` のインスタンスを生成する。
 
 ```swift
 import LLMLocalMLX
@@ -34,9 +34,9 @@ let spec = ModelSpec(
 try await backend.loadModel(spec)
 ```
 
-`MLXBackend` は Swift の `actor` として実装されており、並行アクセスから内部状態を保護します。
+`MLXBackend` は Swift の `actor` として実装されており、並行アクセスから内部状態を保護する。
 `generateFromMessages` はターン間でプロンプトの KV キャッシュを再利用し、
-長い会話でも毎回フルプロンプトを再処理するコストを避けます。
+長い会話でも毎回フルプロンプトを再処理するコストを避ける。
 
 ## Topics
 

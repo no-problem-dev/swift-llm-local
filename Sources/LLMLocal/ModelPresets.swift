@@ -6,22 +6,22 @@ import LLMLocalClient
 /// MLX コミュニティの推奨モデルプリセット
 ///
 /// 各プリセットは mlx-community（Hugging Face）の特定の量子化モデルを対象とした
-/// 事前設定済みの ``ModelSpec`` です。ファミリー別に整理されています。
+/// 事前設定済みの ``ModelSpec``。ファミリー別に整理されている。
 ///
 /// ## toolCallSupport の判定基準
 ///
-/// 各モデルの `toolCallSupport` は以下の積で判定しています（2026-06 検証）:
+/// 各モデルの `toolCallSupport` は以下の積で判定している（2026-06 検証）:
 /// 1. chat template に tools 分岐があるか（ツール定義がモデルに見えるか）
 /// 2. モデルの出力形式が mlx-swift-lm の `ToolCallFormat` でパース可能か
 ///
 /// テンプレートが対応していても出力形式のパーサが mlx-swift-lm に存在しない
 /// モデル（GPT-OSS の harmony 形式、Granite の `<|tool_call|>` 形式等）は
-/// `.unsupported` です。
+/// `.unsupported`。
 ///
 /// ## contextLength
 ///
-/// モデル本来の最大コンテキスト長（config.json の max_position_embeddings）です。
-/// 実行時のメモリ予算は別途 `GenerationConfig` / デバイスメモリで管理してください。
+/// モデル本来の最大コンテキスト長（config.json の max_position_embeddings）。
+/// 実行時のメモリ予算は別途 `GenerationConfig` / デバイスメモリで管理する。
 public enum ModelPresets {
 
     // MARK: - Qwen Family (Alibaba)

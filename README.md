@@ -1,67 +1,67 @@
-[English](README_EN.md) | 日本語
+English | [日本語](README.ja.md)
 
 # LLMLocal
 
-iOS / macOS デバイス上でローカル LLM 推論を実現する Swift パッケージ
+On-device LLM inference Swift package for iOS / macOS
 
 ![Swift](https://img.shields.io/badge/Swift-6.2-orange.svg)
 ![Platforms](https://img.shields.io/badge/Platforms-iOS%2018.0+%20%7C%20macOS%2015.0+-blue.svg)
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-## 特徴
+## Features
 
-- **オンデバイス推論** - クラウド API に依存しないプライバシー保護型 AI 機能
-- **MLX バックエンド** - Apple Silicon 最適化された高速推論エンジン
-- **エージェント統合** - `LocalAgentClient` が swift-llm-client の `AgentCapableClient` に準拠。クラウドプロバイダーと同じエージェントループでローカル LLM を使用可能
-- **ツールコール** - ネイティブ function calling 対応。モデルごとの対応可否を `ModelProfile.toolCallSupport` で管理し、非対応モデルへのツール付きリクエストは明示的にエラー
-- **モデル管理** - ダウンロード追跡・レジューム・ローカルキャッシュ
-- **LoRA サポート** - GitHub Releases / HuggingFace / ローカルからアダプタ読み込み
-- **メモリ監視** - デバイスメモリに応じた自動アンロード
-- **マルチモデル切替** - LRU ベースの自動モデルスワッピング
+- **On-device Inference** - Privacy-preserving AI without cloud API dependency
+- **MLX Backend** - High-performance inference engine optimized for Apple Silicon
+- **Agent Integration** - `LocalAgentClient` conforms to swift-llm-client's `AgentCapableClient`, so local LLMs can run in the same agent loop as cloud providers
+- **Tool Calling** - Native function calling. Per-model capability is tracked via `ModelProfile.toolCallSupport`, and tool requests to unsupported models fail explicitly
+- **Model Management** - Download tracking, resume, and local caching
+- **LoRA Support** - Load adapters from GitHub Releases / HuggingFace / local files
+- **Memory Monitoring** - Automatic model unloading based on device memory
+- **Multi-model Switching** - LRU-based automatic model swapping
 
-## インストール
+## Installation
 
 ```swift
 // Package.swift
 dependencies: [
-    .package(url: "https://github.com/no-problem-dev/swift-llm-local.git", .upToNextMajor(from: "2.0.0"))
+    .package(url: "https://github.com/no-problem-dev/swift-llm-local.git", .upToNextMajor(from: "2.2.6"))
 ]
 ```
 
-### モジュール構成
+### Module Structure
 
-用途に応じて必要なモジュールのみをインポートできます：
+Import only the modules you need:
 
-| モジュール | 用途 |
-|-----------|------|
-| `LLMLocal` | アンブレラ（全モジュール + LLMLocalService + LocalAgentClient） |
-| `LLMLocalClient` | プロトコル層のみ（アプリ抽象化用） |
-| `LLMLocalMLX` | MLX バックエンド（DI 設定用） |
+| Module | Purpose |
+|--------|---------|
+| `LLMLocal` | Umbrella (all modules + LLMLocalService + LocalAgentClient) |
+| `LLMLocalClient` | Protocol layer only (for app abstraction) |
+| `LLMLocalMLX` | MLX backend (for app DI configuration) |
 
-## クイックスタート
+## Quick Start
 
 ```swift
 import LLMLocal
 
-// 1. サービスを作成
+// 1. Create service
 let service = LLMLocalService(
     backend: MLXBackend(),
     modelRegistry: ModelRegistry(cacheDirectory: cacheDirectory)
 )
 
-// 2. プリセットモデルで生成（ストリーミング）
+// 2. Generate with preset model (streaming)
 for try await token in await service.generate(
     model: ModelPresets.qwen3_4B,
-    prompt: "SwiftUIでリストを作る方法を教えて"
+    prompt: "How do I build a list in SwiftUI?"
 ) {
     print(token, terminator: "")
 }
 ```
 
-### 生成パラメータのカスタマイズ
+### Customizing Generation Parameters
 
 ```swift
-// maxTokens: nil（デフォルト）はコンテキスト上限まで生成
+// maxTokens: nil (default) generates until the context limit
 let config = GenerationConfig(
     maxTokens: 512,
     temperature: 0.7,
@@ -70,26 +70,26 @@ let config = GenerationConfig(
 
 for try await token in await service.generate(
     model: ModelPresets.qwen3_4B,
-    prompt: "創造的な短い物語を書いて",
+    prompt: "Write a short creative story",
     config: config
 ) {
     print(token, terminator: "")
 }
 ```
 
-### エージェントクライアントとして使用
+### Using as an Agent Client
 
 ```swift
 import LLMLocal
 
 let client = LocalAgentClient(service: service)
 
-// swift-llm-client の AgentCapableClient として、
-// クラウドプロバイダーと同じエージェントループに注入できる
+// Inject into the same agent loop as cloud providers,
+// as an AgentCapableClient from swift-llm-client
 let response = try await client.executeAgentStep(
-    messages: [.user("東京の天気は？")],
+    messages: [.user("What's the weather in Tokyo?")],
     model: ModelPresets.qwen3_4B,
-    systemPrompt: "あなたは親切なアシスタントです",
+    systemPrompt: "You are a helpful assistant",
     tools: tools,
     toolChoice: .auto,
     responseSchema: nil,
@@ -100,11 +100,11 @@ let response = try await client.executeAgentStep(
 )
 ```
 
-ツールコールの可否はモデル依存です。`ModelProfile.toolCallSupport` が
-`.unsupported` のモデル（DeepSeek R1 蒸留、Gemma 3 等）にツールを渡すと
-`LLMLocalError.toolCallsUnsupported` がスローされます。
+Tool calling capability is model-dependent. Passing tools to a model whose
+`ModelProfile.toolCallSupport` is `.unsupported` (DeepSeek R1 distills, Gemma 3, etc.)
+throws `LLMLocalError.toolCallsUnsupported`.
 
-### LoRA アダプタの使用
+### Using LoRA Adapters
 
 ```swift
 let modelWithAdapter = ModelSpec(
@@ -113,61 +113,63 @@ let modelWithAdapter = ModelSpec(
     adapter: .huggingFace(id: "your-org/your-adapter"),
     contextLength: 262_144,
     displayName: "Fine-tuned Qwen",
-    description: "Domain-specific fine-tuned model"
+    description: "Domain-specific fine-tuned model",
+    estimatedMemoryBytes: 2_400_000_000
 )
 ```
 
-### カスタムダウンローダー
+### Custom Downloaders
 
-mlx-swift-lm 3.x の `Downloader` / `TokenizerLoader` 注入に対応しています。
-デフォルトは Hugging Face Hub ですが、S3 やアプリ内バンドル等の独自取得戦略を注入できます。
+Supports mlx-swift-lm 3.x `Downloader` / `TokenizerLoader` injection.
+The default is the Hugging Face Hub, but you can inject custom retrieval
+strategies such as S3 or in-app bundles.
 
 ```swift
 let backend = MLXBackend(
-    downloader: myCustomDownloader,   // 省略時は Hugging Face Hub
-    tokenizerLoader: nil              // 省略時は swift-transformers AutoTokenizer
+    downloader: myCustomDownloader,   // defaults to Hugging Face Hub
+    tokenizerLoader: nil              // defaults to swift-transformers AutoTokenizer
 )
 ```
 
-## アーキテクチャ
+## Architecture
 
-4 層構造で関心の分離を実現しています：
+Four-layer structure for separation of concerns:
 
 ```
-Layer 0: LLMLocalClient      プロトコル + 共有型
-Layer 1: LLMLocalModels       モデル管理
-Layer 2: LLMLocalMLX          MLX 具象実装
-Umbrella: LLMLocal            サービス + エージェントアダプタ + 再エクスポート
+Layer 0: LLMLocalClient      Protocols + shared types
+Layer 1: LLMLocalModels       Model management
+Layer 2: LLMLocalMLX          MLX concrete implementation
+Umbrella: LLMLocal            Service + agent adapter + re-exports
 ```
 
-## ドキュメント
+## Documentation
 
-詳細なガイドと API リファレンスは DocC ドキュメントを参照してください。
+See the DocC documentation for detailed guides and API reference.
 
-| ガイド | 内容 |
-|-------|------|
-| [API Reference](https://no-problem-dev.github.io/swift-llm-local/documentation/llmlocal/) | 全パブリック API |
+| Guide | Contents |
+|-------|----------|
+| [API Reference](https://no-problem-dev.github.io/swift-llm-local/documentation/llmlocal/) | All public APIs |
 
-## 要件
+## Requirements
 
 - iOS 18.0+ / macOS 15.0+
 - Swift 6.2+
 - Xcode 16.0+
 
-## 依存関係
+## Dependencies
 
-- [swift-llm-client](https://github.com/no-problem-dev/swift-llm-client) (>= 3.4.1) - LLM クライアント抽象化
-- [mlx-swift-lm](https://github.com/ml-explore/mlx-swift-lm) (3.x) - MLX 推論フレームワーク
-- [swift-huggingface](https://github.com/huggingface/swift-huggingface) - Hugging Face Hub クライアント
-- [swift-transformers](https://github.com/huggingface/swift-transformers) - トークナイザー
+- [swift-llm-client](https://github.com/no-problem-dev/swift-llm-client) (>= 3.5.1) - LLM client abstraction
+- [mlx-swift-lm](https://github.com/ml-explore/mlx-swift-lm) (3.x) - MLX inference framework
+- [swift-huggingface](https://github.com/huggingface/swift-huggingface) - Hugging Face Hub client
+- [swift-transformers](https://github.com/huggingface/swift-transformers) - Tokenizers
 
-## ライセンス
+## License
 
-MIT License - 詳細は [LICENSE](LICENSE) を参照
+MIT License - See [LICENSE](LICENSE) for details
 
-## リンク
+## Links
 
-- [完全なドキュメント](https://no-problem-dev.github.io/swift-llm-local/documentation/llmlocal/)
-- [Issue報告](https://github.com/no-problem-dev/swift-llm-local/issues)
-- [ディスカッション](https://github.com/no-problem-dev/swift-llm-local/discussions)
-- [リリースプロセス](RELEASE_PROCESS.md)
+- [Full Documentation](https://no-problem-dev.github.io/swift-llm-local/documentation/llmlocal/)
+- [Report Issues](https://github.com/no-problem-dev/swift-llm-local/issues)
+- [Discussions](https://github.com/no-problem-dev/swift-llm-local/discussions)
+- [Release Process](RELEASE_PROCESS.md)

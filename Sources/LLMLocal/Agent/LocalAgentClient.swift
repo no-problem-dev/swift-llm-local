@@ -18,12 +18,14 @@ import LLMLocalClient
 /// ## クラウド専用パラメータの扱い
 ///
 /// `cachePolicy` / `reasoningEffort` / `thinkingMode` はローカル推論に対応する
-/// 概念がないため受け取って無視します（graceful degradation）。
+/// 概念がないため受け取って無視する（graceful degradation）。
 /// ローカルモデルの思考は `<think>` タグとして出力され、`thinkingMode` に
-/// かかわらず thinking パイプラインへ流れます。
+/// かかわらず thinking パイプラインへ流れる。
 public final class LocalAgentClient: Sendable {
     private let service: LLMLocalService
 
+    /// 指定したサービスでクライアントを初期化する。
+    /// - Parameter service: ローカル推論を担う `LLMLocalService` 実装。
     public init(service: LLMLocalService) {
         self.service = service
     }
@@ -34,6 +36,18 @@ public final class LocalAgentClient: Sendable {
 extension LocalAgentClient: StructuredLLMClient {
     public typealias Model = ModelSpec
 
+    /// 単一プロンプト入力から型付き構造化レスポンスを生成する。
+    ///
+    /// `input.prompt` をユーザーメッセージに変換してから `generateWithUsage(messages:...)` に委譲する。
+    ///
+    /// - Parameters:
+    ///   - input: プロンプトを含む入力。
+    ///   - model: 使用するモデル仕様。
+    ///   - systemPrompt: システムプロンプト。`nil` の場合は省略される。
+    ///   - temperature: サンプリング温度。`nil` の場合はモデルの推奨値を使用する。
+    ///   - maxTokens: 生成トークン数の上限。`nil` の場合はモデルの推奨値を使用する。
+    /// - Returns: デコード済み型 `T` とトークン使用量を含む生成結果。
+    /// - Throws: モデルロードエラー、JSON デコードエラー等。
     public func generateWithUsage<T: StructuredProtocol>(
         input: LLMInput,
         model: ModelSpec,
@@ -50,6 +64,19 @@ extension LocalAgentClient: StructuredLLMClient {
         )
     }
 
+    /// チャット履歴から型付き構造化レスポンスを生成する。
+    ///
+    /// モデル出力を JSON としてデコードする。ローカルモデルが Markdown コードフェンスで
+    /// JSON を包んだ場合は自動的にフェンスを除去する。
+    ///
+    /// - Parameters:
+    ///   - messages: チャット履歴。
+    ///   - model: 使用するモデル仕様。
+    ///   - systemPrompt: システムプロンプト。`nil` の場合は省略される。
+    ///   - temperature: サンプリング温度。`nil` の場合はモデルの推奨値を使用する。
+    ///   - maxTokens: 生成トークン数の上限。`nil` の場合はモデルの推奨値を使用する。
+    /// - Returns: デコード済み型 `T` とトークン使用量を含む生成結果。
+    /// - Throws: モデルロードエラー、JSON デコードエラー等。
     public func generateWithUsage<T: StructuredProtocol>(
         messages: [LLMMessage],
         model: ModelSpec,
@@ -80,10 +107,10 @@ extension LocalAgentClient: StructuredLLMClient {
         )
     }
 
-    /// モデル出力から JSON ペイロードを抽出します。
+    /// モデル出力から JSON ペイロードを抽出する。
     ///
     /// ローカルモデルは JSON を Markdown コードフェンスで包むことが多いため、
-    /// フェンスがあれば内側を取り出します。
+    /// フェンスがあれば内側を取り出す。
     static func extractJSONPayload(from text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.hasPrefix("```") else { return trimmed }
@@ -100,6 +127,21 @@ extension LocalAgentClient: StructuredLLMClient {
 // MARK: - ToolCallableClient
 
 extension LocalAgentClient: ToolCallableClient {
+    /// モデルにツール定義を渡し、ツールコール計画または通常テキストを返す。
+    ///
+    /// `toolChoice` と `cachePolicy` はローカル推論では無視される（graceful degradation）。
+    ///
+    /// - Parameters:
+    ///   - messages: チャット履歴。
+    ///   - model: 使用するモデル仕様。
+    ///   - tools: モデルに提示するツール定義セット。
+    ///   - toolChoice: ツール選択ヒント（ローカルでは無視）。
+    ///   - systemPrompt: システムプロンプト。`nil` の場合は省略される。
+    ///   - temperature: サンプリング温度。`nil` の場合はモデルの推奨値を使用する。
+    ///   - maxTokens: 生成トークン数の上限。`nil` の場合はモデルの推奨値を使用する。
+    ///   - cachePolicy: プロンプトキャッシュポリシー（ローカルでは無視）。
+    /// - Returns: ツールコール一覧とテキスト出力を含むレスポンス。
+    /// - Throws: モデルがツールコールをサポートしない場合は `LLMLocalError.toolCallsUnsupported`。
     public func planToolCalls(
         messages: [LLMMessage],
         model: ModelSpec,
@@ -132,6 +174,24 @@ extension LocalAgentClient: ToolCallableClient {
 // MARK: - AgentCapableClient
 
 extension LocalAgentClient: AgentCapableClient {
+    /// エージェントの 1 ステップを非同期で実行し、完全なレスポンスを返す。
+    ///
+    /// `<think>` タグを検出して thinking ブロックとして分離する。
+    /// `responseSchema` / `thinkingMode` / `reasoningEffort` / `cachePolicy` はローカル推論では無視される。
+    ///
+    /// - Parameters:
+    ///   - messages: チャット履歴。
+    ///   - model: 使用するモデル仕様。
+    ///   - systemPrompt: システムプロンプト。`nil` の場合は省略される。
+    ///   - tools: モデルに提示するツール定義セット。
+    ///   - toolChoice: ツール選択ヒント（ローカルでは無視）。
+    ///   - responseSchema: レスポンス JSON スキーマ（ローカルでは無視）。
+    ///   - thinkingMode: 思考モード（ローカルでは無視）。
+    ///   - reasoningEffort: 推論コスト設定（ローカルでは無視）。
+    ///   - maxTokens: 生成トークン数の上限。`nil` の場合はモデルの推奨値を使用する。
+    ///   - cachePolicy: プロンプトキャッシュポリシー（ローカルでは無視）。
+    /// - Returns: テキスト・thinking・ツールコールを含む `LLMResponse`。
+    /// - Throws: モデルロードエラー等。
     public func executeAgentStep(
         messages: [LLMMessage],
         model: ModelSpec,
@@ -155,6 +215,24 @@ extension LocalAgentClient: AgentCapableClient {
         return outcome.response(model: model)
     }
 
+    /// エージェントの 1 ステップをストリームで実行し、差分イベントを逐次配信する。
+    ///
+    /// テキスト差分は `.delta(.textDelta)` 、thinking 差分は `.delta(.thinkingDelta)` として流れ、
+    /// 完了時に `.completed(LLMResponse)` を発行してストリームを終了する。
+    /// `responseSchema` / `thinkingMode` / `reasoningEffort` / `cachePolicy` はローカル推論では無視される。
+    ///
+    /// - Parameters:
+    ///   - messages: チャット履歴。
+    ///   - model: 使用するモデル仕様。
+    ///   - systemPrompt: システムプロンプト。`nil` の場合は省略される。
+    ///   - tools: モデルに提示するツール定義セット。
+    ///   - toolChoice: ツール選択ヒント（ローカルでは無視）。
+    ///   - responseSchema: レスポンス JSON スキーマ（ローカルでは無視）。
+    ///   - thinkingMode: 思考モード（ローカルでは無視）。
+    ///   - reasoningEffort: 推論コスト設定（ローカルでは無視）。
+    ///   - maxTokens: 生成トークン数の上限。`nil` の場合はモデルの推奨値を使用する。
+    ///   - cachePolicy: プロンプトキャッシュポリシー（ローカルでは無視）。
+    /// - Returns: `StreamingAgentEvent` の非同期スロー列。
     public func streamAgentStep(
         messages: [LLMMessage],
         model: ModelSpec,
@@ -228,8 +306,8 @@ extension LocalAgentClient {
     /// 全 conformance が共有する生成コア。
     ///
     /// サービスの生成ストリームを消費し、`<think>` タグを thinking として分離、
-    /// ツールコールと実測トークン数を収集します。
-    /// `onDelta` を渡すとテキスト/思考の差分をリアルタイムに通知します。
+    /// ツールコールと実測トークン数を収集する。
+    /// `onDelta` を渡すとテキスト/思考の差分をリアルタイムに通知する。
     private func runGeneration(
         messages: [LLMMessage],
         model: ModelSpec,

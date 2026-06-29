@@ -1,17 +1,17 @@
 # Getting Started
 
-LLMLocal をプロジェクトに追加し、最初のオンデバイス LLM 推論を動かします。
+LLMLocal をプロジェクトに追加し、最初のオンデバイス LLM 推論を動かす。
 
-## Installation
+## インストール
 
-Package.swift の `dependencies` に追加してください。
+Package.swift の `dependencies` に追加する。
 
 ```swift
 // Package.swift
 dependencies: [
     .package(
         url: "https://github.com/no-problem-dev/swift-llm-local.git",
-        from: "2.0.0"
+        from: "2.2.6"
     )
 ],
 targets: [
@@ -24,12 +24,12 @@ targets: [
 ]
 ```
 
-## Basic Usage
+## 基本的な使い方
 
 ### 1. サービスの構築
 
-``LLMLocalService`` は推論バックエンドとモデルレジストリを束ねるファサードです。
-`MLXBackend` と `ModelRegistry` を渡して初期化します。
+``LLMLocalService`` は推論バックエンドとモデルレジストリを束ねるファサード。
+`MLXBackend` と `ModelRegistry` を渡して初期化する。
 
 ```swift
 import LLMLocal
@@ -40,7 +40,7 @@ let service = LLMLocalService(
 )
 ```
 
-メモリ警告時に自動アンロードするには `MemoryMonitor` を渡します。
+メモリ警告時に自動アンロードするには `MemoryMonitor` を渡す。
 
 ```swift
 let monitor = MemoryMonitor()
@@ -54,8 +54,8 @@ await service.startMemoryMonitoring()
 
 ### 2. モデルの選択
 
-``ModelPresets`` に主要なオープンモデルのプリセットが用意されています。
-`estimatedMemoryBytes` でデバイスへの適合を確認できます。
+``ModelPresets`` に主要なオープンモデルのプリセットが用意されている。
+`estimatedMemoryBytes` でデバイスへの適合を確認できる。
 
 ```swift
 // 軽量モデル（~350 MB）
@@ -70,8 +70,8 @@ let all = ModelPresets.all
 
 ### 3. テキスト生成
 
-``LLMLocalService/generate(model:prompt:config:)`` はモデルを自動ロードしてストリームを返します。
-モデルがまだダウンロードされていない場合は自動的に Hugging Face Hub からダウンロードします。
+``LLMLocalService/generate(model:prompt:config:)`` はモデルを自動ロードしてストリームを返す。
+モデルがまだダウンロードされていない場合は自動的に Hugging Face Hub からダウンロードする。
 
 ```swift
 let stream = await service.generate(
@@ -84,7 +84,7 @@ for try await token in stream {
 }
 ```
 
-生成パラメータを調整するには `GenerationConfig` を渡します。
+生成パラメータを調整するには `GenerationConfig` を渡す。
 
 ```swift
 let config = GenerationConfig(
@@ -104,8 +104,8 @@ for try await token in await service.generate(
 
 ### 4. ツールコール
 
-`generateFromMessages(model:messages:systemPrompt:config:tools:)` でエージェントループを構築できます。
-ツールコール対応可否はモデルごとに `ModelProfile.toolCallSupport` で管理されています。
+`generateFromMessages(model:messages:systemPrompt:config:tools:)` でエージェントループを構築できる。
+ツールコール対応可否はモデルごとに `ModelProfile.toolCallSupport` で管理されている。
 
 ```swift
 let tools: [ToolDefinition] = [weatherTool]
@@ -128,8 +128,8 @@ for try await output in stream {
 
 ### 5. ダウンロード済みモデルの管理
 
-``LLMLocalService`` はディスクの実体を正として管理します。
-インメモリのレジストリではなくファイルシステムを参照するため、アプリ再起動後も正確に判定できます。
+``LLMLocalService`` はディスクの実体を正として管理する。
+インメモリのレジストリではなくファイルシステムを参照するため、アプリ再起動後も正確に判定できる。
 
 ```swift
 // ダウンロード済み確認

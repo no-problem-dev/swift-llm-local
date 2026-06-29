@@ -6,13 +6,13 @@ public enum GenerationOutput: Sendable {
     case text(String)
     /// モデルからのツール呼び出しリクエスト。
     case toolCall(ToolCall)
-    /// 生成完了時のトークン統計。ストリームの最後に1回だけ流れます。
+    /// 生成完了時のトークン統計。ストリームの最後に1回だけ流れる。
     case info(GenerationInfo)
 }
 
 /// 生成完了時のトークン統計
 ///
-/// バックエンドが実測したトークン数を上位層（usage 報告・統計）に伝搬します。
+/// バックエンドが実測したトークン数を上位層（usage 報告・統計）に伝搬する。
 public struct GenerationInfo: Sendable, Equatable {
     /// 入力プロンプトのトークン数。
     public let promptTokenCount: Int
@@ -21,7 +21,7 @@ public struct GenerationInfo: Sendable, Equatable {
     /// 生成スループット（トークン/秒）。
     public let tokensPerSecond: Double
 
-    /// 生成統計を初期化します。
+    /// 生成統計を初期化する。
     /// - Parameters:
     ///   - promptTokenCount: 入力プロンプトのトークン数。
     ///   - generationTokenCount: 生成されたトークン数。

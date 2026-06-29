@@ -6,7 +6,7 @@ import LLMLocalClient
 /// バックグラウンドダウンロードの追跡に使用する内部状態
 public enum DownloadState: Sendable {
     /// ダウンロードが進行中。
-    /// - Note: このケースは URLSession のタスクが開始直後に設定されます。
+    /// - Note: URLSession のタスクが開始直後に設定される。
     case downloading
 
     /// レジュームデータを保存してダウンロードが一時停止中。
@@ -41,10 +41,10 @@ public enum BackgroundDownloadError: Error, Sendable, Equatable {
 
 /// バックグラウンドダウンロード操作のプロトコル
 ///
-/// テスト用の依存性注入を可能にします。実装は実際の URLSession
-/// バックグラウンドダウンロード動作またはテストスタブを提供します。
+/// テスト用の依存性注入を可能にする。実装は実際の URLSession
+/// バックグラウンドダウンロード動作またはテストスタブを提供する。
 public protocol BackgroundDownloadDelegate: Sendable {
-    /// バックグラウンドダウンロードを開始または再開します。
+    /// バックグラウンドダウンロードを開始または再開する。
     ///
     /// - Parameters:
     ///   - url: ダウンロード元のリモートURL。
@@ -53,19 +53,19 @@ public protocol BackgroundDownloadDelegate: Sendable {
     /// - Throws: ダウンロード中に発生したエラー。
     func startDownload(url: URL, resumeData: Data?) async throws -> URL
 
-    /// 指定されたURLのダウンロードが再開可能かを確認します。
+    /// 指定されたURLのダウンロードが再開可能かを確認する。
     ///
     /// - Parameter url: 確認するリモートURL。
     /// - Returns: レジュームデータが利用可能な場合は `true`。
     func canResume(for url: URL) -> Bool
 
-    /// URLに対する保存済みレジュームデータを取得します（存在する場合）。
+    /// URLに対する保存済みレジュームデータを取得する（存在する場合）。
     ///
     /// - Parameter url: 検索するリモートURL。
     /// - Returns: レジュームデータ。保存されていない場合は `nil`。
     func resumeData(for url: URL) -> Data?
 
-    /// アクティブなダウンロードをキャンセルし、レジュームデータを返します。
+    /// アクティブなダウンロードをキャンセルし、レジュームデータを返す。
     ///
     /// - Parameter url: キャンセルするリモートURL。
     /// - Returns: 利用可能なレジュームデータ。なければ `nil`。
@@ -76,8 +76,8 @@ public protocol BackgroundDownloadDelegate: Sendable {
 
 /// ネットワークアクセスなしでバックグラウンドダウンロードをシミュレートするデフォルトスタブデリゲート
 ///
-/// カスタムデリゲートが提供されない場合のデフォルトデリゲートとして使用されます。
-/// ダウンロードURLの最終パスコンポーネントに基づくシミュレートされたローカルファイルURLを返します。
+/// カスタムデリゲートが提供されない場合のデフォルトデリゲートとして使用される。
+/// ダウンロードURLの最終パスコンポーネントに基づくシミュレートされたローカルファイルURLを返す。
 struct StubBackgroundDownloadDelegate: BackgroundDownloadDelegate, Sendable {
 
     init() {}
@@ -105,11 +105,11 @@ struct StubBackgroundDownloadDelegate: BackgroundDownloadDelegate, Sendable {
 /// レジューム機能付きのバックグラウンドモデルダウンロードを管理するアクター
 ///
 /// `BackgroundDownloader` は大容量モデルファイルのダウンロードに対して、
-/// 一時停止・再開・キャンセル操作を提供します。レジュームデータをメモリに保存し、
-/// 実際のダウンロード処理を ``BackgroundDownloadDelegate`` に委譲します。
+/// 一時停止・再開・キャンセル操作を提供する。レジュームデータをメモリに保存し、
+/// 実際のダウンロード処理を ``BackgroundDownloadDelegate`` に委譲する。
 ///
-/// これはライブラリレベルのアクターです。アプリ側は独自の
-/// App Delegate で URLSession バックグラウンドセッションイベントを処理します。
+/// ライブラリレベルのアクター。アプリ側は独自の
+/// App Delegate で URLSession バックグラウンドセッションイベントを処理する。
 ///
 /// ## Usage
 ///
@@ -134,13 +134,13 @@ public actor BackgroundDownloader {
     /// バックグラウンドダウンロードデリゲート（テスト用に注入可能）。
     private let delegate: any BackgroundDownloadDelegate
 
-    /// 新しいバックグラウンドダウンローダーを作成します。
+    /// 新しいバックグラウンドダウンローダーを作成する。
     ///
     /// - Parameters:
     ///   - storageDirectory: レジュームデータをディスクに保存するディレクトリ。
     ///     デフォルトは `~/Library/Application Support/LLMLocal/bg-downloads`。
     ///   - delegate: ダウンロードを実行するオプションのデリゲート。
-    ///     `nil` の場合、``StubBackgroundDownloadDelegate`` が使用されます。
+    ///     `nil` の場合、``StubBackgroundDownloadDelegate`` を使用する。
     public init(
         storageDirectory: URL? = nil,
         delegate: (any BackgroundDownloadDelegate)? = nil
@@ -154,10 +154,10 @@ public actor BackgroundDownloader {
 
     // MARK: - Public API
 
-    /// URLからのダウンロードを開始または再開します。
+    /// URLからのダウンロードを開始または再開する。
     ///
-    /// このURLのレジュームデータが存在する場合、ダウンロードの再開に使用されます。
-    /// ダウンロード完了時にローカルファイルURLを返します。
+    /// このURLのレジュームデータが存在する場合、ダウンロードの再開に使用される。
+    /// ダウンロード完了時にローカルファイルURLを返す。
     ///
     /// - Parameter url: ダウンロードするリモートURL。
     /// - Returns: ダウンロードが保存されたローカルファイルURL。
@@ -191,7 +191,7 @@ public actor BackgroundDownloader {
         }
     }
 
-    /// ダウンロードを一時停止し、レジュームデータを保存します。
+    /// ダウンロードを一時停止し、レジュームデータを保存する。
     ///
     /// - Parameter url: ダウンロードを一時停止するリモートURL。
     /// - Throws: アクティブなダウンロードが存在しない場合は ``BackgroundDownloadError/notDownloading``。
@@ -213,7 +213,7 @@ public actor BackgroundDownloader {
         }
     }
 
-    /// 一時停止したダウンロードを再開します。
+    /// 一時停止したダウンロードを再開する。
     ///
     /// - Parameter url: ダウンロードを再開するリモートURL。
     /// - Returns: ダウンロード完了時のローカルファイルURL。
@@ -227,9 +227,9 @@ public actor BackgroundDownloader {
         return try await download(from: url)
     }
 
-    /// ダウンロードをキャンセルし、関連するすべての状態をクリアします。
+    /// ダウンロードをキャンセルし、関連するすべての状態をクリアする。
     ///
-    /// このURLのアクティブなダウンロードがない場合、このメソッドは何もしません。
+    /// このURLのアクティブなダウンロードがない場合、このメソッドは何もしない。
     ///
     /// - Parameter url: キャンセルするリモートURL。
     public func cancel(url: URL) async throws {
@@ -260,7 +260,7 @@ public actor BackgroundDownloader {
         resumeDataStore[url] != nil
     }
 
-    /// すべてのアクティブなダウンロードURLを返します。
+    /// すべてのアクティブなダウンロードURLを返す。
     ///
     /// - Returns: 現在ダウンロード中のURLの配列。
     public func activeDownloadURLs() -> [URL] {
@@ -274,10 +274,10 @@ public actor BackgroundDownloader {
 
     // MARK: - Internal (for testing)
 
-    /// URLをアクティブダウンロード中としてマークします。
+    /// URLをアクティブダウンロード中としてマークする。
     ///
     /// テスト目的のヘルパー。一時停止やキャンセルが可能な
-    /// 進行中のダウンロードをシミュレートします。
+    /// 進行中のダウンロードをシミュレートする。
     ///
     /// - Parameter url: ダウンロード中としてマークするURL。
     func markAsDownloading(_ url: URL) {

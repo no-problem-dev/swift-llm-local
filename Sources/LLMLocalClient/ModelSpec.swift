@@ -23,13 +23,13 @@ public struct ModelSpec: Sendable, Hashable, Codable {
 
     /// モデルの推定メモリ使用量（バイト単位）。
     ///
-    /// 量子化後の推論時に必要なおおよそのメモリ量を示します。
-    /// KV キャッシュやランタイムオーバーヘッドを含む概算値です。
+    /// 量子化後の推論時に必要なおおよそのメモリ量を示す。
+    /// KV キャッシュやランタイムオーバーヘッドを含む概算値。
     public let estimatedMemoryBytes: UInt64
 
     /// モデルの特性・能力プロファイル。
     ///
-    /// ツールコール対応度、日本語力、量子化情報などを含みます。
+    /// ツールコール対応度、日本語力、量子化情報などを含む。
     public let profile: ModelProfile?
 
     /// このモデルの推奨生成設定（サンプリング・KV キャッシュ・思考モード）。
@@ -38,7 +38,7 @@ public struct ModelSpec: Sendable, Hashable, Codable {
     /// 呼び出し側はこれを基準に `maxTokens` などだけを上書きする。
     public let recommendedGeneration: GenerationConfig
 
-    /// 新しいモデル仕様を作成します。
+    /// 新しいモデル仕様を作成する。
     /// - Parameters:
     ///   - id: このモデル仕様の一意識別子。
     ///   - base: ベースモデルの重みの所在。
@@ -73,7 +73,7 @@ public struct ModelSpec: Sendable, Hashable, Codable {
 }
 
 extension ModelSpec {
-    /// 推定メモリ使用量を人間可読な文字列で返します（例: "2.3 GB"）。
+    /// 推定メモリ使用量を人間可読な文字列で返す（例: "2.3 GB"）。
     public var formattedMemorySize: String {
         let formatter = ByteCountFormatter()
         formatter.countStyle = .memory
