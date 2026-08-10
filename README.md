@@ -24,7 +24,7 @@ On-device LLM inference Swift package for iOS / macOS
 ```swift
 // Package.swift
 dependencies: [
-    .package(url: "https://github.com/no-problem-dev/swift-llm-local.git", .upToNextMajor(from: "2.2.6"))
+    .package(url: "https://github.com/no-problem-dev/swift-llm-local.git", .upToNextMajor(from: "3.0.0"))
 ]
 ```
 
