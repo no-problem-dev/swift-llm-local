@@ -13,5 +13,5 @@
 // - ToolCall (re-exported from LLMTool)
 // - JSONSchema (re-exported from LLMClient)
 
-@_exported import LLMClient
-@_exported import LLMTool
+import LLMClient
+import LLMTool

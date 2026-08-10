@@ -1,3 +1,5 @@
+import LLMTool
+import LLMClient
 import Foundation
 import LLMLocalClient
 import MLXLMCommon

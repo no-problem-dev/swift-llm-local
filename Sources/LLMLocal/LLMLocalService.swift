@@ -1,3 +1,4 @@
+import LLMTool
 import LLMClient
 import LLMLocalClient
 import LLMLocalMLX

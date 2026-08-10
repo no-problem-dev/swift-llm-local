@@ -1,3 +1,4 @@
+import LLMTool
 import Foundation
 import Testing
 import LLMLocalClient
