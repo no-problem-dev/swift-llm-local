@@ -12,12 +12,15 @@ public enum DownloadState: Sendable, Equatable {
     /// A transfer has been handed to the delegate and has not returned yet.
     case downloading
 
-    /// The transfer was stopped and its resume data kept so it can be restarted.
+    /// The transfer was stopped, carrying the resume data when the transport produced any.
     ///
-    /// When the delegate hands back no resume data, an empty `Data` is stored rather than nothing,
-    /// so a paused URL always looks resumable even when there is nothing to resume from.
-    /// - Parameter resumeData: Bytes the delegate returned when the transfer was cancelled.
-    case paused(resumeData: Data)
+    /// `nil` means the transport could not make the transfer resumable. It is kept distinct from
+    /// empty data because the two lead to opposite decisions: a resumable pause continues where it
+    /// left off, and a non-resumable one has to start from the first byte — which, for a model, is
+    /// gigabytes the caller should be told about rather than discover from the progress bar.
+    /// - Parameter resumeData: Bytes the delegate returned when the transfer was cancelled, or
+    ///   `nil` when it returned none.
+    case paused(resumeData: Data?)
 }
 
 // MARK: - BackgroundDownloadError
@@ -45,16 +48,20 @@ public protocol BackgroundDownloadDelegate: Sendable {
     ///
     /// - Parameters:
     ///   - url: Remote URL to fetch.
-    ///   - resumeData: Bytes from a transfer that was cancelled earlier.
-    ///     ``BackgroundDownloader`` passes empty data rather than `nil` when a pause produced no
-    ///     resume data, so treat empty data as "start from the beginning".
+    ///   - resumeData: Bytes from a transfer that was cancelled earlier, or `nil` to start from
+    ///     the beginning. ``BackgroundDownloader`` passes `nil` when the pause produced no resume
+    ///     data; it does not substitute empty data.
     /// - Returns: Location of the finished file on disk.
     func startDownload(url: URL, resumeData: Data?) async throws -> URL
 
     /// Stops an in-flight transfer and hands back resume data when the transport supports it.
     ///
-    /// Called for both pause and cancel. Returning `nil` is taken as "not resumable": a pause
-    /// still marks the URL paused, and the next start receives empty resume data.
+    /// Called for both pause and cancel. Returning `nil` is taken as "not resumable": the URL is
+    /// still marked paused, but no resume data is stored, so ``BackgroundDownloader/resume(url:)``
+    /// refuses rather than silently restarting from the first byte.
+    ///
+    /// Throwing means the transfer was **not** stopped. ``BackgroundDownloader`` keeps its
+    /// bookkeeping in that case, so the URL goes on reporting as in flight — which it is.
     ///
     /// - Parameter url: Remote URL whose transfer should stop.
     /// - Returns: Resume data, or `nil` when the transfer cannot be resumed.
@@ -146,21 +153,27 @@ public actor BackgroundDownloader {
 
     /// Stops the tracked transfer for a URL and keeps whatever resume data comes back.
     ///
-    /// When the delegate returns no resume data the URL is still marked paused and empty data is
-    /// stored, so ``hasResumeData(for:)`` answers `true` and ``resume(url:)`` succeeds while the
-    /// transfer actually restarts from the first byte. What happens to a suspended
-    /// ``download(from:)`` call is up to the delegate.
+    /// When the delegate returns no resume data, the URL is marked paused but nothing is stored, so
+    /// ``hasResumeData(for:)`` answers `false` and ``resume(url:)`` throws
+    /// ``BackgroundDownloadError/noResumeData``. That is the honest answer to "can this continue
+    /// where it left off": storing empty data instead made every paused URL look resumable and
+    /// turned ``resume(url:)`` into a silent restart from byte zero of a multi-gigabyte file. A
+    /// caller that wants the restart asks for it with ``download(from:)``.
+    ///
+    /// What happens to a suspended ``download(from:)`` call is up to the delegate.
     ///
     /// - Parameter url: Remote URL to pause.
     /// - Throws: ``BackgroundDownloadError/notDownloading`` when the URL is not tracked, and
-    ///   whatever the delegate throws while cancelling.
+    ///   whatever the delegate throws while cancelling — in which case nothing is marked paused,
+    ///   because the transfer was not stopped.
     public func pause(url: URL) async throws {
         guard activeDownloads[url] != nil else {
             throw BackgroundDownloadError.notDownloading
         }
 
-        // Get resume data from the delegate
-        let data = try await delegate.cancelDownload(for: url) ?? Data()
+        // Get resume data from the delegate. A throw here means the transfer is still running, so
+        // the bookkeeping is left alone and the URL keeps reporting as in flight.
+        let data = try await delegate.cancelDownload(for: url)
 
         resumeDataStore[url] = data
         activeDownloads[url] = .paused(resumeData: data)
@@ -168,8 +181,9 @@ public actor BackgroundDownloader {
 
     /// Restarts a paused transfer from its stored resume data.
     ///
-    /// This is ``download(from:)`` with a precondition: the stored data is picked up there, so an
-    /// empty stored value silently restarts from the beginning.
+    /// This is ``download(from:)`` with a precondition: the stored data is picked up there. A pause
+    /// the transport could not make resumable stores nothing, so this refuses rather than restarting
+    /// from the first byte under the name "resume".
     ///
     /// - Parameter url: Remote URL to restart.
     /// - Returns: Location the delegate reported for the finished file.
@@ -186,13 +200,19 @@ public actor BackgroundDownloader {
     /// Drops all tracking for a URL and tells the delegate to stop.
     ///
     /// Any resume data is discarded, so the next ``download(from:)`` for the URL starts from the
-    /// first byte. The delegate's error is swallowed, so this never actually fails despite being
-    /// throwing. An untracked URL is a no-op.
+    /// first byte. An untracked URL is a no-op.
+    ///
+    /// The tracking is dropped only once the delegate confirms the transfer stopped. A delegate
+    /// that throws leaves everything in place and the error reaches the caller: a transfer that
+    /// refused to stop is still moving bytes, and forgetting it would leave ``isDownloading(_:)``
+    /// answering `false` about a download that is still running — and no handle left to stop it
+    /// with.
     ///
     /// - Parameter url: Remote URL to cancel.
+    /// - Throws: Whatever the delegate throws while cancelling.
     public func cancel(url: URL) async throws {
         if activeDownloads[url] != nil {
-            _ = try? await delegate.cancelDownload(for: url)
+            _ = try await delegate.cancelDownload(for: url)
         }
         activeDownloads.removeValue(forKey: url)
         resumeDataStore.removeValue(forKey: url)
@@ -210,8 +230,8 @@ public actor BackgroundDownloader {
 
     /// Reports whether a pause left resume data for the URL.
     ///
-    /// Answers `true` after a pause that produced nothing, because empty data is stored in that
-    /// case; it is not a promise that the transfer can continue where it left off.
+    /// `true` means ``resume(url:)`` has something to continue from. A pause the transport could
+    /// not make resumable answers `false`.
     ///
     /// - Parameter url: Remote URL to check.
     /// - Returns: `true` when an entry exists in the resume-data table.

@@ -15,7 +15,7 @@ MLX backend, so one import is enough for an app.
 ```swift
 import LLMLocal
 
-let service = LLMLocalService(
+let service = try LLMLocalService(
     backend: MLXBackend(),
     modelRegistry: ModelRegistry()
 )
@@ -53,7 +53,7 @@ model against the device before you load it.
 
 ```swift
 let monitor = MemoryMonitor()
-let service = LLMLocalService(
+let service = try LLMLocalService(
     backend: MLXBackend(),
     modelRegistry: ModelRegistry(),
     memoryMonitor: monitor

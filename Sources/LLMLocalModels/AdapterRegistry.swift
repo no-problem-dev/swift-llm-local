@@ -33,33 +33,6 @@ public protocol AdapterNetworkDelegate: Sendable {
     func downloadHuggingFace(id: String, destination: URL) async throws
 }
 
-// MARK: - StubAdapterNetworkDelegate
-
-/// Default delegate that writes a placeholder instead of downloading.
-///
-/// Used when no network delegate is injected. It creates the parent directory and writes a short
-/// marker string at the destination path, which is enough for the registry to record a cache entry
-/// but is not something a model can load.
-struct StubAdapterNetworkDelegate: AdapterNetworkDelegate {
-    func downloadGitHubRelease(
-        repo: String, tag: String, asset: String, destination: URL
-    ) async throws {
-        try FileManager.default.createDirectory(
-            at: destination.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        try Data("stub-adapter".utf8).write(to: destination)
-    }
-
-    func downloadHuggingFace(id: String, destination: URL) async throws {
-        try FileManager.default.createDirectory(
-            at: destination.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        try Data("stub-adapter".utf8).write(to: destination)
-    }
-}
-
 // MARK: - AdapterInfo
 
 /// An adapter recorded as downloaded, with the version and path kept for it.
@@ -150,7 +123,7 @@ public struct AdapterInfo: Sendable, Codable {
 /// ## Usage
 ///
 /// ```swift
-/// let registry = AdapterRegistry()
+/// let registry = try AdapterRegistry(networkDelegate: myDownloader)
 ///
 /// // Resolve an adapter source to a local file URL
 /// let localURL = try await registry.resolve(
@@ -177,8 +150,14 @@ public actor AdapterRegistry {
     /// there but will not read or decode throws.
     private let cache: any RegistryStore<AdapterInfo>
 
-    /// Performs the downloads. Defaults to a stub that writes a placeholder.
-    private let networkDelegate: any AdapterNetworkDelegate
+    /// Performs the downloads, when one was injected.
+    ///
+    /// `nil` unless the app supplied one. There is no stub standing in: the one that used to fill
+    /// the gap wrote a 13-byte text file and let the registry record it as a cached adapter, so the
+    /// mismatch surfaced much later as a load failure against a base model that had already been
+    /// fetched. Local sources, lookups, and eviction all work without a delegate, so the refusal
+    /// belongs at the one branch that needs bytes fetched.
+    private let networkDelegate: (any AdapterNetworkDelegate)?
 
     /// Creates a registry that stores adapters in a directory and records them in a JSON file.
     ///
@@ -187,30 +166,43 @@ public actor AdapterRegistry {
     ///     `~/Library/Application Support/LLMLocal/adapters`.
     ///   - registryStore: Persistence for the entries. When `nil`, `adapter-registry.json` inside
     ///     the adapter directory is used.
-    ///   - networkDelegate: Performs the downloads. When `nil`, a stub writes a placeholder file
-    ///     and no bytes are fetched.
+    ///   - networkDelegate: Performs the downloads. When `nil`, only ``resolve(_:)`` on a remote
+    ///     source is affected: it fails rather than recording a placeholder as a cached adapter.
+    /// - Throws: ``LLMLocalError/storageUnreadable(path:reason:)`` when `adapterDirectory` is `nil`
+    ///   and the system returns no Application Support directory.
     public init(
         adapterDirectory: URL? = nil,
         registryStore: (any RegistryStore<AdapterInfo>)? = nil,
         networkDelegate: (any AdapterNetworkDelegate)? = nil
-    ) {
-        let dir = adapterDirectory
-            ?? FileManager.default.urls(
-                for: .applicationSupportDirectory,
-                in: .userDomainMask
-            )
-            .first!
-            .appendingPathComponent("LLMLocal/adapters")
+    ) throws {
+        let dir = try adapterDirectory
+            ?? ApplicationSupportDirectory.url()
+                .appendingPathComponent("LLMLocal/adapters")
         self.adapterDirectory = dir
         self.cache = registryStore
             ?? FileSystemRegistryStore<AdapterInfo>(
                 directory: dir,
                 filename: "adapter-registry.json"
             )
-        self.networkDelegate = networkDelegate ?? StubAdapterNetworkDelegate()
+        self.networkDelegate = networkDelegate
     }
 
     // MARK: - Private Helpers
+
+    /// The delegate that fetches adapter bytes.
+    ///
+    /// - Throws: ``LLMLocalError/adapterMergeFailed(reason:)`` when none was supplied.
+    private func requireNetworkDelegate() throws -> any AdapterNetworkDelegate {
+        guard let networkDelegate else {
+            throw LLMLocalError.adapterMergeFailed(
+                reason: """
+                    No network delegate was supplied to AdapterRegistry, so there is nothing to \
+                    fetch the adapter with.
+                    """
+            )
+        }
+        return networkDelegate
+    }
 
     /// Reads the store into memory on first use; later calls return immediately.
     ///
@@ -244,7 +236,8 @@ public actor AdapterRegistry {
     ///
     /// - Parameter source: Adapter to resolve.
     /// - Returns: Local URL for the adapter, which the MLX backend loads as an adapter directory.
-    /// - Throws: ``LLMLocalError/adapterMergeFailed(reason:)`` when a local adapter is missing,
+    /// - Throws: ``LLMLocalError/adapterMergeFailed(reason:)`` when a local adapter is missing or
+    ///   when a remote source needs downloading and no network delegate was supplied,
     ///   ``LLMLocalError/registryUnreadable(reason:)`` when the registry cannot be read — raised
     ///   before the delegate is asked for anything, so no download is started and no file is
     ///   overwritten — and whatever the network delegate or the registry save throws.
@@ -267,7 +260,7 @@ public actor AdapterRegistry {
             }
             // Download from GitHub Releases
             let localPath = adapterDirectory.appendingPathComponent(key)
-            try await networkDelegate.downloadGitHubRelease(
+            try await requireNetworkDelegate().downloadGitHubRelease(
                 repo: repo, tag: tag, asset: asset, destination: localPath
             )
             let info = AdapterInfo(
@@ -287,7 +280,7 @@ public actor AdapterRegistry {
                 return info.localPath
             }
             let localPath = adapterDirectory.appendingPathComponent(key)
-            try await networkDelegate.downloadHuggingFace(
+            try await requireNetworkDelegate().downloadHuggingFace(
                 id: id, destination: localPath
             )
             let info = AdapterInfo(

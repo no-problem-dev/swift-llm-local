@@ -13,11 +13,14 @@ public struct DownloadedModel: Sendable, Hashable, Codable, Identifiable {
     /// Directory holding the model's configuration and weights.
     public let directory: URL
 
-    /// Bytes the files occupy on disk, or `nil` when the directory could not be measured.
+    /// Bytes the files occupy on disk.
     ///
     /// Measured by walking the directory, so it is the real cost of deleting or keeping the model,
-    /// unlike ``ModelSpec/estimatedMemoryBytes`` which estimates memory while running.
-    public let sizeInBytes: Int64?
+    /// unlike ``ModelSpec/estimatedMemoryBytes`` which estimates memory while running. Not optional:
+    /// a directory that could not be measured produces no `DownloadedModel` at all, because a value
+    /// standing in for a failed measurement is one a caller sums into a storage total and shows to
+    /// someone deciding what to delete.
+    public let sizeInBytes: Int64
 
     /// When the download most likely finished, or `nil` when the date is unavailable.
     ///
@@ -30,7 +33,7 @@ public struct DownloadedModel: Sendable, Hashable, Codable, Identifiable {
     public init(
         modelId: String,
         directory: URL,
-        sizeInBytes: Int64?,
+        sizeInBytes: Int64,
         downloadedAt: Date?
     ) {
         self.modelId = modelId
@@ -41,12 +44,11 @@ public struct DownloadedModel: Sendable, Hashable, Codable, Identifiable {
 }
 
 extension DownloadedModel {
-    /// On-disk size formatted for display, such as "2.3 GB", or an em dash when it is unknown.
+    /// On-disk size formatted for display, such as "2.3 GB".
     ///
     /// Uses the file count style, so the number matches what the Files app or Storage settings would
     /// report for the same directory.
     public var formattedSize: String {
-        guard let sizeInBytes else { return "—" }
         let formatter = ByteCountFormatter()
         formatter.countStyle = .file
         return formatter.string(fromByteCount: sizeInBytes)

@@ -8,7 +8,7 @@ struct LLMLocalErrorTests {
     // MARK: - Error case creation and associated values
 
     @Test("downloadFailed preserves modelId and reason")
-    func downloadFailed() {
+    func downloadFailed() throws {
         let error = LLMLocalError.downloadFailed(modelId: "llama-3", reason: "Network timeout")
         if case .downloadFailed(let modelId, let reason) = error {
             #expect(modelId == "llama-3")
@@ -19,7 +19,7 @@ struct LLMLocalErrorTests {
     }
 
     @Test("loadFailed preserves modelId and reason")
-    func loadFailed() {
+    func loadFailed() throws {
         let error = LLMLocalError.loadFailed(modelId: "mistral-7b", reason: "Corrupted weights")
         if case .loadFailed(let modelId, let reason) = error {
             #expect(modelId == "mistral-7b")
@@ -30,25 +30,25 @@ struct LLMLocalErrorTests {
     }
 
     @Test("modelNotLoaded case is created")
-    func modelNotLoaded() {
+    func modelNotLoaded() throws {
         let error = LLMLocalError.modelNotLoaded
         #expect(error == .modelNotLoaded)
     }
 
     @Test("loadInProgress case is created")
-    func loadInProgress() {
+    func loadInProgress() throws {
         let error = LLMLocalError.loadInProgress
         #expect(error == .loadInProgress)
     }
 
     @Test("cancelled case is created")
-    func cancelled() {
+    func cancelled() throws {
         let error = LLMLocalError.cancelled
         #expect(error == .cancelled)
     }
 
     @Test("adapterMergeFailed preserves reason")
-    func adapterMergeFailed() {
+    func adapterMergeFailed() throws {
         let error = LLMLocalError.adapterMergeFailed(reason: "Dimension mismatch")
         if case .adapterMergeFailed(let reason) = error {
             #expect(reason == "Dimension mismatch")
@@ -58,7 +58,7 @@ struct LLMLocalErrorTests {
     }
 
     @Test("toolCallsUnsupported preserves modelId")
-    func toolCallsUnsupported() {
+    func toolCallsUnsupported() throws {
         let error = LLMLocalError.toolCallsUnsupported(modelId: "gemma-2b")
         if case .toolCallsUnsupported(let modelId) = error {
             #expect(modelId == "gemma-2b")
@@ -70,7 +70,7 @@ struct LLMLocalErrorTests {
     // MARK: - Error protocol conformance
 
     @Test("conforms to Error protocol")
-    func conformsToError() {
+    func conformsToError() throws {
         let error: any Error = LLMLocalError.modelNotLoaded
         #expect(error is LLMLocalError)
     }
@@ -78,28 +78,28 @@ struct LLMLocalErrorTests {
     // MARK: - Equatable conformance
 
     @Test("same cases with same values are equal")
-    func equalCases() {
+    func equalCases() throws {
         let a = LLMLocalError.downloadFailed(modelId: "llama-3", reason: "timeout")
         let b = LLMLocalError.downloadFailed(modelId: "llama-3", reason: "timeout")
         #expect(a == b)
     }
 
     @Test("same cases with different values are not equal")
-    func differentValues() {
+    func differentValues() throws {
         let a = LLMLocalError.downloadFailed(modelId: "llama-3", reason: "timeout")
         let b = LLMLocalError.downloadFailed(modelId: "mistral-7b", reason: "timeout")
         #expect(a != b)
     }
 
     @Test("different cases are not equal")
-    func differentCases() {
+    func differentCases() throws {
         let a = LLMLocalError.modelNotLoaded
         let b = LLMLocalError.loadInProgress
         #expect(a != b)
     }
 
     @Test("simple cases without associated values are equal")
-    func simpleCasesEqual() {
+    func simpleCasesEqual() throws {
         #expect(LLMLocalError.cancelled == LLMLocalError.cancelled)
         #expect(LLMLocalError.modelNotLoaded == LLMLocalError.modelNotLoaded)
         #expect(LLMLocalError.loadInProgress == LLMLocalError.loadInProgress)
@@ -108,7 +108,7 @@ struct LLMLocalErrorTests {
     // MARK: - Sendable (compile-time check)
 
     @Test("error is Sendable")
-    func sendableCheck() async {
+    func sendableCheck() async throws {
         let error = LLMLocalError.modelNotLoaded
         let result = await sendAcrossBoundary(error)
         #expect(result == .modelNotLoaded)
@@ -130,6 +130,11 @@ private let everyCase: [LLMLocalError] = [
     .adapterMergeFailed(reason: "Dimension mismatch"),
     .toolCallsUnsupported(modelId: "gemma-2b"),
     .registryUnreadable(reason: "Decoding failed for key 'registry': truncated JSON"),
+    .storageUnreadable(
+        path: "/Library/Application Support/swift-llm-local/models/mlx-community/Qwen3-4B",
+        reason: "You don't have permission to view it."
+    ),
+    .memoryUnreadable(reason: "host_page_size failed with kern_return_t 5."),
 ]
 
 /// Exhaustive re-statement of the expected copy, used to prove `everyCase` covers the enum.
@@ -151,6 +156,10 @@ private func expectedDescription(_ error: LLMLocalError) -> String {
         "Model '\(modelId)' does not support tool calls."
     case .registryUnreadable(let reason):
         "The registry of downloaded items could not be read: \(reason)"
+    case .storageUnreadable(let path, let reason):
+        "The model storage at '\(path)' could not be read: \(reason)"
+    case .memoryUnreadable(let reason):
+        "The device's memory could not be measured: \(reason)"
     }
 }
 
@@ -158,7 +167,7 @@ private func expectedDescription(_ error: LLMLocalError) -> String {
 struct LLMLocalErrorDescriptionTests {
 
     @Test("every case describes itself in English")
-    func everyCaseIsEnglish() {
+    func everyCaseIsEnglish() throws {
         for error in everyCase {
             #expect(error.errorDescription == expectedDescription(error))
         }
@@ -167,7 +176,7 @@ struct LLMLocalErrorDescriptionTests {
     /// The descriptions reach consumers' error handling, so they must not carry Japanese copy that
     /// an English-language app would surface verbatim.
     @Test("no description contains Japanese characters")
-    func noJapaneseInDescriptions() {
+    func noJapaneseInDescriptions() throws {
         // Hiragana, katakana, CJK ideographs, and the CJK punctuation used in the old copy.
         let japanese = CharacterSet(charactersIn: "\u{3040}"..."\u{30FF}")
             .union(CharacterSet(charactersIn: "\u{4E00}"..."\u{9FFF}"))
@@ -184,7 +193,7 @@ struct LLMLocalErrorDescriptionTests {
     }
 
     @Test("localizedDescription keeps the associated values")
-    func localizedDescriptionKeepsValues() {
+    func localizedDescriptionKeepsValues() throws {
         let error = LLMLocalError.downloadFailed(modelId: "llama-3", reason: "Network timeout")
         #expect(error.localizedDescription.contains("llama-3"))
         #expect(error.localizedDescription.contains("Network timeout"))

@@ -45,8 +45,8 @@ struct LLMLocalServiceMemoryTests {
         )
         let monitor = MemoryMonitor(memoryProvider: provider)
         let backend = MockBackend()
-        let modelRegistry = ModelRegistry(cacheDirectory: dir)
-        let service = LLMLocalService(
+        let modelRegistry = try ModelRegistry(cacheDirectory: dir)
+        let service = try LLMLocalService(
             backend: backend,
             modelRegistry: modelRegistry,
             memoryMonitor: monitor
@@ -66,8 +66,8 @@ struct LLMLocalServiceMemoryTests {
         defer { LLMLocalServiceMemoryTests.removeTempDir(dir) }
 
         let backend = MockBackend()
-        let modelRegistry = ModelRegistry(cacheDirectory: dir)
-        let service = LLMLocalService(backend: backend, modelRegistry: modelRegistry)
+        let modelRegistry = try ModelRegistry(cacheDirectory: dir)
+        let service = try LLMLocalService(backend: backend, modelRegistry: modelRegistry)
 
         // Act
         let contextLength = await service.recommendedContextLength()
@@ -88,8 +88,8 @@ struct LLMLocalServiceMemoryTests {
         )
         let monitor = MemoryMonitor(memoryProvider: provider)
         let backend = MockBackend()
-        let modelRegistry = ModelRegistry(cacheDirectory: dir)
-        let service = LLMLocalService(
+        let modelRegistry = try ModelRegistry(cacheDirectory: dir)
+        let service = try LLMLocalService(
             backend: backend,
             modelRegistry: modelRegistry,
             memoryMonitor: monitor
@@ -114,8 +114,8 @@ struct LLMLocalServiceMemoryTests {
         )
         let monitor = MemoryMonitor(memoryProvider: provider)
         let backend = MockBackend()
-        let modelRegistry = ModelRegistry(cacheDirectory: dir)
-        let service = LLMLocalService(
+        let modelRegistry = try ModelRegistry(cacheDirectory: dir)
+        let service = try LLMLocalService(
             backend: backend,
             modelRegistry: modelRegistry,
             memoryMonitor: monitor
@@ -169,8 +169,8 @@ struct LLMLocalServiceMemoryTests {
         )
         let monitor = MemoryMonitor(memoryProvider: provider)
         let backend = MockBackend()
-        let modelRegistry = ModelRegistry(cacheDirectory: dir)
-        let service = LLMLocalService(
+        let modelRegistry = try ModelRegistry(cacheDirectory: dir)
+        let service = try LLMLocalService(
             backend: backend,
             modelRegistry: modelRegistry,
             memoryMonitor: monitor
@@ -192,8 +192,8 @@ struct LLMLocalServiceMemoryTests {
         defer { LLMLocalServiceMemoryTests.removeTempDir(dir) }
 
         let backend = MockBackend()
-        let modelRegistry = ModelRegistry(cacheDirectory: dir)
-        let service = LLMLocalService(backend: backend, modelRegistry: modelRegistry)
+        let modelRegistry = try ModelRegistry(cacheDirectory: dir)
+        let service = try LLMLocalService(backend: backend, modelRegistry: modelRegistry)
 
         // Act: should not crash
         await service.startMemoryMonitoring()
@@ -211,10 +211,10 @@ struct LLMLocalServiceMemoryTests {
         defer { LLMLocalServiceMemoryTests.removeTempDir(dir) }
 
         let backend = MockBackend()
-        let modelRegistry = ModelRegistry(cacheDirectory: dir)
+        let modelRegistry = try ModelRegistry(cacheDirectory: dir)
 
         // Act: the old init signature should still work
-        let service = LLMLocalService(backend: backend, modelRegistry: modelRegistry)
+        let service = try LLMLocalService(backend: backend, modelRegistry: modelRegistry)
 
         // Assert
         let contextLength = await service.recommendedContextLength()
@@ -233,8 +233,8 @@ struct LLMLocalServiceMemoryTests {
         )
         let monitor = MemoryMonitor(memoryProvider: provider)
         let backend = MockBackend()
-        let modelRegistry = ModelRegistry(cacheDirectory: dir)
-        let service = LLMLocalService(
+        let modelRegistry = try ModelRegistry(cacheDirectory: dir)
+        let service = try LLMLocalService(
             backend: backend,
             modelRegistry: modelRegistry,
             memoryMonitor: monitor
@@ -260,8 +260,8 @@ struct LLMLocalServiceMemoryTests {
         )
         let monitor = MemoryMonitor(memoryProvider: provider)
         let backend = MockBackend()
-        let modelRegistry = ModelRegistry(cacheDirectory: dir)
-        let service = LLMLocalService(
+        let modelRegistry = try ModelRegistry(cacheDirectory: dir)
+        let service = try LLMLocalService(
             backend: backend,
             modelRegistry: modelRegistry,
             memoryMonitor: monitor
@@ -278,7 +278,7 @@ struct LLMLocalServiceMemoryTests {
         )
 
         // Act
-        let compatible = await service.isModelCompatible(spec)
+        let compatible = try await service.isModelCompatible(spec)
 
         // Assert
         #expect(compatible == true)
@@ -296,8 +296,8 @@ struct LLMLocalServiceMemoryTests {
         )
         let monitor = MemoryMonitor(memoryProvider: provider)
         let backend = MockBackend()
-        let modelRegistry = ModelRegistry(cacheDirectory: dir)
-        let service = LLMLocalService(
+        let modelRegistry = try ModelRegistry(cacheDirectory: dir)
+        let service = try LLMLocalService(
             backend: backend,
             modelRegistry: modelRegistry,
             memoryMonitor: monitor
@@ -314,7 +314,7 @@ struct LLMLocalServiceMemoryTests {
         )
 
         // Act
-        let compatible = await service.isModelCompatible(spec)
+        let compatible = try await service.isModelCompatible(spec)
 
         // Assert
         #expect(compatible == false)
@@ -333,15 +333,15 @@ struct LLMLocalServiceMemoryTests {
         )
         let monitor = MemoryMonitor(memoryProvider: provider)
         let backend = MockBackend()
-        let modelRegistry = ModelRegistry(cacheDirectory: dir)
-        let service = LLMLocalService(
+        let modelRegistry = try ModelRegistry(cacheDirectory: dir)
+        let service = try LLMLocalService(
             backend: backend,
             modelRegistry: modelRegistry,
             memoryMonitor: monitor
         )
 
         // Act
-        let maxMemory = await service.maxAllowedModelMemory()
+        let maxMemory = try await service.maxAllowedModelMemory()
 
         // Assert
         let expected = UInt64(Double(totalMem) * 0.8)

@@ -24,9 +24,9 @@ struct IntegrationTests {
     @Test("Full flow: Service → Backend → load → generate → stats")
     func fullFlowGeneratesTokensAndStats() async throws {
         // Setup
-        let backend = MLXBackend()
-        let modelRegistry = ModelRegistry()
-        let service = LLMLocalService(backend: backend, modelRegistry: modelRegistry)
+        let backend = try MLXBackend()
+        let modelRegistry = try ModelRegistry()
+        let service = try LLMLocalService(backend: backend, modelRegistry: modelRegistry)
 
         // Use a short prompt and limit tokens to minimize execution time
         let config = GenerationConfig(maxTokens: 50, temperature: 0.7, topP: 0.9)
@@ -63,9 +63,9 @@ struct IntegrationTests {
     @Test("Error handling: Invalid model ID → loadFailed")
     func invalidModelIdThrowsLoadFailed() async throws {
         // Setup
-        let backend = MLXBackend()
-        let modelRegistry = ModelRegistry()
-        let service = LLMLocalService(backend: backend, modelRegistry: modelRegistry)
+        let backend = try MLXBackend()
+        let modelRegistry = try ModelRegistry()
+        let service = try LLMLocalService(backend: backend, modelRegistry: modelRegistry)
 
         // Create a model spec with invalid HuggingFace ID
         let invalidModel = ModelSpec(
@@ -106,9 +106,9 @@ struct IntegrationTests {
     @Test("Cancellation: Start generate, cancel the task")
     func cancellationFinishesCleanly() async throws {
         // Setup
-        let backend = MLXBackend()
-        let modelRegistry = ModelRegistry()
-        let service = LLMLocalService(backend: backend, modelRegistry: modelRegistry)
+        let backend = try MLXBackend()
+        let modelRegistry = try ModelRegistry()
+        let service = try LLMLocalService(backend: backend, modelRegistry: modelRegistry)
 
         // Use a longer generation to ensure we can cancel mid-stream
         let config = GenerationConfig(maxTokens: 200, temperature: 0.7, topP: 0.9)
@@ -158,9 +158,9 @@ struct IntegrationTests {
     @Test("Re-generation: Generate without unloading, then generate again")
     func reGenerationWorksWithoutReloading() async throws {
         // Setup
-        let backend = MLXBackend()
-        let modelRegistry = ModelRegistry()
-        let service = LLMLocalService(backend: backend, modelRegistry: modelRegistry)
+        let backend = try MLXBackend()
+        let modelRegistry = try ModelRegistry()
+        let service = try LLMLocalService(backend: backend, modelRegistry: modelRegistry)
 
         let config = GenerationConfig(maxTokens: 20)
         let prompt1 = "What is Swift?"
@@ -205,9 +205,9 @@ struct IntegrationTests {
     @Test("Stats validation: After generation, check GenerationStats")
     func generationStatsAreValid() async throws {
         // Setup
-        let backend = MLXBackend()
-        let modelRegistry = ModelRegistry()
-        let service = LLMLocalService(backend: backend, modelRegistry: modelRegistry)
+        let backend = try MLXBackend()
+        let modelRegistry = try ModelRegistry()
+        let service = try LLMLocalService(backend: backend, modelRegistry: modelRegistry)
 
         let config = GenerationConfig(maxTokens: 30)
         let prompt = "Explain generics in Swift."

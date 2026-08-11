@@ -47,8 +47,8 @@ struct LLMLocalServiceTests {
             let dir = try LLMLocalServiceTests.makeTempDir()
             defer { LLMLocalServiceTests.removeTempDir(dir) }
             let backend = MockBackend()
-            let modelRegistry = ModelRegistry(cacheDirectory: dir)
-            let service = LLMLocalService(backend: backend, modelRegistry: modelRegistry)
+            let modelRegistry = try ModelRegistry(cacheDirectory: dir)
+            let service = try LLMLocalService(backend: backend, modelRegistry: modelRegistry)
             let spec = LLMLocalServiceTests.sampleSpec()
 
             // Act
@@ -72,8 +72,8 @@ struct LLMLocalServiceTests {
             let dir = try LLMLocalServiceTests.makeTempDir()
             defer { LLMLocalServiceTests.removeTempDir(dir) }
             let backend = MockBackend()
-            let modelRegistry = ModelRegistry(cacheDirectory: dir)
-            let service = LLMLocalService(backend: backend, modelRegistry: modelRegistry)
+            let modelRegistry = try ModelRegistry(cacheDirectory: dir)
+            let service = try LLMLocalService(backend: backend, modelRegistry: modelRegistry)
             let spec = LLMLocalServiceTests.sampleSpec()
 
             // Pre-load the model into the backend
@@ -102,8 +102,8 @@ struct LLMLocalServiceTests {
             let dir = try LLMLocalServiceTests.makeTempDir()
             defer { LLMLocalServiceTests.removeTempDir(dir) }
             let backend = MockBackend()
-            let modelRegistry = ModelRegistry(cacheDirectory: dir)
-            let service = LLMLocalService(backend: backend, modelRegistry: modelRegistry)
+            let modelRegistry = try ModelRegistry(cacheDirectory: dir)
+            let service = try LLMLocalService(backend: backend, modelRegistry: modelRegistry)
             let spec = LLMLocalServiceTests.sampleSpec()
 
             // Act
@@ -123,8 +123,8 @@ struct LLMLocalServiceTests {
             defer { LLMLocalServiceTests.removeTempDir(dir) }
             let backend = MockBackend()
             await backend.setShouldThrow(.loadFailed(modelId: "test", reason: "test error"))
-            let modelRegistry = ModelRegistry(cacheDirectory: dir)
-            let service = LLMLocalService(backend: backend, modelRegistry: modelRegistry)
+            let modelRegistry = try ModelRegistry(cacheDirectory: dir)
+            let service = try LLMLocalService(backend: backend, modelRegistry: modelRegistry)
             let spec = LLMLocalServiceTests.sampleSpec()
 
             // Act & Assert
@@ -146,8 +146,8 @@ struct LLMLocalServiceTests {
             let dir = try LLMLocalServiceTests.makeTempDir()
             defer { LLMLocalServiceTests.removeTempDir(dir) }
             let backend = MockBackend()
-            let modelRegistry = ModelRegistry(cacheDirectory: dir)
-            let service = LLMLocalService(backend: backend, modelRegistry: modelRegistry)
+            let modelRegistry = try ModelRegistry(cacheDirectory: dir)
+            let service = try LLMLocalService(backend: backend, modelRegistry: modelRegistry)
             let spec = LLMLocalServiceTests.sampleSpec()
 
             // Act
@@ -167,8 +167,8 @@ struct LLMLocalServiceTests {
             defer { LLMLocalServiceTests.removeTempDir(dir) }
             let backend = MockBackend()
             await backend.setShouldThrow(.loadFailed(modelId: "test", reason: "test error"))
-            let modelRegistry = ModelRegistry(cacheDirectory: dir)
-            let service = LLMLocalService(backend: backend, modelRegistry: modelRegistry)
+            let modelRegistry = try ModelRegistry(cacheDirectory: dir)
+            let service = try LLMLocalService(backend: backend, modelRegistry: modelRegistry)
             let spec = LLMLocalServiceTests.sampleSpec()
 
             // Act & Assert
@@ -191,8 +191,8 @@ struct LLMLocalServiceTests {
             let backend = MockBackend()
             // Use many tokens to give time for cancellation
             await backend.setMockTokens(Array(repeating: "token", count: 1000))
-            let modelRegistry = ModelRegistry(cacheDirectory: dir)
-            let service = LLMLocalService(backend: backend, modelRegistry: modelRegistry)
+            let modelRegistry = try ModelRegistry(cacheDirectory: dir)
+            let service = try LLMLocalService(backend: backend, modelRegistry: modelRegistry)
             let spec = LLMLocalServiceTests.sampleSpec()
 
             // Act

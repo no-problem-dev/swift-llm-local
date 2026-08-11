@@ -70,18 +70,21 @@ public actor LLMLocalService {
     ///     Preloading through this type always bypasses it.
     ///   - inventory: Reader for the on-disk model store. Point it at a different root only if the
     ///     backend's downloader was pointed there too, or downloaded models will look missing.
+    ///     When `nil`, one is built over the default root.
+    /// - Throws: When `inventory` is `nil` and the default model storage root cannot be
+    ///   established — see `LocalModelInventory`.
     public init(
         backend: any LLMLocalBackend,
         modelRegistry: ModelRegistry,
         memoryMonitor: MemoryMonitor? = nil,
         modelSwitcher: ModelSwitcher? = nil,
-        inventory: LocalModelInventory = LocalModelInventory()
-    ) {
+        inventory: LocalModelInventory? = nil
+    ) throws {
         self.backend = backend
         self.modelRegistry = modelRegistry
         self.memoryMonitor = memoryMonitor
         self.modelSwitcher = modelSwitcher
-        self.inventory = inventory
+        self.inventory = try inventory ?? LocalModelInventory()
     }
 
     /// Generates text from a prompt, streaming each chunk as the model produces it.
@@ -359,8 +362,10 @@ public actor LLMLocalService {
     /// that are downloaded but not loaded. A download interrupted partway leaves its finished files
     /// behind and still answers `false`, because the weights are incomplete. Use this to gate a
     /// model picker to what can start without a multi-gigabyte wait, and to badge a list.
-    public func isDownloaded(_ spec: ModelSpec) -> Bool {
-        inventory.isDownloaded(spec)
+    /// - Throws: ``LLMLocalError/storageUnreadable(path:reason:)`` when the model's directory is
+    ///   there but cannot be read. `false` means absent or incomplete, never "could not tell".
+    public func isDownloaded(_ spec: ModelSpec) throws -> Bool {
+        try inventory.isDownloaded(spec)
     }
 
     /// Returns the downloaded members of a candidate list with their on-disk size and download time.
@@ -370,18 +375,26 @@ public actor LLMLocalService {
     /// ``ModelPresets/all``. Most recently downloaded first.
     ///
     /// - Parameter specs: Models to look for on disk.
-    public func downloadedModels(among specs: [ModelSpec]) -> [DownloadedModel] {
-        inventory.downloadedModels(among: specs)
+    /// - Throws: ``LLMLocalError/storageUnreadable(path:reason:)`` when a candidate's directory is
+    ///   there but cannot be read or measured.
+    public func downloadedModels(among specs: [ModelSpec]) throws -> [DownloadedModel] {
+        try inventory.downloadedModels(among: specs)
     }
 
     /// Bytes the model's files occupy on disk, or `nil` when it is not fully downloaded.
-    public func downloadSize(of spec: ModelSpec) -> Int64? {
-        inventory.diskSize(of: spec)
+    ///
+    /// - Throws: ``LLMLocalError/storageUnreadable(path:reason:)`` when the directory is there but
+    ///   cannot be measured.
+    public func downloadSize(of spec: ModelSpec) throws -> Int64? {
+        try inventory.diskSize(of: spec)
     }
 
     /// Total bytes occupied on disk by the downloaded members of a candidate list.
-    public func totalDownloadedSize(among specs: [ModelSpec]) -> Int64 {
-        inventory.totalDiskSize(among: specs)
+    ///
+    /// - Throws: ``LLMLocalError/storageUnreadable(path:reason:)`` when a candidate cannot be
+    ///   measured. Zero means nothing is downloaded, never a partial sum.
+    public func totalDownloadedSize(among specs: [ModelSpec]) throws -> Int64 {
+        try inventory.totalDiskSize(among: specs)
     }
 
     /// Deletes a model's downloaded files to reclaim disk space.
@@ -493,9 +506,12 @@ public actor LLMLocalService {
     /// On iOS this is what this process may still allocate before jetsam intervenes, not free
     /// system RAM, and it moves while the app runs. On macOS it is an estimate from free and
     /// inactive pages.
-    public func availableMemory() async -> UInt64? {
+    ///
+    /// - Throws: ``LLMLocalError/memoryUnreadable(reason:)`` when the kernel query fails. `nil`
+    ///   means no monitor was supplied, never that the number could not be read.
+    public func availableMemory() async throws -> UInt64? {
         guard let monitor = memoryMonitor else { return nil }
-        return await monitor.availableMemory()
+        return try await monitor.availableMemory()
     }
 
     /// Reports whether this device can be expected to hold the model's weights.
@@ -506,9 +522,11 @@ public actor LLMLocalService {
     ///
     /// - Parameter spec: Model to check.
     /// - Returns: `true` when it fits, or `nil` when no memory monitor was supplied.
-    public func isModelCompatible(_ spec: ModelSpec) async -> Bool? {
+    /// - Throws: ``LLMLocalError/memoryUnreadable(reason:)`` when the kernel query fails. `false`
+    ///   means the model is too big, never that the budget could not be measured.
+    public func isModelCompatible(_ spec: ModelSpec) async throws -> Bool? {
         guard let monitor = memoryMonitor else { return nil }
-        return await monitor.isModelCompatible(spec)
+        return try await monitor.isModelCompatible(spec)
     }
 
     /// Largest model, in bytes, this device is expected to hold.
@@ -519,9 +537,10 @@ public actor LLMLocalService {
     /// memory. The margin covers the KV cache, activations, and the rest of the app.
     ///
     /// - Returns: Budget in bytes, or `nil` when no memory monitor was supplied.
-    public func maxAllowedModelMemory() async -> UInt64? {
+    /// - Throws: ``LLMLocalError/memoryUnreadable(reason:)`` when the kernel query fails.
+    public func maxAllowedModelMemory() async throws -> UInt64? {
         guard let monitor = memoryMonitor else { return nil }
-        return await monitor.maxAllowedModelMemory()
+        return try await monitor.maxAllowedModelMemory()
     }
 
     // MARK: - Private

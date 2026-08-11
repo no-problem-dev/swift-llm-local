@@ -24,7 +24,7 @@
 ```swift
 import LLMLocal
 
-let service = LLMLocalService(
+let service = try LLMLocalService(
     backend: MLXBackend(),
     modelRegistry: ModelRegistry(cacheDirectory: cacheDirectory)
 )

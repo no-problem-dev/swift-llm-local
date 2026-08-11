@@ -6,7 +6,7 @@ import LLMLocal
 struct ReExportTests {
 
     @Test("LLMLocalClient types are accessible via import LLMLocal")
-    func clientTypesAccessible() {
+    func clientTypesAccessible() throws {
         // ModelSpec
         let spec = ModelSpec(
             id: "test",
@@ -42,13 +42,13 @@ struct ReExportTests {
     @Test("LLMLocalModels types are accessible via import LLMLocal")
     func modelsTypesAccessible() async throws {
         // ModelRegistry
-        let registry = ModelRegistry()
+        let registry = try ModelRegistry()
         let models = try await registry.cachedModels()
         #expect(models.isEmpty)
     }
 
     @Test("LLMLocal-specific types are accessible")
-    func localSpecificTypesAccessible() {
+    func localSpecificTypesAccessible() throws {
         // LLMLocalService - verify the type exists and is accessible
         let serviceType = LLMLocalService.self
         #expect(serviceType == LLMLocalService.self)

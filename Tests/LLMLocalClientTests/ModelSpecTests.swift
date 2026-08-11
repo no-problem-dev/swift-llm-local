@@ -9,21 +9,21 @@ import LLMLocalClient
 struct ModelSourceTests {
 
     @Test("huggingFace sources with same id are equal")
-    func huggingFaceSameIdAreEqual() {
+    func huggingFaceSameIdAreEqual() throws {
         let a = ModelSource.huggingFace(id: "mlx-community/Llama-3.2-1B")
         let b = ModelSource.huggingFace(id: "mlx-community/Llama-3.2-1B")
         #expect(a == b)
     }
 
     @Test("huggingFace sources with different ids are not equal")
-    func huggingFaceDifferentIdsAreNotEqual() {
+    func huggingFaceDifferentIdsAreNotEqual() throws {
         let a = ModelSource.huggingFace(id: "mlx-community/Llama-3.2-1B")
         let b = ModelSource.huggingFace(id: "mlx-community/Mistral-7B")
         #expect(a != b)
     }
 
     @Test("local sources with same path are equal")
-    func localSamePathAreEqual() {
+    func localSamePathAreEqual() throws {
         let url = URL(filePath: "/tmp/models/llama")
         let a = ModelSource.local(path: url)
         let b = ModelSource.local(path: url)
@@ -31,14 +31,14 @@ struct ModelSourceTests {
     }
 
     @Test("local sources with different paths are not equal")
-    func localDifferentPathsAreNotEqual() {
+    func localDifferentPathsAreNotEqual() throws {
         let a = ModelSource.local(path: URL(filePath: "/tmp/models/llama"))
         let b = ModelSource.local(path: URL(filePath: "/tmp/models/mistral"))
         #expect(a != b)
     }
 
     @Test("huggingFace and local are not equal")
-    func huggingFaceAndLocalAreNotEqual() {
+    func huggingFaceAndLocalAreNotEqual() throws {
         let a = ModelSource.huggingFace(id: "mlx-community/Llama-3.2-1B")
         let b = ModelSource.local(path: URL(filePath: "/tmp/models/llama"))
         #expect(a != b)
@@ -61,7 +61,7 @@ struct ModelSourceTests {
     }
 
     @Test("ModelSource conforms to Sendable")
-    func conformsToSendable() async {
+    func conformsToSendable() async throws {
         let source = ModelSource.huggingFace(id: "test")
         // Passing across a Sendable closure boundary proves Sendable conformance at compile time
         let result: ModelSource = { @Sendable in source }()
@@ -75,28 +75,28 @@ struct ModelSourceTests {
 struct AdapterSourceTests {
 
     @Test("gitHubRelease sources with same values are equal")
-    func gitHubReleaseSameValuesAreEqual() {
+    func gitHubReleaseSameValuesAreEqual() throws {
         let a = AdapterSource.gitHubRelease(repo: "owner/repo", tag: "v1.0", asset: "adapter.safetensors")
         let b = AdapterSource.gitHubRelease(repo: "owner/repo", tag: "v1.0", asset: "adapter.safetensors")
         #expect(a == b)
     }
 
     @Test("gitHubRelease sources with different tags are not equal")
-    func gitHubReleaseDifferentTagsAreNotEqual() {
+    func gitHubReleaseDifferentTagsAreNotEqual() throws {
         let a = AdapterSource.gitHubRelease(repo: "owner/repo", tag: "v1.0", asset: "adapter.safetensors")
         let b = AdapterSource.gitHubRelease(repo: "owner/repo", tag: "v2.0", asset: "adapter.safetensors")
         #expect(a != b)
     }
 
     @Test("huggingFace adapter sources with same id are equal")
-    func huggingFaceSameIdAreEqual() {
+    func huggingFaceSameIdAreEqual() throws {
         let a = AdapterSource.huggingFace(id: "user/adapter-1")
         let b = AdapterSource.huggingFace(id: "user/adapter-1")
         #expect(a == b)
     }
 
     @Test("local adapter sources with same path are equal")
-    func localSamePathAreEqual() {
+    func localSamePathAreEqual() throws {
         let url = URL(filePath: "/tmp/adapters/lora")
         let a = AdapterSource.local(path: url)
         let b = AdapterSource.local(path: url)
@@ -104,7 +104,7 @@ struct AdapterSourceTests {
     }
 
     @Test("different adapter source types are not equal")
-    func differentTypesAreNotEqual() {
+    func differentTypesAreNotEqual() throws {
         let a = AdapterSource.huggingFace(id: "user/adapter-1")
         let b = AdapterSource.local(path: URL(filePath: "/tmp/adapters/lora"))
         #expect(a != b)
@@ -135,7 +135,7 @@ struct AdapterSourceTests {
     }
 
     @Test("AdapterSource conforms to Sendable")
-    func conformsToSendable() {
+    func conformsToSendable() throws {
         let source = AdapterSource.huggingFace(id: "test")
         let result: AdapterSource = { @Sendable in source }()
         #expect(result == source)
@@ -172,7 +172,7 @@ struct ModelSpecTests {
     // MARK: - Initialization
 
     @Test("initializes with all properties")
-    func initializesWithAllProperties() {
+    func initializesWithAllProperties() throws {
         let adapter = AdapterSource.gitHubRelease(repo: "owner/repo", tag: "v1.0", asset: "adapter.safetensors")
         let spec = ModelSpec(
             id: "test-model",
@@ -194,7 +194,7 @@ struct ModelSpecTests {
     }
 
     @Test("initializes with nil adapter by default")
-    func initializesWithNilAdapterByDefault() {
+    func initializesWithNilAdapterByDefault() throws {
         let spec = ModelSpec(
             id: "test-model",
             base: .huggingFace(id: "mlx-community/test"),
@@ -210,42 +210,42 @@ struct ModelSpecTests {
     // MARK: - Hashable
 
     @Test("specs with same id and base are equal")
-    func specsWithSameValuesAreEqual() {
+    func specsWithSameValuesAreEqual() throws {
         let a = Self.sampleSpec()
         let b = Self.sampleSpec()
         #expect(a == b)
     }
 
     @Test("specs with different ids are not equal")
-    func specsWithDifferentIdsAreNotEqual() {
+    func specsWithDifferentIdsAreNotEqual() throws {
         let a = Self.sampleSpec(id: "model-a")
         let b = Self.sampleSpec(id: "model-b")
         #expect(a != b)
     }
 
     @Test("specs with different base sources are not equal")
-    func specsWithDifferentBasesAreNotEqual() {
+    func specsWithDifferentBasesAreNotEqual() throws {
         let a = Self.sampleSpec(base: .huggingFace(id: "model-a"))
         let b = Self.sampleSpec(base: .huggingFace(id: "model-b"))
         #expect(a != b)
     }
 
     @Test("specs with different adapters are not equal")
-    func specsWithDifferentAdaptersAreNotEqual() {
+    func specsWithDifferentAdaptersAreNotEqual() throws {
         let a = Self.sampleSpec(adapter: nil)
         let b = Self.sampleSpec(adapter: .huggingFace(id: "adapter-1"))
         #expect(a != b)
     }
 
     @Test("equal specs produce same hash value")
-    func equalSpecsProduceSameHash() {
+    func equalSpecsProduceSameHash() throws {
         let a = Self.sampleSpec()
         let b = Self.sampleSpec()
         #expect(a.hashValue == b.hashValue)
     }
 
     @Test("can be used as Set element")
-    func canBeUsedAsSetElement() {
+    func canBeUsedAsSetElement() throws {
         let spec1 = Self.sampleSpec(id: "model-1")
         let spec2 = Self.sampleSpec(id: "model-2")
         let spec1Duplicate = Self.sampleSpec(id: "model-1")
@@ -259,7 +259,7 @@ struct ModelSpecTests {
     }
 
     @Test("can be used as Dictionary key")
-    func canBeUsedAsDictionaryKey() {
+    func canBeUsedAsDictionaryKey() throws {
         let spec = Self.sampleSpec()
         var dict: [ModelSpec: String] = [:]
         dict[spec] = "loaded"
@@ -343,7 +343,7 @@ struct ModelSpecTests {
     // MARK: - formattedMemorySize
 
     @Test("formattedMemorySize returns human readable string")
-    func formattedMemorySizeReturnsString() {
+    func formattedMemorySizeReturnsString() throws {
         let spec = Self.sampleSpec(estimatedMemoryBytes: 4_500_000_000)
         let formatted = spec.formattedMemorySize
         #expect(formatted.contains("GB"))
@@ -352,13 +352,13 @@ struct ModelSpecTests {
     // MARK: - sizeTier
 
     @Test("sizeTier returns tiny for sub-1GB model")
-    func sizeTierReturnsTiny() {
+    func sizeTierReturnsTiny() throws {
         let spec = Self.sampleSpec(estimatedMemoryBytes: 500_000_000)
         #expect(spec.sizeTier == .tiny)
     }
 
     @Test("sizeTier returns medium for 5GB model")
-    func sizeTierReturnsMedium() {
+    func sizeTierReturnsMedium() throws {
         let spec = Self.sampleSpec(estimatedMemoryBytes: 5_000_000_000)
         #expect(spec.sizeTier == .medium)
     }
@@ -366,7 +366,7 @@ struct ModelSpecTests {
     // MARK: - profile
 
     @Test("initializes with profile")
-    func initializesWithProfile() {
+    func initializesWithProfile() throws {
         let profile = ModelProfile(
             summary: "Test profile",
             modelFamily: "Test",
@@ -391,7 +391,7 @@ struct ModelSpecTests {
     }
 
     @Test("profile defaults to nil")
-    func profileDefaultsToNil() {
+    func profileDefaultsToNil() throws {
         let spec = Self.sampleSpec()
         #expect(spec.profile == nil)
     }
@@ -436,7 +436,7 @@ struct ModelSpecTests {
     // MARK: - Sendable
 
     @Test("ModelSpec conforms to Sendable")
-    func conformsToSendable() {
+    func conformsToSendable() throws {
         let spec = Self.sampleSpec()
         let result: ModelSpec = { @Sendable in spec }()
         #expect(result == spec)
@@ -483,13 +483,13 @@ struct LLMLocalBackendTests {
     }
 
     @Test("initially not loaded")
-    func initiallyNotLoaded() async {
+    func initiallyNotLoaded() async throws {
         let loaded = await backend.isLoaded
         #expect(loaded == false)
     }
 
     @Test("initially has no current model")
-    func initiallyHasNoCurrentModel() async {
+    func initiallyHasNoCurrentModel() async throws {
         let model = await backend.currentModel
         #expect(model == nil)
     }

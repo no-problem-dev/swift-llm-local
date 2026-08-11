@@ -99,6 +99,40 @@ public enum LLMLocalError: Error, Sendable, Equatable {
     ///
     /// - Parameter reason: Message from the persistence layer, meant for logs rather than the user.
     case registryUnreadable(reason: String)
+
+    /// The file system holding the model files could not be read.
+    ///
+    /// The sibling of ``registryUnreadable(reason:)`` one layer down. Where that one is about the
+    /// record of what was downloaded, this is about the files themselves: a directory that will not
+    /// list, a file that will not stat, or an Application Support directory the system did not
+    /// return. **A directory that is simply not there is not this case**: that one reads as "not
+    /// downloaded" and no error is raised.
+    ///
+    /// Keeping those apart matters most where the answer decides whether to spend a download.
+    /// `LocalModelInventory` and the MLX downloader both ask the file system whether a model is
+    /// already present, and an unreadable directory answered as "absent" re-fetches gigabytes the
+    /// device is still holding. It matters twice over because this is the layer
+    /// ``registryUnreadable(reason:)`` sends callers to when the registry itself cannot be read.
+    ///
+    /// Nothing is cached from the failure, so the next call reads again and succeeds once the
+    /// permissions or the volume are back.
+    ///
+    /// - Parameters:
+    ///   - path: File system location that could not be read.
+    ///   - reason: Message from the file system, meant for logs rather than the user.
+    case storageUnreadable(path: String, reason: String)
+
+    /// The device's memory numbers could not be read.
+    ///
+    /// Raised by `MemoryMonitor` when the kernel query behind available memory fails. It is not a
+    /// statement that memory is short — it is the absence of a measurement, and the admission
+    /// checks that decide whether a model fits refuse to answer rather than answering from a
+    /// fabricated number. A guess here is worse than no answer in both directions: too low blocks
+    /// every model on a device that could run them, too high loads weights that get the app killed
+    /// by jetsam.
+    ///
+    /// - Parameter reason: Kernel return code or message, meant for logs rather than the user.
+    case memoryUnreadable(reason: String)
 }
 
 // MARK: - LocalizedError
@@ -129,6 +163,10 @@ extension LLMLocalError: LocalizedError {
             "Model '\(modelId)' does not support tool calls."
         case .registryUnreadable(let reason):
             "The registry of downloaded items could not be read: \(reason)"
+        case .storageUnreadable(let path, let reason):
+            "The model storage at '\(path)' could not be read: \(reason)"
+        case .memoryUnreadable(let reason):
+            "The device's memory could not be measured: \(reason)"
         }
     }
 }

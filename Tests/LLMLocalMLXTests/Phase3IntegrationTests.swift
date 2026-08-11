@@ -26,7 +26,7 @@ struct Phase3IntegrationTests {
     @Test("ModelSwitcher switches between models")
     func modelSwitcherSwitchesModels() async throws {
         // Arrange
-        let backend = MLXBackend()
+        let backend = try MLXBackend()
         let switcher = ModelSwitcher(backend: backend)
 
         let model1 = ModelPresets.qwen3_0_6B
@@ -45,10 +45,10 @@ struct Phase3IntegrationTests {
     @Test("LLMLocalService generates with ModelSwitcher")
     func serviceWithModelSwitcher() async throws {
         // Arrange
-        let backend = MLXBackend()
-        let modelRegistry = ModelRegistry()
+        let backend = try MLXBackend()
+        let modelRegistry = try ModelRegistry()
         let switcher = ModelSwitcher(backend: backend)
-        let service = LLMLocalService(
+        let service = try LLMLocalService(
             backend: backend,
             modelRegistry: modelRegistry,
             modelSwitcher: switcher
@@ -77,10 +77,10 @@ struct Phase3IntegrationTests {
     @Test("Phase 1-2 regression: generation without switcher works")
     func phase12RegressionNoSwitcher() async throws {
         // Arrange — no modelSwitcher (backward compat)
-        let backend = MLXBackend()
-        let modelRegistry = ModelRegistry()
+        let backend = try MLXBackend()
+        let modelRegistry = try ModelRegistry()
         let monitor = MemoryMonitor()
-        let service = LLMLocalService(
+        let service = try LLMLocalService(
             backend: backend,
             modelRegistry: modelRegistry,
             memoryMonitor: monitor

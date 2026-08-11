@@ -15,7 +15,7 @@ root — the one place that constructs the backend and hands it to whatever need
 import LLMLocalClient
 import LLMLocalMLX
 
-let backend = MLXBackend(
+let backend = try MLXBackend(
     gpuCacheLimit: 30 * 1024 * 1024,
     adapterResolver: myAdapterRegistry
 )

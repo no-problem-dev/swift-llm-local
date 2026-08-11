@@ -32,9 +32,9 @@ private func sampleSpec(
 struct MLXBackendProtocolConformanceTests {
 
     @Test("MLXBackend conforms to LLMLocalBackend")
-    func conformsToLLMLocalBackend() {
+    func conformsToLLMLocalBackend() throws {
         // Arrange & Act: compile-time check -- MLXBackend as LLMLocalBackend
-        let backend = MLXBackend()
+        let backend = try MLXBackend()
         let _: any LLMLocalBackend = backend
 
         // Assert: if this compiles, the conformance is verified
@@ -42,8 +42,8 @@ struct MLXBackendProtocolConformanceTests {
     }
 
     @Test("MLXBackend conforms to Sendable")
-    func conformsToSendable() {
-        let backend = MLXBackend()
+    func conformsToSendable() throws {
+        let backend = try MLXBackend()
         // Passing through a Sendable closure boundary proves Sendable at compile time
         let result: any LLMLocalBackend = { @Sendable in backend }()
         #expect(result is MLXBackend)
@@ -56,9 +56,9 @@ struct MLXBackendProtocolConformanceTests {
 struct MLXBackendInitialStateTests {
 
     @Test("isLoaded is false when newly created")
-    func isLoadedIsFalseWhenNew() async {
+    func isLoadedIsFalseWhenNew() async throws {
         // Arrange
-        let backend = MLXBackend()
+        let backend = try MLXBackend()
 
         // Act
         let loaded = await backend.isLoaded
@@ -68,9 +68,9 @@ struct MLXBackendInitialStateTests {
     }
 
     @Test("currentModel is nil when newly created")
-    func currentModelIsNilWhenNew() async {
+    func currentModelIsNilWhenNew() async throws {
         // Arrange
-        let backend = MLXBackend()
+        let backend = try MLXBackend()
 
         // Act
         let model = await backend.currentModel
@@ -80,9 +80,9 @@ struct MLXBackendInitialStateTests {
     }
 
     @Test("initializes with default GPU cache limit")
-    func initializesWithDefaultGPUCacheLimit() async {
+    func initializesWithDefaultGPUCacheLimit() async throws {
         // Arrange & Act
-        let backend = MLXBackend()
+        let backend = try MLXBackend()
 
         // Assert: default is 20 MB (20 * 1024 * 1024)
         let cacheLimit = await backend.gpuCacheLimitValue
@@ -90,10 +90,10 @@ struct MLXBackendInitialStateTests {
     }
 
     @Test("initializes with custom GPU cache limit")
-    func initializesWithCustomGPUCacheLimit() async {
+    func initializesWithCustomGPUCacheLimit() async throws {
         // Arrange & Act
         let customLimit = 50 * 1024 * 1024
-        let backend = MLXBackend(gpuCacheLimit: customLimit)
+        let backend = try MLXBackend(gpuCacheLimit: customLimit)
 
         // Assert
         let cacheLimit = await backend.gpuCacheLimitValue
@@ -107,9 +107,9 @@ struct MLXBackendInitialStateTests {
 struct MLXBackendUnloadModelTests {
 
     @Test("unloadModel on fresh instance does not crash")
-    func unloadOnFreshInstanceDoesNotCrash() async {
+    func unloadOnFreshInstanceDoesNotCrash() async throws {
         // Arrange
-        let backend = MLXBackend()
+        let backend = try MLXBackend()
 
         // Act: should not throw or crash
         await backend.unloadModel()
@@ -130,7 +130,7 @@ struct MLXBackendGenerateWithoutModelTests {
     @Test("generate throws modelNotLoaded when no model loaded")
     func generateThrowsModelNotLoaded() async throws {
         // Arrange
-        let backend = MLXBackend()
+        let backend = try MLXBackend()
         let config = GenerationConfig()
 
         // Act
@@ -157,9 +157,9 @@ struct MLXBackendGenerateWithoutModelTests {
 struct MLXBackendLoadInProgressTests {
 
     @Test("isLoading is false initially")
-    func isLoadingIsFalseInitially() async {
+    func isLoadingIsFalseInitially() async throws {
         // Arrange
-        let backend = MLXBackend()
+        let backend = try MLXBackend()
 
         // Act
         let loading = await backend.isLoadingValue
@@ -175,7 +175,7 @@ struct MLXBackendLoadInProgressTests {
 struct GenerationConfigMLXConversionTests {
 
     @Test("converts maxTokens correctly")
-    func convertsMaxTokens() {
+    func convertsMaxTokens() throws {
         // Arrange
         let config = GenerationConfig(maxTokens: 512)
 
@@ -187,7 +187,7 @@ struct GenerationConfigMLXConversionTests {
     }
 
     @Test("converts temperature correctly")
-    func convertsTemperature() {
+    func convertsTemperature() throws {
         // Arrange
         let config = GenerationConfig(temperature: 0.5)
 
@@ -199,7 +199,7 @@ struct GenerationConfigMLXConversionTests {
     }
 
     @Test("converts topP correctly")
-    func convertsTopP() {
+    func convertsTopP() throws {
         // Arrange
         let config = GenerationConfig(topP: 0.85)
 
@@ -211,7 +211,7 @@ struct GenerationConfigMLXConversionTests {
     }
 
     @Test("converts default config correctly")
-    func convertsDefaultConfig() {
+    func convertsDefaultConfig() throws {
         // Arrange
         let config = GenerationConfig.default
 
@@ -225,7 +225,7 @@ struct GenerationConfigMLXConversionTests {
     }
 
     @Test("converts extreme values correctly")
-    func convertsExtremeValues() {
+    func convertsExtremeValues() throws {
         // Arrange: zero temperature (deterministic)
         let config = GenerationConfig(maxTokens: 1, temperature: 0.0, topP: 1.0)
 
@@ -245,7 +245,7 @@ struct GenerationConfigMLXConversionTests {
 struct MLXBackendSameModelSkipTests {
 
     @Test("loadModel with same spec does not re-load (tested via state)")
-    func sameModelSpecSkipsReload() async {
+    func sameModelSpecSkipsReload() async throws {
         // This test verifies that the spec comparison works correctly.
         // Since we cannot call real MLX APIs, we test the equality logic
         // that drives the early return.
@@ -265,7 +265,7 @@ struct MLXBackendSameModelSkipTests {
 struct MLXBackendModelSourceExtractionTests {
 
     @Test("extracts HuggingFace ID from huggingFace source")
-    func extractsHuggingFaceId() {
+    func extractsHuggingFaceId() throws {
         // Arrange
         let source = ModelSource.huggingFace(id: "mlx-community/Llama-3.2-1B-Instruct-4bit")
 
@@ -283,7 +283,7 @@ struct MLXBackendModelSourceExtractionTests {
     }
 
     @Test("extracts path from local source")
-    func extractsLocalPath() {
+    func extractsLocalPath() throws {
         // Arrange
         let url = URL(filePath: "/tmp/models/llama")
         let source = ModelSource.local(path: url)

@@ -43,7 +43,7 @@ private final class AtomicFlag: @unchecked Sendable {
 struct MemoryMonitorDeviceMemoryTierTests {
 
     @Test("returns .standard for 8GB device")
-    func returnsStandardFor8GB() async {
+    func returnsStandardFor8GB() async throws {
         // Arrange
         let provider = MockMemoryProvider(
             totalMemory: 8 * 1024 * 1024 * 1024,
@@ -59,7 +59,7 @@ struct MemoryMonitorDeviceMemoryTierTests {
     }
 
     @Test("returns .high for 12GB device")
-    func returnsHighFor12GB() async {
+    func returnsHighFor12GB() async throws {
         // Arrange
         let provider = MockMemoryProvider(
             totalMemory: 12 * 1024 * 1024 * 1024,
@@ -75,7 +75,7 @@ struct MemoryMonitorDeviceMemoryTierTests {
     }
 
     @Test("returns .high for 16GB device")
-    func returnsHighFor16GB() async {
+    func returnsHighFor16GB() async throws {
         // Arrange
         let provider = MockMemoryProvider(
             totalMemory: 16 * 1024 * 1024 * 1024,
@@ -91,7 +91,7 @@ struct MemoryMonitorDeviceMemoryTierTests {
     }
 
     @Test("returns .standard for 6GB device")
-    func returnsStandardFor6GB() async {
+    func returnsStandardFor6GB() async throws {
         // Arrange
         let provider = MockMemoryProvider(
             totalMemory: 6 * 1024 * 1024 * 1024,
@@ -107,7 +107,7 @@ struct MemoryMonitorDeviceMemoryTierTests {
     }
 
     @Test("returns .standard for boundary value just below 12GB")
-    func returnsStandardForJustBelow12GB() async {
+    func returnsStandardForJustBelow12GB() async throws {
         // Arrange: 12GB - 1 byte
         let provider = MockMemoryProvider(
             totalMemory: 12 * 1024 * 1024 * 1024 - 1,
@@ -129,7 +129,7 @@ struct MemoryMonitorDeviceMemoryTierTests {
 struct MemoryMonitorRecommendedContextLengthTests {
 
     @Test("returns 2048 for 8GB device")
-    func returns2048For8GBDevice() async {
+    func returns2048For8GBDevice() async throws {
         // Arrange
         let provider = MockMemoryProvider(
             totalMemory: 8 * 1024 * 1024 * 1024,
@@ -145,7 +145,7 @@ struct MemoryMonitorRecommendedContextLengthTests {
     }
 
     @Test("returns 4096 for 12GB device")
-    func returns4096For12GBDevice() async {
+    func returns4096For12GBDevice() async throws {
         // Arrange
         let provider = MockMemoryProvider(
             totalMemory: 12 * 1024 * 1024 * 1024,
@@ -167,7 +167,7 @@ struct MemoryMonitorRecommendedContextLengthTests {
 struct MemoryMonitorAvailableMemoryTests {
 
     @Test("returns the provider's available memory value")
-    func returnsProviderValue() async {
+    func returnsProviderValue() async throws {
         // Arrange
         let expectedAvailable: UInt64 = 5_368_709_120 // 5GB
         let provider = MockMemoryProvider(
@@ -177,7 +177,7 @@ struct MemoryMonitorAvailableMemoryTests {
         let monitor = MemoryMonitor(memoryProvider: provider)
 
         // Act
-        let available = await monitor.availableMemory()
+        let available = try await monitor.availableMemory()
 
         // Assert
         #expect(available == expectedAvailable)
@@ -190,7 +190,7 @@ struct MemoryMonitorAvailableMemoryTests {
 struct MemoryMonitorMonitoringLifecycleTests {
 
     @Test("startMonitoring sets monitoring state")
-    func startMonitoringSetsState() async {
+    func startMonitoringSetsState() async throws {
         // Arrange
         let provider = MockMemoryProvider(
             totalMemory: 8 * 1024 * 1024 * 1024,
@@ -210,7 +210,7 @@ struct MemoryMonitorMonitoringLifecycleTests {
     }
 
     @Test("stopMonitoring clears state")
-    func stopMonitoringClearsState() async {
+    func stopMonitoringClearsState() async throws {
         // Arrange
         let provider = MockMemoryProvider(
             totalMemory: 8 * 1024 * 1024 * 1024,
@@ -228,7 +228,7 @@ struct MemoryMonitorMonitoringLifecycleTests {
     }
 
     @Test("calling startMonitoring twice does not duplicate observation")
-    func startMonitoringIdempotent() async {
+    func startMonitoringIdempotent() async throws {
         // Arrange
         let provider = MockMemoryProvider(
             totalMemory: 8 * 1024 * 1024 * 1024,
@@ -295,7 +295,7 @@ struct MemoryMonitorNotificationTests {
 struct MemoryMonitorTotalMemoryTests {
 
     @Test("totalMemory returns provider value")
-    func totalMemoryReturnsProviderValue() async {
+    func totalMemoryReturnsProviderValue() async throws {
         // Arrange
         let expectedTotal: UInt64 = 16 * 1024 * 1024 * 1024
         let provider = MockMemoryProvider(
@@ -318,7 +318,7 @@ struct MemoryMonitorTotalMemoryTests {
 struct MemoryMonitorModelCompatibilityTests {
 
     @Test("isModelCompatible returns true when model fits in 80 percent")
-    func isModelCompatibleReturnsTrueWhenModelFits() async {
+    func isModelCompatibleReturnsTrueWhenModelFits() async throws {
         // Arrange: 16 GB device, 80% = 12.8 GB
         let provider = MockMemoryProvider(
             totalMemory: 16 * 1024 * 1024 * 1024,
@@ -336,14 +336,14 @@ struct MemoryMonitorModelCompatibilityTests {
         )
 
         // Act
-        let compatible = await monitor.isModelCompatible(spec)
+        let compatible = try await monitor.isModelCompatible(spec)
 
         // Assert
         #expect(compatible == true)
     }
 
     @Test("isModelCompatible returns false when model exceeds 80 percent")
-    func isModelCompatibleReturnsFalseWhenModelExceeds() async {
+    func isModelCompatibleReturnsFalseWhenModelExceeds() async throws {
         // Arrange: 8 GB device, 80% = 6.4 GB
         let provider = MockMemoryProvider(
             totalMemory: 8 * 1024 * 1024 * 1024,
@@ -361,7 +361,7 @@ struct MemoryMonitorModelCompatibilityTests {
         )
 
         // Act
-        let compatible = await monitor.isModelCompatible(spec)
+        let compatible = try await monitor.isModelCompatible(spec)
 
         // Assert
         #expect(compatible == false)
@@ -374,7 +374,7 @@ struct MemoryMonitorModelCompatibilityTests {
 struct MemoryMonitorMaxAllowedModelMemoryTests {
 
     @Test("maxAllowedModelMemory returns 80 percent of the platform budget")
-    func maxAllowedModelMemoryReturns80Percent() async {
+    func maxAllowedModelMemoryReturns80Percent() async throws {
         // Arrange
         let totalMem: UInt64 = 16 * 1024 * 1024 * 1024
         let availableMem: UInt64 = 8 * 1024 * 1024 * 1024
@@ -385,7 +385,7 @@ struct MemoryMonitorMaxAllowedModelMemoryTests {
         let monitor = MemoryMonitor(memoryProvider: provider)
 
         // Act
-        let maxMemory = await monitor.maxAllowedModelMemory()
+        let maxMemory = try await monitor.maxAllowedModelMemory()
 
         // Assert: iOS budgets against available memory because jetsam kills the app well below
         // the physical total; macOS budgets against the physical total.

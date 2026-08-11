@@ -24,22 +24,3 @@ public protocol DownloadProgressDelegate: Sendable {
         progressHandler: @Sendable (DownloadProgress) -> Void
     ) async throws -> Int64
 }
-
-// MARK: - StubDownloadDelegate
-
-/// Default delegate that transfers nothing and reports a fixed size.
-///
-/// Used when no delegate is injected. It never calls the progress handler, so a stream from
-/// ``ModelRegistry/downloadWithProgress(_:)`` yields only the registry's own zero and full values,
-/// and the model is registered with a size that no file on disk backs.
-struct StubDownloadDelegate: DownloadProgressDelegate {
-    /// Size reported for every stub download, in bytes.
-    static let stubSize: Int64 = 1_000_000
-
-    func download(
-        _ spec: ModelSpec,
-        progressHandler: @Sendable (DownloadProgress) -> Void
-    ) async throws -> Int64 {
-        StubDownloadDelegate.stubSize
-    }
-}

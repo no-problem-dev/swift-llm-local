@@ -42,7 +42,7 @@ struct DownloadProgressTests {
     struct TypePropertyTests {
 
         @Test("stores fraction correctly")
-        func storesFractionCorrectly() {
+        func storesFractionCorrectly() throws {
             // Arrange & Act
             let progress = DownloadProgress(
                 fraction: 0.5,
@@ -56,7 +56,7 @@ struct DownloadProgressTests {
         }
 
         @Test("stores completedBytes correctly")
-        func storesCompletedBytesCorrectly() {
+        func storesCompletedBytesCorrectly() throws {
             // Arrange & Act
             let progress = DownloadProgress(
                 fraction: 0.25,
@@ -70,7 +70,7 @@ struct DownloadProgressTests {
         }
 
         @Test("stores totalBytes correctly")
-        func storesTotalBytesCorrectly() {
+        func storesTotalBytesCorrectly() throws {
             // Arrange & Act
             let progress = DownloadProgress(
                 fraction: 1.0,
@@ -84,7 +84,7 @@ struct DownloadProgressTests {
         }
 
         @Test("stores currentFile as nil when unknown")
-        func storesCurrentFileAsNil() {
+        func storesCurrentFileAsNil() throws {
             // Arrange & Act
             let progress = DownloadProgress(
                 fraction: 0.0,
@@ -98,7 +98,7 @@ struct DownloadProgressTests {
         }
 
         @Test("stores currentFile when provided")
-        func storesCurrentFileWhenProvided() {
+        func storesCurrentFileWhenProvided() throws {
             // Arrange & Act
             let progress = DownloadProgress(
                 fraction: 0.3,
@@ -112,7 +112,7 @@ struct DownloadProgressTests {
         }
 
         @Test("is Sendable")
-        func isSendable() async {
+        func isSendable() async throws {
             // Arrange
             let progress = DownloadProgress(
                 fraction: 0.5,
@@ -131,17 +131,66 @@ struct DownloadProgressTests {
         }
     }
 
-    // MARK: - downloadWithProgress (default delegate / stub)
+    // MARK: - downloadWithProgress
 
     @Suite("downloadWithProgress")
     struct DownloadWithProgressTests {
+
+        /// Transfers nothing but reports a size, standing in for a real downloader.
+        ///
+        /// It is a *test* double, injected explicitly. The registry used to install one of these on
+        /// every caller who did not supply a delegate, which is how a stream could report a
+        /// completed 1 MB download of a model that was never fetched.
+        struct FixedSizeDelegate: DownloadProgressDelegate {
+            static let size: Int64 = 1_000_000
+
+            func download(
+                _ spec: ModelSpec,
+                progressHandler: @Sendable (DownloadProgress) -> Void
+            ) async throws -> Int64 {
+                Self.size
+            }
+        }
+
+        /// Without a delegate there is nothing to move the bytes, and the stream says so.
+        ///
+        /// The contrast is the point: the same call with a delegate reaches 1.0 and registers the
+        /// model. A default that fabricated the same ending is the strongest form of the swallow —
+        /// it is what a caller who simply forgot to wire a downloader used to get, and the only
+        /// evidence was a registry entry whose size no file on disk backed.
+        @Test("a registry with no download delegate fails instead of reporting a download")
+        func noDelegateFailsLoudly() async throws {
+            // Arrange
+            let dir = try DownloadProgressTests.makeTempDir()
+            defer { DownloadProgressTests.removeTempDir(dir) }
+            let registry = try ModelRegistry(cacheDirectory: dir)
+            let spec = DownloadProgressTests.sampleSpec()
+
+            // Act
+            var thrown: (any Error)?
+            do {
+                for try await _ in await registry.downloadWithProgress(spec) {}
+            } catch {
+                thrown = error
+            }
+
+            // Assert
+            guard case .downloadFailed = thrown as? LLMLocalError else {
+                Issue.record("expected downloadFailed, got \(String(describing: thrown))")
+                return
+            }
+            #expect(
+                try await registry.isCached(spec) == false,
+                "a download that never happened must not leave a registry entry behind"
+            )
+        }
 
         @Test("yields initial progress with fraction 0.0")
         func yieldsInitialProgress() async throws {
             // Arrange
             let dir = try DownloadProgressTests.makeTempDir()
             defer { DownloadProgressTests.removeTempDir(dir) }
-            let registry = ModelRegistry(cacheDirectory: dir)
+            let registry = try ModelRegistry(cacheDirectory: dir, downloadDelegate: FixedSizeDelegate())
             let spec = DownloadProgressTests.sampleSpec()
 
             // Act
@@ -160,7 +209,7 @@ struct DownloadProgressTests {
             // Arrange
             let dir = try DownloadProgressTests.makeTempDir()
             defer { DownloadProgressTests.removeTempDir(dir) }
-            let registry = ModelRegistry(cacheDirectory: dir)
+            let registry = try ModelRegistry(cacheDirectory: dir, downloadDelegate: FixedSizeDelegate())
             let spec = DownloadProgressTests.sampleSpec()
 
             // Act
@@ -179,7 +228,7 @@ struct DownloadProgressTests {
             // Arrange
             let dir = try DownloadProgressTests.makeTempDir()
             defer { DownloadProgressTests.removeTempDir(dir) }
-            let registry = ModelRegistry(cacheDirectory: dir)
+            let registry = try ModelRegistry(cacheDirectory: dir, downloadDelegate: FixedSizeDelegate())
             let spec = DownloadProgressTests.sampleSpec()
 
             // Act
@@ -200,7 +249,7 @@ struct DownloadProgressTests {
             // Arrange
             let dir = try DownloadProgressTests.makeTempDir()
             defer { DownloadProgressTests.removeTempDir(dir) }
-            let registry = ModelRegistry(cacheDirectory: dir)
+            let registry = try ModelRegistry(cacheDirectory: dir, downloadDelegate: FixedSizeDelegate())
             let spec = DownloadProgressTests.sampleSpec()
 
             // Act - consume the entire stream
@@ -268,7 +317,7 @@ struct DownloadProgressTests {
                 steps: [0.25, 0.5, 0.75],
                 totalSize: 4_000_000
             )
-            let registry = ModelRegistry(cacheDirectory: dir, downloadDelegate: delegate)
+            let registry = try ModelRegistry(cacheDirectory: dir, downloadDelegate: delegate)
             let spec = DownloadProgressTests.sampleSpec()
 
             // Act
@@ -296,7 +345,7 @@ struct DownloadProgressTests {
                 steps: [0.5],
                 totalSize: 1_000_000
             )
-            let registry = ModelRegistry(cacheDirectory: dir, downloadDelegate: delegate)
+            let registry = try ModelRegistry(cacheDirectory: dir, downloadDelegate: delegate)
             let spec = DownloadProgressTests.sampleSpec()
 
             // Act
@@ -319,7 +368,7 @@ struct DownloadProgressTests {
                 steps: [0.5],
                 totalSize: 2_500_000
             )
-            let registry = ModelRegistry(cacheDirectory: dir, downloadDelegate: delegate)
+            let registry = try ModelRegistry(cacheDirectory: dir, downloadDelegate: delegate)
             let spec = DownloadProgressTests.sampleSpec()
 
             // Act
@@ -343,7 +392,7 @@ struct DownloadProgressTests {
                     reason: "network error"
                 )
             )
-            let registry = ModelRegistry(cacheDirectory: dir, downloadDelegate: delegate)
+            let registry = try ModelRegistry(cacheDirectory: dir, downloadDelegate: delegate)
             let spec = DownloadProgressTests.sampleSpec()
 
             // Act & Assert
@@ -374,7 +423,7 @@ struct DownloadProgressTests {
                     reason: "network error"
                 )
             )
-            let registry = ModelRegistry(cacheDirectory: dir, downloadDelegate: delegate)
+            let registry = try ModelRegistry(cacheDirectory: dir, downloadDelegate: delegate)
             let spec = DownloadProgressTests.sampleSpec()
 
             // Act - consume stream, ignoring error
@@ -420,7 +469,7 @@ struct DownloadProgressTests {
             let dir = try DownloadProgressTests.makeTempDir()
             defer { DownloadProgressTests.removeTempDir(dir) }
             let delegate = SlowDelegate()
-            let registry = ModelRegistry(cacheDirectory: dir, downloadDelegate: delegate)
+            let registry = try ModelRegistry(cacheDirectory: dir, downloadDelegate: delegate)
             let spec = DownloadProgressTests.sampleSpec()
 
             // Act

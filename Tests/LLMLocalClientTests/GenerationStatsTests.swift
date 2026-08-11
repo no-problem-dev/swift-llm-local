@@ -7,7 +7,7 @@ struct GenerationStatsTests {
     // MARK: - Init and property access
 
     @Test("stores tokenCount correctly")
-    func tokenCount() {
+    func tokenCount() throws {
         let stats = GenerationStats(
             tokenCount: 150,
             tokensPerSecond: 45.5,
@@ -17,7 +17,7 @@ struct GenerationStatsTests {
     }
 
     @Test("stores tokensPerSecond correctly")
-    func tokensPerSecond() {
+    func tokensPerSecond() throws {
         let stats = GenerationStats(
             tokenCount: 150,
             tokensPerSecond: 45.5,
@@ -27,7 +27,7 @@ struct GenerationStatsTests {
     }
 
     @Test("stores duration correctly")
-    func duration() {
+    func duration() throws {
         let stats = GenerationStats(
             tokenCount: 150,
             tokensPerSecond: 45.5,
@@ -39,7 +39,7 @@ struct GenerationStatsTests {
     // MARK: - Edge cases
 
     @Test("handles zero tokenCount")
-    func zeroTokenCount() {
+    func zeroTokenCount() throws {
         let stats = GenerationStats(
             tokenCount: 0,
             tokensPerSecond: 0.0,
@@ -51,7 +51,7 @@ struct GenerationStatsTests {
     }
 
     @Test("handles large tokenCount")
-    func largeTokenCount() {
+    func largeTokenCount() throws {
         let stats = GenerationStats(
             tokenCount: 100_000,
             tokensPerSecond: 120.75,
@@ -62,7 +62,7 @@ struct GenerationStatsTests {
     }
 
     @Test("handles sub-second duration")
-    func subSecondDuration() {
+    func subSecondDuration() throws {
         let stats = GenerationStats(
             tokenCount: 10,
             tokensPerSecond: 200.0,
@@ -78,7 +78,7 @@ struct GenerationStatsTests {
     // MARK: - Sendable (compile-time check)
 
     @Test("stats is Sendable")
-    func sendableCheck() async {
+    func sendableCheck() async throws {
         let stats = GenerationStats(
             tokenCount: 100,
             tokensPerSecond: 50.0,

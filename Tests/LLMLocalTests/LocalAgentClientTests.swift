@@ -131,9 +131,9 @@ struct LocalAgentClientTests {
     private static func makeClient(
         backend: MockBackend,
         cacheDirectory: URL
-    ) -> LocalAgentClient {
-        let registry = ModelRegistry(cacheDirectory: cacheDirectory)
-        let service = LLMLocalService(backend: backend, modelRegistry: registry)
+    ) throws -> LocalAgentClient {
+        let registry = try ModelRegistry(cacheDirectory: cacheDirectory)
+        let service = try LLMLocalService(backend: backend, modelRegistry: registry)
         return LocalAgentClient(service: service)
     }
 
@@ -182,7 +182,7 @@ struct LocalAgentClientTests {
             .text(#"{"message":"hi"}"#),
             .info(Self.sampleInfo),
         ])
-        let client = Self.makeClient(backend: backend, cacheDirectory: dir)
+        let client = try Self.makeClient(backend: backend, cacheDirectory: dir)
 
         let result: GenerationResult<TestGreeting> = try await generateStructured(
             client,
@@ -205,7 +205,7 @@ struct LocalAgentClientTests {
             .text(#"{"message":"fenced"}"#),
             .text("\n```"),
         ])
-        let client = Self.makeClient(backend: backend, cacheDirectory: dir)
+        let client = try Self.makeClient(backend: backend, cacheDirectory: dir)
 
         let result: GenerationResult<TestGreeting> = try await generateStructured(
             client,
@@ -228,7 +228,7 @@ struct LocalAgentClientTests {
             .toolCall(Self.sampleToolCall),
             .info(Self.sampleInfo),
         ])
-        let client = Self.makeClient(backend: backend, cacheDirectory: dir)
+        let client = try Self.makeClient(backend: backend, cacheDirectory: dir)
 
         let response = try await planViaProtocol(
             client,
@@ -249,7 +249,7 @@ struct LocalAgentClientTests {
         let dir = try Self.makeTempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
         let backend = MockBackend()
-        let client = Self.makeClient(backend: backend, cacheDirectory: dir)
+        let client = try Self.makeClient(backend: backend, cacheDirectory: dir)
 
         _ = try await planViaProtocol(
             client,
@@ -276,7 +276,7 @@ struct LocalAgentClientTests {
             .toolCall(Self.sampleToolCall),
             .info(Self.sampleInfo),
         ])
-        let client = Self.makeClient(backend: backend, cacheDirectory: dir)
+        let client = try Self.makeClient(backend: backend, cacheDirectory: dir)
 
         let response = try await executeViaProtocol(
             client,
@@ -310,7 +310,7 @@ struct LocalAgentClientTests {
         let dir = try Self.makeTempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
         let backend = MockBackend()
-        let client = Self.makeClient(backend: backend, cacheDirectory: dir)
+        let client = try Self.makeClient(backend: backend, cacheDirectory: dir)
 
         _ = try await executeViaProtocol(
             client,
@@ -332,7 +332,7 @@ struct LocalAgentClientTests {
         let dir = try Self.makeTempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
         let backend = MockBackend()
-        let client = Self.makeClient(backend: backend, cacheDirectory: dir)
+        let client = try Self.makeClient(backend: backend, cacheDirectory: dir)
 
         _ = try await executeViaProtocol(
             client,
@@ -355,7 +355,7 @@ struct LocalAgentClientTests {
             .text("Answer"),
             .info(Self.sampleInfo),
         ])
-        let client = Self.makeClient(backend: backend, cacheDirectory: dir)
+        let client = try Self.makeClient(backend: backend, cacheDirectory: dir)
 
         var thinkingDeltas: [String] = []
         var textDeltas: [String] = []
@@ -395,7 +395,7 @@ struct LocalAgentClientTests {
         let dir = try Self.makeTempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
         let backend = MockBackend()
-        let client = Self.makeClient(backend: backend, cacheDirectory: dir)
+        let client = try Self.makeClient(backend: backend, cacheDirectory: dir)
 
         await #expect(throws: LLMLocalError.toolCallsUnsupported(modelId: "test-model")) {
             _ = try await executeViaProtocol(
@@ -413,7 +413,7 @@ struct LocalAgentClientTests {
         defer { try? FileManager.default.removeItem(at: dir) }
         let backend = MockBackend()
         await backend.setMockToolOutputs([.text("plain answer")])
-        let client = Self.makeClient(backend: backend, cacheDirectory: dir)
+        let client = try Self.makeClient(backend: backend, cacheDirectory: dir)
 
         let response = try await executeViaProtocol(
             client,
@@ -432,7 +432,7 @@ struct LocalAgentClientTests {
         defer { try? FileManager.default.removeItem(at: dir) }
         let backend = MockBackend()
         await backend.setMockToolOutputs([.toolCall(Self.sampleToolCall)])
-        let client = Self.makeClient(backend: backend, cacheDirectory: dir)
+        let client = try Self.makeClient(backend: backend, cacheDirectory: dir)
 
         let response = try await planViaProtocol(
             client,
@@ -447,7 +447,7 @@ struct LocalAgentClientTests {
     // MARK: - JSON Payload Extraction
 
     @Test("extractJSONPayload はフェンスなし・言語タグ付き・タグなしフェンスを処理する")
-    func extractJSONPayloadVariants() {
+    func extractJSONPayloadVariants() throws {
         #expect(LocalAgentClient.extractJSONPayload(from: #"{"a":1}"#) == #"{"a":1}"#)
         #expect(
             LocalAgentClient.extractJSONPayload(from: "```json\n{\"a\":1}\n```") == #"{"a":1}"#

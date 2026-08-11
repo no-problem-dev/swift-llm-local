@@ -81,7 +81,7 @@ private func adapterSpec(
 struct AdapterResolvingProtocolTests {
 
     @Test("AdapterResolving protocol exists and is usable")
-    func protocolExistsAndIsUsable() {
+    func protocolExistsAndIsUsable() throws {
         // Arrange & Act: compile-time check -- MockAdapterResolver as AdapterResolving
         let resolver: any AdapterResolving = MockAdapterResolver()
 
@@ -90,7 +90,7 @@ struct AdapterResolvingProtocolTests {
     }
 
     @Test("AdapterResolving conforms to Sendable")
-    func conformsToSendable() {
+    func conformsToSendable() throws {
         // Arrange & Act: compile-time check via Sendable closure boundary
         let resolver = MockAdapterResolver()
         let result: any AdapterResolving = { @Sendable in resolver }()
@@ -114,7 +114,7 @@ struct AdapterResolvingProtocolTests {
     }
 
     @Test("Mock resolver throws when configured to fail")
-    func mockResolverThrowsWhenConfigured() async {
+    func mockResolverThrowsWhenConfigured() async throws {
         // Arrange
         let resolver = MockAdapterResolver(shouldThrow: true)
         let source = AdapterSource.local(path: URL(filePath: "/tmp/adapters/lora"))
@@ -132,9 +132,9 @@ struct AdapterResolvingProtocolTests {
 struct MLXBackendAdapterConfigurationTests {
 
     @Test("Backend created without resolver has nil adapterResolver")
-    func backendWithoutResolverHasNilResolver() async {
+    func backendWithoutResolverHasNilResolver() async throws {
         // Arrange & Act
-        let backend = MLXBackend()
+        let backend = try MLXBackend()
 
         // Assert
         let hasResolver = await backend.hasAdapterResolver
@@ -142,12 +142,12 @@ struct MLXBackendAdapterConfigurationTests {
     }
 
     @Test("Backend created with resolver stores it")
-    func backendWithResolverStoresIt() async {
+    func backendWithResolverStoresIt() async throws {
         // Arrange
         let resolver = MockAdapterResolver()
 
         // Act
-        let backend = MLXBackend(adapterResolver: resolver)
+        let backend = try MLXBackend(adapterResolver: resolver)
 
         // Assert
         let hasResolver = await backend.hasAdapterResolver
@@ -155,10 +155,10 @@ struct MLXBackendAdapterConfigurationTests {
     }
 
     @Test("Backend with resolver preserves default gpuCacheLimit")
-    func backendWithResolverPreservesDefaultCacheLimit() async {
+    func backendWithResolverPreservesDefaultCacheLimit() async throws {
         // Arrange & Act
         let resolver = MockAdapterResolver()
-        let backend = MLXBackend(adapterResolver: resolver)
+        let backend = try MLXBackend(adapterResolver: resolver)
 
         // Assert
         let cacheLimit = await backend.gpuCacheLimitValue
@@ -166,13 +166,13 @@ struct MLXBackendAdapterConfigurationTests {
     }
 
     @Test("Backend with resolver and custom gpuCacheLimit")
-    func backendWithResolverAndCustomCacheLimit() async {
+    func backendWithResolverAndCustomCacheLimit() async throws {
         // Arrange
         let resolver = MockAdapterResolver()
         let customLimit = 50 * 1024 * 1024
 
         // Act
-        let backend = MLXBackend(gpuCacheLimit: customLimit, adapterResolver: resolver)
+        let backend = try MLXBackend(gpuCacheLimit: customLimit, adapterResolver: resolver)
 
         // Assert
         let cacheLimit = await backend.gpuCacheLimitValue
@@ -188,9 +188,9 @@ struct MLXBackendAdapterConfigurationTests {
 struct MLXBackendResolveAdapterTests {
 
     @Test("resolveAdapter with adapter but no resolver throws adapterMergeFailed")
-    func resolveAdapterWithNoResolverThrows() async {
+    func resolveAdapterWithNoResolverThrows() async throws {
         // Arrange
-        let backend = MLXBackend()
+        let backend = try MLXBackend()
         let spec = adapterSpec()
 
         // Act & Assert
@@ -207,7 +207,7 @@ struct MLXBackendResolveAdapterTests {
         let expectedURL = URL(filePath: "/tmp/adapters/resolved-lora")
         let spy = SpyAdapterResolver(resolvedURL: expectedURL)
         let adapterSource = AdapterSource.local(path: URL(filePath: "/tmp/adapters/lora"))
-        let backend = MLXBackend(adapterResolver: spy)
+        let backend = try MLXBackend(adapterResolver: spy)
         let spec = adapterSpec(adapter: adapterSource)
 
         // Act
@@ -222,10 +222,10 @@ struct MLXBackendResolveAdapterTests {
     }
 
     @Test("resolveAdapter with adapter resolution failure propagates LLMLocalError")
-    func resolveAdapterPropagatesLLMLocalError() async {
+    func resolveAdapterPropagatesLLMLocalError() async throws {
         // Arrange
         let failingResolver = MockAdapterResolver(shouldThrow: true)
-        let backend = MLXBackend(adapterResolver: failingResolver)
+        let backend = try MLXBackend(adapterResolver: failingResolver)
         let spec = adapterSpec()
 
         // Act & Assert
@@ -239,7 +239,7 @@ struct MLXBackendResolveAdapterTests {
     @Test("resolveAdapter without adapter returns nil")
     func resolveAdapterWithoutAdapterReturnsNil() async throws {
         // Arrange: spec without adapter, no resolver needed
-        let backend = MLXBackend()
+        let backend = try MLXBackend()
         let spec = adapterSpec(adapter: nil)
 
         // Act
@@ -253,7 +253,7 @@ struct MLXBackendResolveAdapterTests {
     func resolveAdapterWithoutAdapterDoesNotCallResolver() async throws {
         // Arrange: resolver provided but spec has no adapter
         let spy = SpyAdapterResolver()
-        let backend = MLXBackend(adapterResolver: spy)
+        let backend = try MLXBackend(adapterResolver: spy)
         let spec = adapterSpec(adapter: nil)
 
         // Act
@@ -270,7 +270,7 @@ struct MLXBackendResolveAdapterTests {
         let expectedURL = URL(filePath: "/tmp/adapters/gh-adapter")
         let spy = SpyAdapterResolver(resolvedURL: expectedURL)
         let ghSource = AdapterSource.gitHubRelease(repo: "owner/repo", tag: "v1.0", asset: "adapter.safetensors")
-        let backend = MLXBackend(adapterResolver: spy)
+        let backend = try MLXBackend(adapterResolver: spy)
         let spec = adapterSpec(adapter: ghSource)
 
         // Act
@@ -288,7 +288,7 @@ struct MLXBackendResolveAdapterTests {
         let expectedURL = URL(filePath: "/tmp/adapters/hf-adapter")
         let spy = SpyAdapterResolver(resolvedURL: expectedURL)
         let hfSource = AdapterSource.huggingFace(id: "user/my-lora-adapter")
-        let backend = MLXBackend(adapterResolver: spy)
+        let backend = try MLXBackend(adapterResolver: spy)
         let spec = adapterSpec(adapter: hfSource)
 
         // Act
@@ -301,9 +301,9 @@ struct MLXBackendResolveAdapterTests {
     }
 
     @Test("resolveAdapter wraps non-LLMLocalError in adapterMergeFailed")
-    func resolveAdapterWrapsGenericError() async {
+    func resolveAdapterWrapsGenericError() async throws {
         // Arrange: resolver that throws a generic (non-LLMLocalError) error
-        let backend = MLXBackend(adapterResolver: GenericErrorResolver())
+        let backend = try MLXBackend(adapterResolver: GenericErrorResolver())
         let spec = adapterSpec()
 
         // Act & Assert: generic error should be wrapped in adapterMergeFailed
@@ -330,9 +330,9 @@ private struct GenericErrorResolver: AdapterResolving {
 struct MLXBackendLoadModelAdapterErrorPathTests {
 
     @Test("loadModel with adapter but no resolver throws adapterMergeFailed")
-    func loadModelWithAdapterButNoResolverThrows() async {
+    func loadModelWithAdapterButNoResolverThrows() async throws {
         // Arrange: no resolver configured, but spec has adapter
-        let backend = MLXBackend()
+        let backend = try MLXBackend()
         let spec = adapterSpec()
 
         // Act & Assert: should throw before reaching MLX APIs
@@ -344,10 +344,10 @@ struct MLXBackendLoadModelAdapterErrorPathTests {
     }
 
     @Test("loadModel with adapter resolution failure propagates error")
-    func loadModelWithAdapterResolutionFailurePropagates() async {
+    func loadModelWithAdapterResolutionFailurePropagates() async throws {
         // Arrange
         let failingResolver = MockAdapterResolver(shouldThrow: true)
-        let backend = MLXBackend(adapterResolver: failingResolver)
+        let backend = try MLXBackend(adapterResolver: failingResolver)
         let spec = adapterSpec()
 
         // Act & Assert: should throw before reaching MLX APIs
@@ -357,9 +357,9 @@ struct MLXBackendLoadModelAdapterErrorPathTests {
     }
 
     @Test("loadModel resets lastResolvedAdapterURL before resolving")
-    func loadModelResetsAdapterURL() async {
+    func loadModelResetsAdapterURL() async throws {
         // Arrange: backend with no resolver, adapter spec will fail
-        let backend = MLXBackend()
+        let backend = try MLXBackend()
         let spec = adapterSpec()
 
         // Act
@@ -381,9 +381,9 @@ struct MLXBackendLoadModelAdapterErrorPathTests {
 struct MLXBackendBackwardCompatibilityTests {
 
     @Test("init without adapterResolver maintains original API")
-    func initWithoutAdapterResolverMaintainsAPI() async {
+    func initWithoutAdapterResolverMaintainsAPI() async throws {
         // Arrange & Act: original init signature still works
-        let backend = MLXBackend()
+        let backend = try MLXBackend()
 
         // Assert: no adapter resolver, same defaults
         let hasResolver = await backend.hasAdapterResolver
@@ -398,10 +398,10 @@ struct MLXBackendBackwardCompatibilityTests {
     }
 
     @Test("init with custom gpuCacheLimit still works without adapterResolver")
-    func initWithCustomCacheLimitStillWorks() async {
+    func initWithCustomCacheLimitStillWorks() async throws {
         // Arrange & Act
         let customLimit = 50 * 1024 * 1024
-        let backend = MLXBackend(gpuCacheLimit: customLimit)
+        let backend = try MLXBackend(gpuCacheLimit: customLimit)
 
         // Assert
         let cacheLimit = await backend.gpuCacheLimitValue
@@ -414,7 +414,7 @@ struct MLXBackendBackwardCompatibilityTests {
     func modelSpecWithoutAdapterSkipsResolution() async throws {
         // Arrange: spec without adapter
         let spy = SpyAdapterResolver()
-        let backend = MLXBackend(adapterResolver: spy)
+        let backend = try MLXBackend(adapterResolver: spy)
         let spec = adapterSpec(adapter: nil)
 
         // Act: resolveAdapter should return nil and not call the resolver

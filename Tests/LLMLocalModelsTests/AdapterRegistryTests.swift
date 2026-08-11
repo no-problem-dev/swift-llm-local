@@ -62,7 +62,7 @@ struct AdapterRegistryTests {
     struct CacheKeyTests {
 
         @Test("generates correct key for GitHub Release source")
-        func generatesKeyForGitHubRelease() {
+        func generatesKeyForGitHubRelease() throws {
             // Arrange
             let source = AdapterSource.gitHubRelease(
                 repo: "owner/repo", tag: "v1.0", asset: "adapter.safetensors"
@@ -76,7 +76,7 @@ struct AdapterRegistryTests {
         }
 
         @Test("generates correct key for HuggingFace source")
-        func generatesKeyForHuggingFace() {
+        func generatesKeyForHuggingFace() throws {
             // Arrange
             let source = AdapterSource.huggingFace(id: "user/adapter-model")
 
@@ -88,7 +88,7 @@ struct AdapterRegistryTests {
         }
 
         @Test("generates correct key for local source")
-        func generatesKeyForLocal() {
+        func generatesKeyForLocal() throws {
             // Arrange
             let source = AdapterSource.local(
                 path: URL(fileURLWithPath: "/tmp/adapters/my-adapter")
@@ -115,7 +115,7 @@ struct AdapterRegistryTests {
             let localFile = dir.appendingPathComponent("local-adapter.safetensors")
             try Data("local-adapter-data".utf8).write(to: localFile)
             let source = AdapterSource.local(path: localFile)
-            let registry = AdapterRegistry(
+            let registry = try AdapterRegistry(
                 adapterDirectory: dir,
                 networkDelegate: MockAdapterNetworkDelegate()
             )
@@ -134,7 +134,7 @@ struct AdapterRegistryTests {
             defer { AdapterRegistryTests.removeTempDir(dir) }
             let nonExistentFile = dir.appendingPathComponent("non-existent.safetensors")
             let source = AdapterSource.local(path: nonExistentFile)
-            let registry = AdapterRegistry(
+            let registry = try AdapterRegistry(
                 adapterDirectory: dir,
                 networkDelegate: MockAdapterNetworkDelegate()
             )
@@ -153,7 +153,7 @@ struct AdapterRegistryTests {
             let source = AdapterSource.gitHubRelease(
                 repo: "owner/repo", tag: "v1.0", asset: "adapter.safetensors"
             )
-            let registry = AdapterRegistry(
+            let registry = try AdapterRegistry(
                 adapterDirectory: dir,
                 networkDelegate: MockAdapterNetworkDelegate()
             )
@@ -175,7 +175,7 @@ struct AdapterRegistryTests {
             let source = AdapterSource.gitHubRelease(
                 repo: "owner/repo", tag: "v1.0", asset: "adapter.safetensors"
             )
-            let registry = AdapterRegistry(
+            let registry = try AdapterRegistry(
                 adapterDirectory: dir,
                 networkDelegate: MockAdapterNetworkDelegate()
             )
@@ -194,7 +194,7 @@ struct AdapterRegistryTests {
             let dir = try AdapterRegistryTests.makeTempDir()
             defer { AdapterRegistryTests.removeTempDir(dir) }
             let source = AdapterSource.huggingFace(id: "user/adapter-model")
-            let registry = AdapterRegistry(
+            let registry = try AdapterRegistry(
                 adapterDirectory: dir,
                 networkDelegate: MockAdapterNetworkDelegate()
             )
@@ -216,7 +216,7 @@ struct AdapterRegistryTests {
             let source = AdapterSource.gitHubRelease(
                 repo: "owner/repo", tag: "v1.0", asset: "adapter.safetensors"
             )
-            let registry = AdapterRegistry(
+            let registry = try AdapterRegistry(
                 adapterDirectory: dir,
                 networkDelegate: MockAdapterNetworkDelegate(shouldThrow: true)
             )
@@ -241,7 +241,7 @@ struct AdapterRegistryTests {
             let source = AdapterSource.gitHubRelease(
                 repo: "owner/repo", tag: "v1.0", asset: "adapter.safetensors"
             )
-            let registry = AdapterRegistry(
+            let registry = try AdapterRegistry(
                 adapterDirectory: dir,
                 networkDelegate: MockAdapterNetworkDelegate()
             )
@@ -261,7 +261,7 @@ struct AdapterRegistryTests {
             let source = AdapterSource.gitHubRelease(
                 repo: "owner/repo", tag: "v1.0", asset: "adapter.safetensors"
             )
-            let registry = AdapterRegistry(
+            let registry = try AdapterRegistry(
                 adapterDirectory: dir,
                 networkDelegate: MockAdapterNetworkDelegate()
             )
@@ -283,7 +283,7 @@ struct AdapterRegistryTests {
             let source = AdapterSource.gitHubRelease(
                 repo: "owner/repo", tag: "v1.0", asset: "adapter.safetensors"
             )
-            let registry = AdapterRegistry(
+            let registry = try AdapterRegistry(
                 adapterDirectory: dir,
                 networkDelegate: MockAdapterNetworkDelegate()
             )
@@ -308,7 +308,7 @@ struct AdapterRegistryTests {
             // Arrange
             let dir = try AdapterRegistryTests.makeTempDir()
             defer { AdapterRegistryTests.removeTempDir(dir) }
-            let registry = AdapterRegistry(
+            let registry = try AdapterRegistry(
                 adapterDirectory: dir,
                 networkDelegate: MockAdapterNetworkDelegate()
             )
@@ -325,7 +325,7 @@ struct AdapterRegistryTests {
             // Arrange
             let dir = try AdapterRegistryTests.makeTempDir()
             defer { AdapterRegistryTests.removeTempDir(dir) }
-            let registry = AdapterRegistry(
+            let registry = try AdapterRegistry(
                 adapterDirectory: dir,
                 networkDelegate: MockAdapterNetworkDelegate()
             )
@@ -360,7 +360,7 @@ struct AdapterRegistryTests {
             let source = AdapterSource.gitHubRelease(
                 repo: "owner/repo", tag: "v1.0", asset: "adapter.safetensors"
             )
-            let registry = AdapterRegistry(
+            let registry = try AdapterRegistry(
                 adapterDirectory: dir,
                 networkDelegate: MockAdapterNetworkDelegate()
             )
@@ -380,7 +380,7 @@ struct AdapterRegistryTests {
             let source = AdapterSource.gitHubRelease(
                 repo: "owner/repo", tag: "v1.0", asset: "adapter.safetensors"
             )
-            let registry = AdapterRegistry(
+            let registry = try AdapterRegistry(
                 adapterDirectory: dir,
                 networkDelegate: MockAdapterNetworkDelegate()
             )
@@ -408,7 +408,7 @@ struct AdapterRegistryTests {
                 repo: "owner/repo", tag: "v1.0", asset: "adapter1.safetensors"
             )
             let source2 = AdapterSource.huggingFace(id: "user/adapter-model")
-            let registry = AdapterRegistry(
+            let registry = try AdapterRegistry(
                 adapterDirectory: dir,
                 networkDelegate: MockAdapterNetworkDelegate()
             )
@@ -438,7 +438,7 @@ struct AdapterRegistryTests {
             // Arrange
             let dir = try AdapterRegistryTests.makeTempDir()
             defer { AdapterRegistryTests.removeTempDir(dir) }
-            let registry = AdapterRegistry(
+            let registry = try AdapterRegistry(
                 adapterDirectory: dir,
                 networkDelegate: MockAdapterNetworkDelegate()
             )
@@ -474,13 +474,13 @@ struct AdapterRegistryTests {
             let mockDelegate = MockAdapterNetworkDelegate()
 
             // Act - resolve with one registry instance
-            let registry1 = AdapterRegistry(
+            let registry1 = try AdapterRegistry(
                 adapterDirectory: dir, networkDelegate: mockDelegate
             )
             _ = try await registry1.resolve(source)
 
             // Assert - create new registry instance and verify data persists
-            let registry2 = AdapterRegistry(
+            let registry2 = try AdapterRegistry(
                 adapterDirectory: dir, networkDelegate: mockDelegate
             )
             let adapters = try await registry2.cachedAdapters()
@@ -500,14 +500,14 @@ struct AdapterRegistryTests {
             let mockDelegate = MockAdapterNetworkDelegate()
 
             // Act - resolve adapters with first instance
-            let registry1 = AdapterRegistry(
+            let registry1 = try AdapterRegistry(
                 adapterDirectory: dir, networkDelegate: mockDelegate
             )
             _ = try await registry1.resolve(source1)
             _ = try await registry1.resolve(source2)
 
             // Assert - new instance should load both
-            let registry2 = AdapterRegistry(
+            let registry2 = try AdapterRegistry(
                 adapterDirectory: dir, networkDelegate: mockDelegate
             )
             let adapters = try await registry2.cachedAdapters()

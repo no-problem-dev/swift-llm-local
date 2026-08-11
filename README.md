@@ -24,7 +24,7 @@ Run open LLMs entirely on iOS and macOS devices, through Apple MLX. No API key, 
 ```swift
 import LLMLocal
 
-let service = LLMLocalService(
+let service = try LLMLocalService(
     backend: MLXBackend(),
     modelRegistry: ModelRegistry(cacheDirectory: cacheDirectory)
 )

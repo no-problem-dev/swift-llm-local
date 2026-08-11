@@ -8,7 +8,7 @@ struct CachedModelInfoTests {
     // MARK: - Initialization
 
     @Test("initializes with all properties")
-    func initializesWithAllProperties() {
+    func initializesWithAllProperties() throws {
         // Arrange
         let now = Date()
         let path = URL(fileURLWithPath: "/tmp/models/test-model")
@@ -86,7 +86,7 @@ struct CachedModelInfoTests {
     // MARK: - Sendable
 
     @Test("is Sendable")
-    func isSendable() {
+    func isSendable() throws {
         // Arrange & Act
         let info = CachedModelInfo(
             modelId: "sendable-test",
@@ -104,7 +104,7 @@ struct CachedModelInfoTests {
     // MARK: - modelFilesPath
 
     @Test("initializes with modelFilesPath")
-    func initializesWithModelFilesPath() {
+    func initializesWithModelFilesPath() throws {
         let filesPath = URL(fileURLWithPath: "/tmp/huggingface/models/test")
         let info = CachedModelInfo(
             modelId: "test",
@@ -118,7 +118,7 @@ struct CachedModelInfoTests {
     }
 
     @Test("modelFilesPath defaults to nil")
-    func modelFilesPathDefaultsToNil() {
+    func modelFilesPathDefaultsToNil() throws {
         let info = CachedModelInfo(
             modelId: "test",
             displayName: "Test",

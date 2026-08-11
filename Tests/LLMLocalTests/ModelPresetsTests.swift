@@ -6,45 +6,45 @@ import LLMLocalClient
 struct ModelPresetsTests {
 
     @Test("all presets have unique IDs")
-    func allPresetsHaveUniqueIDs() {
+    func allPresetsHaveUniqueIDs() throws {
         let ids = ModelPresets.all.map(\.id)
         #expect(Set(ids).count == ids.count)
     }
 
     @Test("all presets have non-zero memory estimate")
-    func allPresetsHaveNonZeroMemory() {
+    func allPresetsHaveNonZeroMemory() throws {
         for preset in ModelPresets.all {
             #expect(preset.estimatedMemoryBytes > 0, "Model \(preset.id) has zero memory")
         }
     }
 
     @Test("all presets have non-empty description")
-    func allPresetsHaveNonEmptyDescription() {
+    func allPresetsHaveNonEmptyDescription() throws {
         for preset in ModelPresets.all {
             #expect(!preset.description.isEmpty, "Model \(preset.id) has empty description")
         }
     }
 
     @Test("all array is sorted by memory size")
-    func allArrayIsSortedByMemory() {
+    func allArrayIsSortedByMemory() throws {
         let memories = ModelPresets.all.map(\.estimatedMemoryBytes)
         #expect(memories == memories.sorted())
     }
 
     @Test("contains expected model count")
-    func containsExpectedModelCount() {
+    func containsExpectedModelCount() throws {
         #expect(ModelPresets.all.count >= 30)
     }
 
     @Test("all presets have a profile")
-    func allPresetsHaveProfile() {
+    func allPresetsHaveProfile() throws {
         for preset in ModelPresets.all {
             #expect(preset.profile != nil, "Model \(preset.id) has no profile")
         }
     }
 
     @Test("all profiles have non-empty summary")
-    func allProfilesHaveNonEmptySummary() {
+    func allProfilesHaveNonEmptySummary() throws {
         for preset in ModelPresets.all {
             guard let profile = preset.profile else { continue }
             #expect(!profile.summary.isEmpty, "Model \(preset.id) profile has empty summary")
@@ -52,7 +52,7 @@ struct ModelPresetsTests {
     }
 
     @Test("all profiles have non-empty modelFamily")
-    func allProfilesHaveModelFamily() {
+    func allProfilesHaveModelFamily() throws {
         for preset in ModelPresets.all {
             guard let profile = preset.profile else { continue }
             #expect(!profile.modelFamily.isEmpty, "Model \(preset.id) profile has empty modelFamily")
@@ -60,7 +60,7 @@ struct ModelPresetsTests {
     }
 
     @Test("all profiles have text modality")
-    func allProfilesHaveTextModality() {
+    func allProfilesHaveTextModality() throws {
         for preset in ModelPresets.all {
             guard let profile = preset.profile else { continue }
             #expect(
@@ -71,7 +71,7 @@ struct ModelPresetsTests {
     }
 
     @Test("all local profiles have quantization info")
-    func allLocalProfilesHaveQuantization() {
+    func allLocalProfilesHaveQuantization() throws {
         for preset in ModelPresets.all {
             guard let profile = preset.profile else { continue }
             #expect(
@@ -82,7 +82,7 @@ struct ModelPresetsTests {
     }
 
     @Test("all local profiles have inference speed")
-    func allLocalProfilesHaveInferenceSpeed() {
+    func allLocalProfilesHaveInferenceSpeed() throws {
         for preset in ModelPresets.all {
             guard let profile = preset.profile else { continue }
             #expect(
@@ -110,7 +110,7 @@ struct ModelPresetsTests {
     ]
 
     @Test("every preset has an explicit recommendedGeneration (never .default)")
-    func everyPresetHasExplicitRecommendedGeneration() {
+    func everyPresetHasExplicitRecommendedGeneration() throws {
         for preset in ModelPresets.all {
             #expect(
                 preset.recommendedGeneration != .default,
@@ -120,7 +120,7 @@ struct ModelPresetsTests {
     }
 
     @Test("non-reasoning presets disable thinking; reasoning presets keep it on")
-    func thinkingModeMatchesModelKind() {
+    func thinkingModeMatchesModelKind() throws {
         for preset in ModelPresets.all {
             let expectedThinking = Self.reasoningModelIDs.contains(preset.id)
             #expect(

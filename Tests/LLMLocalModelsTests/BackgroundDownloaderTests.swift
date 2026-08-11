@@ -81,7 +81,7 @@ private let testURL = URL(string: "https://huggingface.co/mlx-community/test-mod
 struct DownloadStateTests {
 
     @Test("downloading state is created correctly")
-    func downloadingStateCreated() {
+    func downloadingStateCreated() throws {
         // Arrange & Act
         let state = DownloadState.downloading
 
@@ -90,7 +90,7 @@ struct DownloadStateTests {
     }
 
     @Test("paused state stores resume data")
-    func pausedStateStoresResumeData() {
+    func pausedStateStoresResumeData() throws {
         // Arrange
         let data = Data("resume-data".utf8)
 
@@ -255,10 +255,46 @@ struct BackgroundDownloaderPauseResumeFlowTests {
         #expect(received == [resumeData])
     }
 
-    /// A pause the transport could not make resumable still marks the URL paused, and the restart
-    /// receives empty data rather than nothing.
-    @Test("pause with no delegate resume data stores empty data")
-    func pauseWithoutDelegateDataStoresEmpty() async throws {
+    /// A pause the transport could not make resumable must not look like a resumable one.
+    ///
+    /// Storing empty data made the two identical from outside: `hasResumeData(for:)` answered
+    /// `true` either way, and `resume(url:)` succeeded either way — one continuing where it left
+    /// off, the other silently starting a multi-gigabyte transfer again from byte zero under the
+    /// name "resume". The contrast against a pause that *did* produce resume data is what this
+    /// asserts; either half alone would pass with the swallow in place.
+    @Test("a pause that produced no resume data is not resumable")
+    func pauseWithoutDelegateDataIsNotResumable() async throws {
+        // Arrange: same pause, two transports — one that can resume, one that cannot.
+        let resumable = BackgroundDownloader(
+            delegate: RecordingBackgroundDownloadDelegate(cancelResumeData: Data("bytes".utf8))
+        )
+        let notResumable = BackgroundDownloader(
+            delegate: RecordingBackgroundDownloadDelegate(cancelResumeData: nil)
+        )
+        await resumable.markAsDownloading(testURL)
+        await notResumable.markAsDownloading(testURL)
+
+        // Act
+        try await resumable.pause(url: testURL)
+        try await notResumable.pause(url: testURL)
+
+        // Assert
+        #expect(await resumable.hasResumeData(for: testURL) == true)
+        #expect(
+            await notResumable.hasResumeData(for: testURL) == false,
+            """
+            empty data stored for a transport that cannot resume makes every paused URL report as \
+            resumable
+            """
+        )
+        await #expect(throws: BackgroundDownloadError.noResumeData) {
+            _ = try await notResumable.resume(url: testURL)
+        }
+    }
+
+    /// The URL is still paused even though it cannot be resumed — the transfer did stop.
+    @Test("a pause that produced no resume data still leaves the URL paused, not downloading")
+    func pauseWithoutDelegateDataStillPauses() async throws {
         // Arrange
         let delegate = RecordingBackgroundDownloadDelegate(cancelResumeData: nil)
         let downloader = BackgroundDownloader(delegate: delegate)
@@ -266,13 +302,26 @@ struct BackgroundDownloaderPauseResumeFlowTests {
 
         // Act
         try await downloader.pause(url: testURL)
-        _ = try await downloader.resume(url: testURL)
 
         // Assert
-        let hasData = await downloader.hasResumeData(for: testURL)
-        #expect(hasData == false) // Cleared once the transfer finished.
+        #expect(await downloader.isDownloading(testURL) == false)
+    }
+
+    /// Starting over is available, but only by asking for it by name.
+    @Test("download restarts a non-resumable pause from the beginning")
+    func downloadRestartsNonResumablePause() async throws {
+        // Arrange
+        let delegate = RecordingBackgroundDownloadDelegate(cancelResumeData: nil)
+        let downloader = BackgroundDownloader(delegate: delegate)
+        await downloader.markAsDownloading(testURL)
+        try await downloader.pause(url: testURL)
+
+        // Act
+        _ = try await downloader.download(from: testURL)
+
+        // Assert: nil, not empty data — "start from the beginning", said plainly.
         let received = await delegate.receivedResumeData
-        #expect(received == [Data()])
+        #expect(received == [nil])
     }
 
     @Test("resume without prior pause throws error")
@@ -307,6 +356,78 @@ struct BackgroundDownloaderPauseResumeFlowTests {
 
 @Suite("BackgroundDownloader cancel flow")
 struct BackgroundDownloaderCancelFlowTests {
+
+    /// A delegate whose cancel fails: the transfer is still running when this returns.
+    private struct UncancellableDelegate: BackgroundDownloadDelegate {
+        struct CancelFailed: Error {}
+
+        func startDownload(url: URL, resumeData: Data?) async throws -> URL {
+            URL(fileURLWithPath: "/tmp/never")
+        }
+
+        func cancelDownload(for url: URL) async throws -> Data? {
+            throw CancelFailed()
+        }
+    }
+
+    /// A cancel the delegate could not perform must not be reported as a cancel.
+    ///
+    /// The bookkeeping was torn down unconditionally, so a transfer that refused to stop went on
+    /// moving bytes while `isDownloading(_:)` answered `false` about it — and with the entry gone
+    /// there was no longer anything to stop it with. The method was `throws` and could never throw.
+    @Test("a cancel the delegate refused leaves the URL reporting as in flight")
+    func failedCancelKeepsTracking() async throws {
+        // Arrange: same call, two delegates — one that stops the transfer, one that cannot.
+        let stoppable = BackgroundDownloader(delegate: MockBackgroundDownloadDelegate())
+        let unstoppable = BackgroundDownloader(delegate: UncancellableDelegate())
+        await stoppable.markAsDownloading(testURL)
+        await unstoppable.markAsDownloading(testURL)
+
+        // Act
+        try await stoppable.cancel(url: testURL)
+        var thrown: (any Error)?
+        do {
+            try await unstoppable.cancel(url: testURL)
+        } catch {
+            thrown = error
+        }
+
+        // Assert
+        #expect(await stoppable.isDownloading(testURL) == false)
+        #expect(
+            thrown is UncancellableDelegate.CancelFailed,
+            "got \(String(describing: thrown))"
+        )
+        #expect(
+            await unstoppable.isDownloading(testURL) == true,
+            """
+            forgetting a transfer that would not stop reports it as finished while it keeps \
+            running, and drops the last handle on it
+            """
+        )
+    }
+
+    /// The same rule for pause: nothing is marked paused when the transfer did not stop.
+    @Test("a pause the delegate refused leaves the URL reporting as in flight")
+    func failedPauseKeepsTracking() async throws {
+        // Arrange
+        let downloader = BackgroundDownloader(delegate: UncancellableDelegate())
+        await downloader.markAsDownloading(testURL)
+
+        // Act
+        var thrown: (any Error)?
+        do {
+            try await downloader.pause(url: testURL)
+        } catch {
+            thrown = error
+        }
+
+        // Assert
+        #expect(thrown is UncancellableDelegate.CancelFailed)
+        #expect(await downloader.isDownloading(testURL) == true)
+        #expect(await downloader.hasResumeData(for: testURL) == false)
+    }
+
 
     @Test("cancel removes from active downloads")
     func cancelRemovesFromActiveDownloads() async throws {
@@ -440,7 +561,7 @@ struct ModelRegistryBackgroundDownloaderTests {
         // Arrange
         let dir = try Self.makeTempDir()
         defer { Self.removeTempDir(dir) }
-        let registry = ModelRegistry(cacheDirectory: dir)
+        let registry = try ModelRegistry(cacheDirectory: dir)
 
         // Act
         let downloader = await registry.backgroundDownloader
@@ -456,7 +577,7 @@ struct ModelRegistryBackgroundDownloaderTests {
         defer { Self.removeTempDir(dir) }
         let delegate = MockBackgroundDownloadDelegate()
         let bgDownloader = BackgroundDownloader(delegate: delegate)
-        let registry = ModelRegistry(
+        let registry = try ModelRegistry(
             cacheDirectory: dir,
             backgroundDownloader: bgDownloader
         )

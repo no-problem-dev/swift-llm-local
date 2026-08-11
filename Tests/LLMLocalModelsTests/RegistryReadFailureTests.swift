@@ -124,8 +124,8 @@ struct RegistryReadFailureTests {
                     RegistryReadFailureTests.modelRegistryFilename
                 )
             )
-            let neverWritten = ModelRegistry(cacheDirectory: emptyDir)
-            let unreadable = ModelRegistry(cacheDirectory: corruptDir)
+            let neverWritten = try ModelRegistry(cacheDirectory: emptyDir)
+            let unreadable = try ModelRegistry(cacheDirectory: corruptDir)
 
             // Act
             let models = try await neverWritten.cachedModels()
@@ -150,7 +150,7 @@ struct RegistryReadFailureTests {
             try RegistryReadFailureTests.staleSchemaJSON.write(
                 to: dir.appendingPathComponent(RegistryReadFailureTests.modelRegistryFilename)
             )
-            let registry = ModelRegistry(cacheDirectory: dir)
+            let registry = try ModelRegistry(cacheDirectory: dir)
 
             // Act
             let error = await errorThrown { _ = try await registry.cachedModels() }
@@ -173,7 +173,7 @@ struct RegistryReadFailureTests {
             try RegistryReadFailureTests.truncatedJSON.write(
                 to: dir.appendingPathComponent(RegistryReadFailureTests.modelRegistryFilename)
             )
-            let registry = ModelRegistry(cacheDirectory: dir)
+            let registry = try ModelRegistry(cacheDirectory: dir)
             let spec = RegistryReadFailureTests.sampleSpec()
 
             // Act
@@ -197,7 +197,7 @@ struct RegistryReadFailureTests {
             try RegistryReadFailureTests.truncatedJSON.write(
                 to: dir.appendingPathComponent(RegistryReadFailureTests.modelRegistryFilename)
             )
-            let registry = ModelRegistry(cacheDirectory: dir)
+            let registry = try ModelRegistry(cacheDirectory: dir)
 
             // Act
             let error = await errorThrown { _ = try await registry.totalCacheSize() }
@@ -219,7 +219,7 @@ struct RegistryReadFailureTests {
             )
             let original = RegistryReadFailureTests.truncatedJSON
             try original.write(to: file)
-            let registry = ModelRegistry(cacheDirectory: dir)
+            let registry = try ModelRegistry(cacheDirectory: dir)
 
             // Act
             let error = await errorThrown {
@@ -251,7 +251,7 @@ struct RegistryReadFailureTests {
             )
             let original = RegistryReadFailureTests.staleSchemaJSON
             try original.write(to: file)
-            let registry = ModelRegistry(cacheDirectory: dir)
+            let registry = try ModelRegistry(cacheDirectory: dir)
 
             // Act
             let error = await errorThrown { try await registry.clearAllCache() }
@@ -276,7 +276,7 @@ struct RegistryReadFailureTests {
                 RegistryReadFailureTests.modelRegistryFilename
             )
             try RegistryReadFailureTests.truncatedJSON.write(to: file)
-            let registry = ModelRegistry(cacheDirectory: dir)
+            let registry = try ModelRegistry(cacheDirectory: dir)
             let firstError = await errorThrown { _ = try await registry.cachedModels() }
             #expect(isRegistryUnreadable(firstError), "got \(String(describing: firstError))")
 
@@ -310,8 +310,8 @@ struct RegistryReadFailureTests {
                     RegistryReadFailureTests.adapterRegistryFilename
                 )
             )
-            let neverWritten = AdapterRegistry(adapterDirectory: emptyDir)
-            let unreadable = AdapterRegistry(adapterDirectory: corruptDir)
+            let neverWritten = try AdapterRegistry(adapterDirectory: emptyDir)
+            let unreadable = try AdapterRegistry(adapterDirectory: corruptDir)
 
             // Act
             let adapters = try await neverWritten.cachedAdapters()
@@ -333,7 +333,7 @@ struct RegistryReadFailureTests {
             try RegistryReadFailureTests.truncatedJSON.write(
                 to: dir.appendingPathComponent(RegistryReadFailureTests.adapterRegistryFilename)
             )
-            let registry = AdapterRegistry(adapterDirectory: dir)
+            let registry = try AdapterRegistry(adapterDirectory: dir)
             let source = AdapterSource.huggingFace(id: "user/adapter")
 
             // Act
@@ -351,7 +351,7 @@ struct RegistryReadFailureTests {
             try RegistryReadFailureTests.truncatedJSON.write(
                 to: dir.appendingPathComponent(RegistryReadFailureTests.adapterRegistryFilename)
             )
-            let registry = AdapterRegistry(adapterDirectory: dir)
+            let registry = try AdapterRegistry(adapterDirectory: dir)
             let source = AdapterSource.gitHubRelease(
                 repo: "owner/repo", tag: "v1.0", asset: "adapter.safetensors"
             )
@@ -383,7 +383,7 @@ struct RegistryReadFailureTests {
             let original = RegistryReadFailureTests.truncatedJSON
             try original.write(to: file)
             let delegate = CountingAdapterNetworkDelegate()
-            let registry = AdapterRegistry(
+            let registry = try AdapterRegistry(
                 adapterDirectory: dir, networkDelegate: delegate
             )
             let source = AdapterSource.huggingFace(id: "user/adapter")

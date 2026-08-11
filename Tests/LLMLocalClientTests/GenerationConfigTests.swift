@@ -7,19 +7,19 @@ struct GenerationConfigTests {
     // MARK: - Default values
 
     @Test("default config has nil maxTokens (no cap)")
-    func defaultMaxTokens() {
+    func defaultMaxTokens() throws {
         let config = GenerationConfig.default
         #expect(config.maxTokens == nil)
     }
 
     @Test("default config has temperature 0.7")
-    func defaultTemperature() {
+    func defaultTemperature() throws {
         let config = GenerationConfig.default
         #expect(config.temperature == 0.7)
     }
 
     @Test("default config has topP 0.9")
-    func defaultTopP() {
+    func defaultTopP() throws {
         let config = GenerationConfig.default
         #expect(config.topP == 0.9)
     }
@@ -27,7 +27,7 @@ struct GenerationConfigTests {
     // MARK: - Init with default parameters
 
     @Test("init without arguments uses default values")
-    func initWithoutArguments() {
+    func initWithoutArguments() throws {
         let config = GenerationConfig()
         #expect(config.maxTokens == nil)
         #expect(config.temperature == 0.7)
@@ -37,7 +37,7 @@ struct GenerationConfigTests {
     // MARK: - Custom values
 
     @Test("init with custom maxTokens")
-    func customMaxTokens() {
+    func customMaxTokens() throws {
         let config = GenerationConfig(maxTokens: 2048)
         #expect(config.maxTokens == 2048)
         #expect(config.temperature == 0.7)
@@ -45,7 +45,7 @@ struct GenerationConfigTests {
     }
 
     @Test("init with custom temperature")
-    func customTemperature() {
+    func customTemperature() throws {
         let config = GenerationConfig(temperature: 0.5)
         #expect(config.maxTokens == nil)
         #expect(config.temperature == 0.5)
@@ -53,7 +53,7 @@ struct GenerationConfigTests {
     }
 
     @Test("init with custom topP")
-    func customTopP() {
+    func customTopP() throws {
         let config = GenerationConfig(topP: 0.95)
         #expect(config.maxTokens == nil)
         #expect(config.temperature == 0.7)
@@ -61,7 +61,7 @@ struct GenerationConfigTests {
     }
 
     @Test("init with all custom values")
-    func allCustomValues() {
+    func allCustomValues() throws {
         let config = GenerationConfig(maxTokens: 512, temperature: 0.3, topP: 0.8)
         #expect(config.maxTokens == 512)
         #expect(config.temperature == 0.3)
@@ -71,7 +71,7 @@ struct GenerationConfigTests {
     // MARK: - Mutability
 
     @Test("properties are mutable")
-    func propertiesAreMutable() {
+    func propertiesAreMutable() throws {
         var config = GenerationConfig()
         config.maxTokens = 4096
         config.temperature = 1.0
@@ -84,7 +84,7 @@ struct GenerationConfigTests {
     // MARK: - Sendable (compile-time check)
 
     @Test("config is Sendable")
-    func sendableCheck() async {
+    func sendableCheck() async throws {
         let config = GenerationConfig(maxTokens: 1024)
         // If this compiles, GenerationConfig conforms to Sendable.
         let result = await sendAcrossBoundary(config)

@@ -14,7 +14,12 @@ public protocol MemoryProvider: Sendable {
     /// The meaning is platform-specific. On iOS-family platforms this is headroom left to this
     /// process before the system kills it; elsewhere it is an estimate of reclaimable system
     /// memory. Neither is this process's current footprint.
-    func availableMemoryBytes() -> UInt64
+    ///
+    /// - Throws: ``LLMLocalError/memoryUnreadable(reason:)`` when no measurement can be taken. An
+    ///   implementation must not substitute a plausible number: the value decides whether weights
+    ///   are loaded into a process jetsam is about to kill, and a caller cannot tell a guess from a
+    ///   reading.
+    func availableMemoryBytes() throws -> UInt64
 }
 
 /// Memory numbers read from the OS.
@@ -25,20 +30,36 @@ public protocol MemoryProvider: Sendable {
 ///
 /// On macOS there is no such call, so free plus inactive pages from Mach's `vm_statistics64`
 /// stand in — a system-wide estimate of what could be reclaimed, which is a much looser bound
-/// than the iOS budget. If the Mach query fails, half of physical memory is returned as a guess.
+/// than the iOS budget. Both Mach calls are checked, and a failure in either throws
+/// ``LLMLocalError/memoryUnreadable(reason:)`` rather than producing a number.
+///
+/// Nothing is guessed here. Half of physical memory used to be returned when the statistics query
+/// failed, and the page size query's own return code was discarded entirely — leaving a page size
+/// of zero, an available figure of zero, and every model on the device judged too large, with no
+/// way for the caller to tell that from a device genuinely out of memory.
 struct SystemMemoryProvider: MemoryProvider, Sendable {
     func totalMemoryBytes() -> UInt64 {
         UInt64(ProcessInfo.processInfo.physicalMemory)
     }
 
-    func availableMemoryBytes() -> UInt64 {
+    func availableMemoryBytes() throws -> UInt64 {
         #if os(iOS) || os(tvOS) || os(watchOS)
         return UInt64(os_proc_available_memory())
         #else
-        // macOS fallback: estimate available memory using Mach vm_statistics64.
-        // Use host_page_size() which is a function call and concurrency-safe.
+        // macOS: estimate available memory from Mach's vm_statistics64.
+        // host_page_size() is a function call and concurrency-safe.
         var pageSize: vm_size_t = 0
-        host_page_size(mach_host_self(), &pageSize)
+        let pageSizeResult = host_page_size(mach_host_self(), &pageSize)
+        guard pageSizeResult == KERN_SUCCESS else {
+            throw LLMLocalError.memoryUnreadable(
+                reason: "host_page_size failed with kern_return_t \(pageSizeResult)."
+            )
+        }
+        guard pageSize > 0 else {
+            throw LLMLocalError.memoryUnreadable(
+                reason: "host_page_size succeeded but reported a page size of zero."
+            )
+        }
 
         var stats = vm_statistics64()
         var count = mach_msg_type_number_t(
@@ -50,8 +71,9 @@ struct SystemMemoryProvider: MemoryProvider, Sendable {
             }
         }
         guard result == KERN_SUCCESS else {
-            // Fallback: return half of total memory as a rough estimate
-            return UInt64(ProcessInfo.processInfo.physicalMemory) / 2
+            throw LLMLocalError.memoryUnreadable(
+                reason: "host_statistics64 failed with kern_return_t \(result)."
+            )
         }
         let ps = UInt64(pageSize)
         let free = UInt64(stats.free_count) * ps
@@ -152,16 +174,23 @@ public actor MemoryMonitor {
     ///
     /// On iOS this is the jetsam headroom rather than free RAM, and it moves with what other apps
     /// and this app's own caches are doing, so it is only meaningful at the moment it is read.
-    public func availableMemory() -> UInt64 {
-        memoryProvider.availableMemoryBytes()
+    ///
+    /// - Throws: ``LLMLocalError/memoryUnreadable(reason:)`` when the measurement cannot be taken.
+    public func availableMemory() throws -> UInt64 {
+        try memoryProvider.availableMemoryBytes()
     }
 
     /// Whether the model's estimated memory use fits within the current budget.
     ///
     /// Advisory: nothing in the load path consults this. A caller that skips the check and loads
     /// an oversized model gets a terminated app, not a thrown error.
-    public func isModelCompatible(_ spec: ModelSpec) -> Bool {
-        Double(spec.estimatedMemoryBytes) <= Double(maxAllowedModelMemory())
+    ///
+    /// - Throws: ``LLMLocalError/memoryUnreadable(reason:)`` when the budget cannot be measured.
+    ///   `false` means the model does not fit, and is never how an unavailable measurement is
+    ///   reported — that answer would reject every model on the device, which is what the caller
+    ///   would see if the budget silently came back as zero.
+    public func isModelCompatible(_ spec: ModelSpec) throws -> Bool {
+        try Double(spec.estimatedMemoryBytes) <= Double(maxAllowedModelMemory())
     }
 
     /// The largest model this device should be asked to hold, in bytes.
@@ -175,11 +204,14 @@ public actor MemoryMonitor {
     ///   app.
     /// - **macOS**: unified memory is plentiful and there is no equivalent per-process kill, so
     ///   the budget stays at 80% of total physical memory.
-    public func maxAllowedModelMemory() -> UInt64 {
+    ///
+    /// - Throws: ``LLMLocalError/memoryUnreadable(reason:)`` when the platform budget cannot be
+    ///   measured.
+    public func maxAllowedModelMemory() throws -> UInt64 {
         #if os(iOS) || os(tvOS) || os(watchOS)
         // Available memory moves at runtime, so decide from the value at call time. Sizing against
         // physical total instead passes a 4-5 GB model on an 8 GB device and crashes on hardware.
-        return UInt64(Double(memoryProvider.availableMemoryBytes()) * 0.8)
+        return try UInt64(Double(memoryProvider.availableMemoryBytes()) * 0.8)
         #else
         return UInt64(Double(memoryProvider.totalMemoryBytes()) * 0.8)
         #endif

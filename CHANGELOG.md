@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **BREAKING** — the calls that answer "what is on disk" and "how much memory is there" now throw
+  instead of guessing. `LocalModelInventory`, `ModelRegistry`, `AdapterRegistry`, `MLXBackend`,
+  `DestinationHubDownloader` and `LLMLocalService` gained throwing initializers;
+  `MemoryProvider.availableMemoryBytes()` throws; `DownloadState.paused` carries `Data?`;
+  `DownloadedModel.sizeInBytes` is no longer optional.
+- `StubDownloadDelegate` and `StubAdapterNetworkDelegate` are gone. They were the *injected
+  defaults*, and they reported a completed 1 MB download of a model that was never fetched and
+  recorded a 13-byte text file as a cached adapter. A caller who forgot to wire a delegate was told
+  the work succeeded. The delegates are now optional, and the two calls that actually need bytes
+  moved — `downloadWithProgress` and a remote `AdapterRegistry.resolve` — fail without one. The uses
+  that never needed a delegate keep working.
+
+### Fixed
+
+- An unreadable model directory reported as "not downloaded". `isDownloaded` used
+  `try? contentsOfDirectory`, so a permission error looked like an absent model — and
+  `DestinationHubDownloader` responded by re-fetching a multi-gigabyte model already on disk.
+  `snapshotState(at:)` now distinguishes complete, incomplete and absent, and throws when it cannot
+  tell.
+- Storage size understated without saying so. The directory walk used `errorHandler: nil` and
+  `try?` per file, so an unreadable subtree silently contributed zero — producing a plausible short
+  number that a user acts on when deciding what to delete.
+- The backup-exclusion flag dropped silently. `try?` on `setResourceValues` meant multi-gigabyte
+  weights could end up in iCloud backup with no signal, contradicting the doc comment directly
+  above it.
+- A fabricated memory measurement. `host_page_size`'s return code was discarded, and a failed
+  `host_statistics64` returned `physicalMemory / 2` — a made-up number indistinguishable from a
+  real one.
+- A download that could not be cancelled reported as stopped. `try?` on the delegate call, then
+  bookkeeping torn down regardless, so the transfer kept running while `isDownloading` said false.
+  A pause with no resume data stored `Data()`, so `hasResumeData` said true and `resume` restarted
+  from byte 0.
+- Eviction reported storage freed when the files were still there. `deleteCache` dropped the entry
+  whether or not the delete succeeded — and that entry was the last thing pointing at the
+  gigabytes, so nothing could find them to try again. The entry is now kept and the failure
+  reported; `clearAllCache` saves what it did manage to free.
+- Application Support resolution had two opposite policies in three files — `.first!` in two
+  (a crash the caller cannot catch) and `?? temporaryDirectory` in the third (a purgeable directory,
+  so "downloaded" quietly stops being true). One throwing helper now serves all three.
+
+
 ## [5.0.0] - 2026-08-11
 
 ### Changed

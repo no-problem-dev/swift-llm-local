@@ -46,7 +46,7 @@ struct ModelRegistryTests {
             // Arrange
             let dir = try ModelRegistryTests.makeTempDir()
             defer { ModelRegistryTests.removeTempDir(dir) }
-            let manager = ModelRegistry(cacheDirectory: dir)
+            let manager = try ModelRegistry(cacheDirectory: dir)
 
             // Act
             let models = try await manager.cachedModels()
@@ -60,7 +60,7 @@ struct ModelRegistryTests {
             // Arrange
             let dir = try ModelRegistryTests.makeTempDir()
             defer { ModelRegistryTests.removeTempDir(dir) }
-            let manager = ModelRegistry(cacheDirectory: dir)
+            let manager = try ModelRegistry(cacheDirectory: dir)
             let spec = ModelRegistryTests.sampleSpec()
 
             // Act
@@ -79,7 +79,7 @@ struct ModelRegistryTests {
             // Arrange
             let dir = try ModelRegistryTests.makeTempDir()
             defer { ModelRegistryTests.removeTempDir(dir) }
-            let manager = ModelRegistry(cacheDirectory: dir)
+            let manager = try ModelRegistry(cacheDirectory: dir)
             let spec1 = ModelRegistryTests.sampleSpec(id: "model-a", displayName: "Model A")
             let spec2 = ModelRegistryTests.sampleSpec(id: "model-b", displayName: "Model B")
 
@@ -106,7 +106,7 @@ struct ModelRegistryTests {
             // Arrange
             let dir = try ModelRegistryTests.makeTempDir()
             defer { ModelRegistryTests.removeTempDir(dir) }
-            let manager = ModelRegistry(cacheDirectory: dir)
+            let manager = try ModelRegistry(cacheDirectory: dir)
             let spec = ModelRegistryTests.sampleSpec()
 
             // Act
@@ -121,7 +121,7 @@ struct ModelRegistryTests {
             // Arrange
             let dir = try ModelRegistryTests.makeTempDir()
             defer { ModelRegistryTests.removeTempDir(dir) }
-            let manager = ModelRegistry(cacheDirectory: dir)
+            let manager = try ModelRegistry(cacheDirectory: dir)
             let spec = ModelRegistryTests.sampleSpec()
             try await manager.registerModel(spec, sizeInBytes: 1000)
 
@@ -137,7 +137,7 @@ struct ModelRegistryTests {
             // Arrange
             let dir = try ModelRegistryTests.makeTempDir()
             defer { ModelRegistryTests.removeTempDir(dir) }
-            let manager = ModelRegistry(cacheDirectory: dir)
+            let manager = try ModelRegistry(cacheDirectory: dir)
             let spec1 = ModelRegistryTests.sampleSpec(id: "model-a")
             let spec2 = ModelRegistryTests.sampleSpec(id: "model-b")
             try await manager.registerModel(spec1, sizeInBytes: 1000)
@@ -160,7 +160,7 @@ struct ModelRegistryTests {
             // Arrange
             let dir = try ModelRegistryTests.makeTempDir()
             defer { ModelRegistryTests.removeTempDir(dir) }
-            let manager = ModelRegistry(cacheDirectory: dir)
+            let manager = try ModelRegistry(cacheDirectory: dir)
 
             // Act
             let size = try await manager.totalCacheSize()
@@ -174,7 +174,7 @@ struct ModelRegistryTests {
             // Arrange
             let dir = try ModelRegistryTests.makeTempDir()
             defer { ModelRegistryTests.removeTempDir(dir) }
-            let manager = ModelRegistry(cacheDirectory: dir)
+            let manager = try ModelRegistry(cacheDirectory: dir)
             let spec1 = ModelRegistryTests.sampleSpec(id: "model-a")
             let spec2 = ModelRegistryTests.sampleSpec(id: "model-b")
             try await manager.registerModel(spec1, sizeInBytes: 1_000_000)
@@ -192,7 +192,7 @@ struct ModelRegistryTests {
             // Arrange
             let dir = try ModelRegistryTests.makeTempDir()
             defer { ModelRegistryTests.removeTempDir(dir) }
-            let manager = ModelRegistry(cacheDirectory: dir)
+            let manager = try ModelRegistry(cacheDirectory: dir)
             let spec = ModelRegistryTests.sampleSpec()
             try await manager.registerModel(spec, sizeInBytes: 750_000)
 
@@ -214,7 +214,7 @@ struct ModelRegistryTests {
             // Arrange
             let dir = try ModelRegistryTests.makeTempDir()
             defer { ModelRegistryTests.removeTempDir(dir) }
-            let manager = ModelRegistry(cacheDirectory: dir)
+            let manager = try ModelRegistry(cacheDirectory: dir)
             let spec = ModelRegistryTests.sampleSpec()
             try await manager.registerModel(spec, sizeInBytes: 1000)
 
@@ -233,7 +233,7 @@ struct ModelRegistryTests {
             // Arrange
             let dir = try ModelRegistryTests.makeTempDir()
             defer { ModelRegistryTests.removeTempDir(dir) }
-            let manager = ModelRegistry(cacheDirectory: dir)
+            let manager = try ModelRegistry(cacheDirectory: dir)
             let spec1 = ModelRegistryTests.sampleSpec(id: "model-a", displayName: "Model A")
             let spec2 = ModelRegistryTests.sampleSpec(id: "model-b", displayName: "Model B")
             try await manager.registerModel(spec1, sizeInBytes: 1000)
@@ -257,7 +257,7 @@ struct ModelRegistryTests {
             // Arrange
             let dir = try ModelRegistryTests.makeTempDir()
             defer { ModelRegistryTests.removeTempDir(dir) }
-            let manager = ModelRegistry(cacheDirectory: dir)
+            let manager = try ModelRegistry(cacheDirectory: dir)
             let spec1 = ModelRegistryTests.sampleSpec(id: "model-a")
             let spec2 = ModelRegistryTests.sampleSpec(id: "model-b")
             try await manager.registerModel(spec1, sizeInBytes: 1_000_000)
@@ -276,7 +276,7 @@ struct ModelRegistryTests {
             // Arrange
             let dir = try ModelRegistryTests.makeTempDir()
             defer { ModelRegistryTests.removeTempDir(dir) }
-            let manager = ModelRegistry(cacheDirectory: dir)
+            let manager = try ModelRegistry(cacheDirectory: dir)
             let spec = ModelRegistryTests.sampleSpec()
 
             // Act & Assert - should not throw
@@ -294,7 +294,7 @@ struct ModelRegistryTests {
             // Arrange
             let dir = try ModelRegistryTests.makeTempDir()
             defer { ModelRegistryTests.removeTempDir(dir) }
-            let manager = ModelRegistry(cacheDirectory: dir)
+            let manager = try ModelRegistry(cacheDirectory: dir)
             let spec1 = ModelRegistryTests.sampleSpec(id: "model-a")
             let spec2 = ModelRegistryTests.sampleSpec(id: "model-b")
             try await manager.registerModel(spec1, sizeInBytes: 1000)
@@ -315,7 +315,7 @@ struct ModelRegistryTests {
             // Arrange
             let dir = try ModelRegistryTests.makeTempDir()
             defer { ModelRegistryTests.removeTempDir(dir) }
-            let manager = ModelRegistry(cacheDirectory: dir)
+            let manager = try ModelRegistry(cacheDirectory: dir)
 
             // Act & Assert - should not throw
             try await manager.clearAllCache()
@@ -337,11 +337,11 @@ struct ModelRegistryTests {
             let spec = ModelRegistryTests.sampleSpec()
 
             // Act - register with one registry instance
-            let registry1 = ModelRegistry(cacheDirectory: dir)
+            let registry1 = try ModelRegistry(cacheDirectory: dir)
             try await registry1.registerModel(spec, sizeInBytes: 1000)
 
             // Assert - create new registry instance and verify data persists
-            let registry2 = ModelRegistry(cacheDirectory: dir)
+            let registry2 = try ModelRegistry(cacheDirectory: dir)
             let models = try await registry2.cachedModels()
             #expect(models.count == 1)
             #expect(models[0].modelId == spec.id)
@@ -353,14 +353,14 @@ struct ModelRegistryTests {
             let dir = try ModelRegistryTests.makeTempDir()
             defer { ModelRegistryTests.removeTempDir(dir) }
             let spec = ModelRegistryTests.sampleSpec()
-            let registry1 = ModelRegistry(cacheDirectory: dir)
+            let registry1 = try ModelRegistry(cacheDirectory: dir)
             try await registry1.registerModel(spec, sizeInBytes: 1000)
 
             // Act
             try await registry1.deleteCache(for: spec)
 
             // Assert - new instance should see empty registry
-            let registry2 = ModelRegistry(cacheDirectory: dir)
+            let registry2 = try ModelRegistry(cacheDirectory: dir)
             let models = try await registry2.cachedModels()
             #expect(models.isEmpty)
         }
@@ -370,7 +370,7 @@ struct ModelRegistryTests {
             // Arrange
             let dir = try ModelRegistryTests.makeTempDir()
             defer { ModelRegistryTests.removeTempDir(dir) }
-            let registry1 = ModelRegistry(cacheDirectory: dir)
+            let registry1 = try ModelRegistry(cacheDirectory: dir)
             let spec1 = ModelRegistryTests.sampleSpec(id: "model-a")
             let spec2 = ModelRegistryTests.sampleSpec(id: "model-b")
             try await registry1.registerModel(spec1, sizeInBytes: 100)
@@ -380,7 +380,7 @@ struct ModelRegistryTests {
             try await registry1.clearAllCache()
 
             // Assert - new instance should see empty registry
-            let registry2 = ModelRegistry(cacheDirectory: dir)
+            let registry2 = try ModelRegistry(cacheDirectory: dir)
             let models = try await registry2.cachedModels()
             #expect(models.isEmpty)
         }
@@ -396,7 +396,7 @@ struct ModelRegistryTests {
             // Arrange
             let dir = try ModelRegistryTests.makeTempDir()
             defer { ModelRegistryTests.removeTempDir(dir) }
-            let manager = ModelRegistry(cacheDirectory: dir)
+            let manager = try ModelRegistry(cacheDirectory: dir)
             let spec = ModelRegistryTests.sampleSpec()
             let before = Date()
 
@@ -416,7 +416,7 @@ struct ModelRegistryTests {
             // Arrange
             let dir = try ModelRegistryTests.makeTempDir()
             defer { ModelRegistryTests.removeTempDir(dir) }
-            let manager = ModelRegistry(cacheDirectory: dir)
+            let manager = try ModelRegistry(cacheDirectory: dir)
             let spec = ModelRegistryTests.sampleSpec()
 
             // Act
@@ -450,7 +450,7 @@ struct ModelRegistryTests {
             let weightFile = modelFilesDir.appendingPathComponent("model.safetensors")
             try Data("fake weights".utf8).write(to: weightFile)
 
-            let manager = ModelRegistry(cacheDirectory: dir)
+            let manager = try ModelRegistry(cacheDirectory: dir)
             let spec = ModelRegistryTests.sampleSpec()
             try await manager.registerModel(
                 spec, sizeInBytes: 1000, modelFilesPath: modelFilesDir
@@ -489,7 +489,7 @@ struct ModelRegistryTests {
                 to: filesDir2.appendingPathComponent("model.safetensors")
             )
 
-            let manager = ModelRegistry(cacheDirectory: dir)
+            let manager = try ModelRegistry(cacheDirectory: dir)
             let spec1 = ModelRegistryTests.sampleSpec(id: "model-a")
             let spec2 = ModelRegistryTests.sampleSpec(id: "model-b")
             try await manager.registerModel(
@@ -514,7 +514,7 @@ struct ModelRegistryTests {
             // Arrange
             let dir = try ModelRegistryTests.makeTempDir()
             defer { ModelRegistryTests.removeTempDir(dir) }
-            let manager = ModelRegistry(cacheDirectory: dir)
+            let manager = try ModelRegistry(cacheDirectory: dir)
             let spec = ModelRegistryTests.sampleSpec()
             try await manager.registerModel(spec, sizeInBytes: 1000)
 
@@ -537,7 +537,7 @@ struct ModelRegistryTests {
             defer { ModelRegistryTests.removeTempDir(dir) }
 
             // Act
-            let manager = ModelRegistry(cacheDirectory: dir)
+            let manager = try ModelRegistry(cacheDirectory: dir)
             let models = try await manager.cachedModels()
 
             // Assert
@@ -547,7 +547,7 @@ struct ModelRegistryTests {
         @Test("initializes with default cache directory")
         func initializesWithDefaultDirectory() async throws {
             // Act - should not crash with nil (uses default)
-            let registry = ModelRegistry()
+            let registry = try ModelRegistry()
             let models = try await registry.cachedModels()
 
             // Assert

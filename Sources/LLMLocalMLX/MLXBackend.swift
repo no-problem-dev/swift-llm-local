@@ -122,17 +122,19 @@ public actor MLXBackend: LLMLocalBackend {
     ///     ``DestinationHubDownloader`` against the Hugging Face Hub.
     ///   - tokenizerLoader: Loads a tokenizer from a local directory. Defaults to the
     ///     swift-transformers `AutoTokenizer`.
+    /// - Throws: When `downloader` is `nil` and the default model storage root cannot be
+    ///   established — see ``DestinationHubDownloader``.
     public init(
         gpuCacheLimit: Int = 20 * 1024 * 1024,
         adapterResolver: (any AdapterResolving)? = nil,
         downloader: (any Downloader)? = nil,
         tokenizerLoader: (any TokenizerLoader)? = nil
-    ) {
+    ) throws {
         self.gpuCacheLimit = gpuCacheLimit
         self.adapterResolver = adapterResolver
         // The swift-huggingface cache path used by #hubDownloader fails to resolve the cached
         // path of large LFS files on iOS, so the explicit-destination downloader is the default.
-        self.downloader = downloader ?? DestinationHubDownloader()
+        self.downloader = try downloader ?? DestinationHubDownloader()
         self.tokenizerLoader = tokenizerLoader ?? #huggingFaceTokenizerLoader()
     }
 

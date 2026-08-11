@@ -77,7 +77,7 @@ private func makeSpec(
 struct ModelSwitcherInitTests {
 
     @Test("no model is loaded before the first ensureLoaded")
-    func noModelLoadedInitially() async {
+    func noModelLoadedInitially() async throws {
         // Arrange
         let backend = MockSwitcherBackend()
 
@@ -336,9 +336,9 @@ struct LLMLocalServiceModelSwitcherTests {
         let dir = try Self.makeTempDir()
         defer { Self.removeTempDir(dir) }
         let backend = MockSwitcherBackend()
-        let modelRegistry = ModelRegistry(cacheDirectory: dir)
+        let modelRegistry = try ModelRegistry(cacheDirectory: dir)
         let switcher = ModelSwitcher(backend: backend)
-        let service = LLMLocalService(
+        let service = try LLMLocalService(
             backend: backend,
             modelRegistry: modelRegistry,
             modelSwitcher: switcher
@@ -364,8 +364,8 @@ struct LLMLocalServiceModelSwitcherTests {
         let dir = try Self.makeTempDir()
         defer { Self.removeTempDir(dir) }
         let backend = MockSwitcherBackend()
-        let modelRegistry = ModelRegistry(cacheDirectory: dir)
-        let service = LLMLocalService(
+        let modelRegistry = try ModelRegistry(cacheDirectory: dir)
+        let service = try LLMLocalService(
             backend: backend,
             modelRegistry: modelRegistry
         )
@@ -390,9 +390,9 @@ struct LLMLocalServiceModelSwitcherTests {
         let dir = try Self.makeTempDir()
         defer { Self.removeTempDir(dir) }
         let backend = MockSwitcherBackend()
-        let modelRegistry = ModelRegistry(cacheDirectory: dir)
+        let modelRegistry = try ModelRegistry(cacheDirectory: dir)
         let switcher = ModelSwitcher(backend: backend)
-        let service = LLMLocalService(
+        let service = try LLMLocalService(
             backend: backend,
             modelRegistry: modelRegistry,
             modelSwitcher: switcher
@@ -417,10 +417,10 @@ struct LLMLocalServiceModelSwitcherTests {
         let dir = try Self.makeTempDir()
         defer { Self.removeTempDir(dir) }
         let backend = MockSwitcherBackend()
-        let modelRegistry = ModelRegistry(cacheDirectory: dir)
+        let modelRegistry = try ModelRegistry(cacheDirectory: dir)
 
         // Act: Use original init without modelSwitcher parameter
-        let service = LLMLocalService(backend: backend, modelRegistry: modelRegistry)
+        let service = try LLMLocalService(backend: backend, modelRegistry: modelRegistry)
         let spec = makeSpec(id: "model-a")
         let stream = await service.generate(model: spec, prompt: "Hello")
         var tokens: [String] = []
@@ -458,7 +458,7 @@ struct ModelSwitcherErrorTests {
     }
 
     @Test("isLoaded returns false for never-loaded model")
-    func isLoadedReturnsFalseForNeverLoaded() async {
+    func isLoadedReturnsFalseForNeverLoaded() async throws {
         // Arrange
         let backend = MockSwitcherBackend()
         let switcher = ModelSwitcher(backend: backend)

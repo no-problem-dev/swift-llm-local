@@ -10,7 +10,7 @@ it is cheap and touches neither disk nor GPU; the expensive work happens on the 
 ```swift
 import LLMLocal
 
-let service = LLMLocalService(
+let service = try LLMLocalService(
     backend: MLXBackend(),
     modelRegistry: ModelRegistry()
 )
@@ -22,7 +22,7 @@ does not warn twice.
 
 ```swift
 let monitor = MemoryMonitor()
-let service = LLMLocalService(
+let service = try LLMLocalService(
     backend: MLXBackend(),
     modelRegistry: ModelRegistry(),
     memoryMonitor: monitor
@@ -121,12 +121,12 @@ Installed models are determined by looking at the filesystem, not by an in-memor
 answer stays correct across app launches.
 
 ```swift
-if await service.isDownloaded(ModelPresets.qwen3_4B) {
+if try await service.isDownloaded(ModelPresets.qwen3_4B) {
     // weights are local; loading will not hit the network
 }
 
-let downloaded = await service.downloadedModels(among: ModelPresets.all)
-let bytes = await service.totalDownloadedSize(among: ModelPresets.all)
+let downloaded = try await service.downloadedModels(among: ModelPresets.all)
+let bytes = try await service.totalDownloadedSize(among: ModelPresets.all)
 
 try await service.deleteDownload(ModelPresets.qwen3_4B)
 ```

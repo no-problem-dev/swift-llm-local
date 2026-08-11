@@ -27,7 +27,7 @@ struct Phase2IntegrationTests {
     @Test("DownloadProgress stream progresses from 0.0 to 1.0")
     func downloadProgressStreamProgresses() async throws {
         // Arrange
-        let modelRegistry = ModelRegistry()
+        let modelRegistry = try ModelRegistry()
         let spec = ModelPresets.qwen3_0_6B
 
         // Act
@@ -56,10 +56,10 @@ struct Phase2IntegrationTests {
     @Test("Memory warning simulation triggers model unload")
     func memoryWarningTriggersUnload() async throws {
         // Arrange
-        let backend = MLXBackend()
-        let modelRegistry = ModelRegistry()
+        let backend = try MLXBackend()
+        let modelRegistry = try ModelRegistry()
         let monitor = MemoryMonitor()
-        let service = LLMLocalService(
+        let service = try LLMLocalService(
             backend: backend,
             modelRegistry: modelRegistry,
             memoryMonitor: monitor
@@ -101,7 +101,7 @@ struct Phase2IntegrationTests {
         // Note: AdapterRegistry (Layer 1) does not explicitly conform to
         // AdapterResolving (Layer 0). In integration tests we test them
         // independently.
-        let backend = MLXBackend()
+        let backend = try MLXBackend()
         let specWithoutAdapter = ModelPresets.qwen3_0_6B
 
         // Act
@@ -121,9 +121,9 @@ struct Phase2IntegrationTests {
     @Test("Phase 1 regression: basic generation still works")
     func phase1RegressionBasicGeneration() async throws {
         // Arrange
-        let backend = MLXBackend()
-        let modelRegistry = ModelRegistry()
-        let service = LLMLocalService(backend: backend, modelRegistry: modelRegistry)
+        let backend = try MLXBackend()
+        let modelRegistry = try ModelRegistry()
+        let service = try LLMLocalService(backend: backend, modelRegistry: modelRegistry)
         let config = GenerationConfig(maxTokens: 20)
 
         // Act
@@ -148,14 +148,14 @@ struct Phase2IntegrationTests {
     // MARK: - Test 5: MemoryMonitor tier and context recommendation
 
     @Test("MemoryMonitor provides correct tier and context length")
-    func memoryMonitorProvidesTierAndContext() async {
+    func memoryMonitorProvidesTierAndContext() async throws {
         // Arrange
         let monitor = MemoryMonitor()
 
         // Act
         let tier = await monitor.deviceMemoryTier()
         let contextLength = await monitor.recommendedContextLength()
-        let available = await monitor.availableMemory()
+        let available = try await monitor.availableMemory()
 
         // Assert: on any real device, memory should be detectable
         #expect(available > 0, "Available memory should be positive on real hardware")
@@ -178,7 +178,7 @@ struct Phase2IntegrationTests {
             .appendingPathComponent("Phase2IT-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
-        let registry = AdapterRegistry(adapterDirectory: tempDir)
+        let registry = try AdapterRegistry(adapterDirectory: tempDir)
         let source = AdapterSource.local(path: URL(fileURLWithPath: "/nonexistent"))
 
         // Act & Assert: local non-existent should throw

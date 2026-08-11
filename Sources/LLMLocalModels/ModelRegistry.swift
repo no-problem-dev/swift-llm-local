@@ -52,8 +52,14 @@ public actor ModelRegistry {
     /// there but will not read or decode throws.
     private let cache: any RegistryStore<CachedModelInfo>
 
-    /// Performs the transfer for ``downloadWithProgress(_:)``.
-    private let downloadDelegate: any DownloadProgressDelegate
+    /// Performs the transfer for ``downloadWithProgress(_:)``, when one was injected.
+    ///
+    /// `nil` unless the app supplied one. There is no stub standing in: this type moves no bytes
+    /// itself, and the stub that used to fill the gap reported a completed 1 MB download of a model
+    /// that was never fetched. Everything else the registry does — recording, listing, evicting —
+    /// works without a delegate, so requiring one at construction would be the wrong trade; the
+    /// refusal belongs at the one call that needs bytes moved.
+    private let downloadDelegate: (any DownloadProgressDelegate)?
 
     /// Backing storage for ``backgroundDownloader``.
     private let _backgroundDownloader: BackgroundDownloader?
@@ -74,25 +80,27 @@ public actor ModelRegistry {
     ///     `~/Library/Application Support/LLMLocal/models`. Model files are not written here.
     ///   - registryStore: Persistence for the entries. When `nil`, `registry.json` inside the
     ///     cache directory is used.
-    ///   - downloadDelegate: Performs the transfer in ``downloadWithProgress(_:)``. When `nil`, a
-    ///     stub reports a fixed 1 MB size and moves no bytes.
+    ///   - downloadDelegate: Performs the transfer in ``downloadWithProgress(_:)``. When `nil`,
+    ///     that method is the only one affected: it fails immediately rather than reporting a
+    ///     download nobody performed.
     ///   - backgroundDownloader: Pause and resume bookkeeping, exposed as-is through
     ///     ``backgroundDownloader``. When `nil` that property stays `nil`; nothing is created on
     ///     the caller's behalf.
+    /// - Throws: ``LLMLocalError/storageUnreadable(path:reason:)`` when `cacheDirectory` is `nil`
+    ///   and the system returns no Application Support directory.
     public init(
         cacheDirectory: URL? = nil,
         registryStore: (any RegistryStore<CachedModelInfo>)? = nil,
         downloadDelegate: (any DownloadProgressDelegate)? = nil,
         backgroundDownloader: BackgroundDownloader? = nil
-    ) {
-        let dir = cacheDirectory
-            ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
-                .first!
+    ) throws {
+        let dir = try cacheDirectory
+            ?? ApplicationSupportDirectory.url()
                 .appendingPathComponent("LLMLocal/models")
         self.cacheDirectory = dir
         self.cache = registryStore
             ?? FileSystemRegistryStore<CachedModelInfo>(directory: dir)
-        self.downloadDelegate = downloadDelegate ?? StubDownloadDelegate()
+        self.downloadDelegate = downloadDelegate
         self._backgroundDownloader = backgroundDownloader
     }
 
@@ -164,20 +172,27 @@ public actor ModelRegistry {
     ///
     /// Files are deleted only when the entry carries a `modelFilesPath`. Entries created by
     /// ``downloadWithProgress(_:)`` never do, so for those this frees no disk space and the bytes
-    /// are left orphaned. A failure to remove the directory is ignored; only saving the registry
-    /// can throw.
+    /// are left orphaned.
+    ///
+    /// When the files are there and will not delete, the entry stays and nothing is written. The
+    /// point of eviction is to free storage; an eviction that frees none of it and drops the entry
+    /// anyway is strictly worse than one that fails, because the entry was the last thing pointing
+    /// at those gigabytes — after that nothing can find them to try again. Reporting the failure
+    /// keeps the pointer and lets the caller retry, or tell the user why the space did not come
+    /// back.
     ///
     /// Evicting a model that a backend currently has loaded does not disturb generation in the
     /// running process — the next load simply has to download the model again.
     ///
     /// - Parameter spec: Model to remove. An unregistered model still triggers a registry save.
     /// - Throws: ``LLMLocalError/registryUnreadable(reason:)`` when the registry cannot be read, in
-    ///   which case nothing is deleted and nothing is written; otherwise when the registry file
-    ///   cannot be written.
+    ///   which case nothing is deleted and nothing is written; the file system's error when the
+    ///   model's files cannot be removed, in which case the entry is kept; otherwise when the
+    ///   registry file cannot be written.
     public func deleteCache(for spec: ModelSpec) async throws {
         try await ensureLoaded()
         if let info = cachedMetadata[spec.id], let filesPath = info.modelFilesPath {
-            try? FileManager.default.removeItem(at: filesPath)
+            try removeIfPresent(at: filesPath)
         }
         cachedMetadata.removeValue(forKey: spec.id)
         try await cache.save(cachedMetadata)
@@ -188,18 +203,41 @@ public actor ModelRegistry {
     /// Same caveat as ``deleteCache(for:)``: entries without a `modelFilesPath` leave their bytes
     /// on disk with nothing left to point at them.
     ///
+    /// Every entry is attempted. Those whose files were removed are dropped and the reduced registry
+    /// is saved, so the work that succeeded is not lost; those whose files would not delete are kept,
+    /// for the same reason as in ``deleteCache(for:)``, and the first failure is then thrown. The
+    /// caller can read ``cachedModels()`` afterwards to see exactly which models are still holding
+    /// storage.
+    ///
     /// - Throws: ``LLMLocalError/registryUnreadable(reason:)`` when the registry cannot be read, in
-    ///   which case no files are deleted and nothing is written; otherwise when the registry file
-    ///   cannot be written.
+    ///   which case no files are deleted and nothing is written; the file system's error when any
+    ///   model's files could not be removed, after the entries that were removed have been saved;
+    ///   otherwise when the registry file cannot be written.
     public func clearAllCache() async throws {
         try await ensureLoaded()
-        for info in cachedMetadata.values {
-            if let filesPath = info.modelFilesPath {
-                try? FileManager.default.removeItem(at: filesPath)
+        var firstFailure: (any Error)?
+        var retained: [String: CachedModelInfo] = [:]
+        for (id, info) in cachedMetadata {
+            guard let filesPath = info.modelFilesPath else { continue }
+            do {
+                try removeIfPresent(at: filesPath)
+            } catch {
+                if firstFailure == nil { firstFailure = error }
+                retained[id] = info
             }
         }
-        cachedMetadata.removeAll()
+        cachedMetadata = retained
         try await cache.save(cachedMetadata)
+        if let firstFailure { throw firstFailure }
+    }
+
+    /// Removes the item, treating "it was not there" as done rather than as a failure.
+    ///
+    /// Eviction is about the storage being gone, and files the user already deleted through iOS
+    /// storage management satisfy that. Every other error is real and is not absorbed.
+    private func removeIfPresent(at path: URL) throws {
+        guard FileManager.default.fileExists(atPath: path.path) else { return }
+        try FileManager.default.removeItem(at: path)
     }
 
     /// Records a model as downloaded.
@@ -255,8 +293,9 @@ public actor ModelRegistry {
     /// still finishes with a full-progress value.
     ///
     /// The entry it registers has no `modelFilesPath`, so ``deleteCache(for:)`` will not free the
-    /// downloaded bytes afterwards. Byte counts come from the delegate; the default stub reports a
-    /// fixed 1 MB and transfers nothing.
+    /// downloaded bytes afterwards. Byte counts come from the delegate, and without a delegate the
+    /// stream fails immediately with ``LLMLocalError/downloadFailed(modelId:reason:)`` — there is no
+    /// stub to report a size for a transfer nobody performed.
     ///
     /// Registration is the last step, so an unreadable registry fails the stream with
     /// ``LLMLocalError/registryUnreadable(reason:)`` *after* the bytes have already been fetched.
@@ -270,10 +309,20 @@ public actor ModelRegistry {
         _ spec: ModelSpec
     ) -> AsyncThrowingStream<DownloadProgress, Error> {
         let delegate = self.downloadDelegate
+        let modelId = spec.id
 
         return AsyncThrowingStream { continuation in
             Task { [weak self] in
                 do {
+                    guard let delegate else {
+                        throw LLMLocalError.downloadFailed(
+                            modelId: modelId,
+                            reason: """
+                                No download delegate was supplied to ModelRegistry, so there is \
+                                nothing to fetch the model with.
+                                """
+                        )
+                    }
                     try Task.checkCancellation()
 
                     // Yield initial progress

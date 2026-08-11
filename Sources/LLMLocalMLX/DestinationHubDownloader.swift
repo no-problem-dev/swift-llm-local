@@ -26,17 +26,24 @@ public struct DestinationHubDownloader: Downloader {
     ///   - baseDirectory: Root to place models under. The default is under Application Support,
     ///     excluded from backup — see `ModelStorageLayout`. A custom root must be passed to
     ///     ``LocalModelInventory`` as well, or downloaded models read as missing.
-    public init(hub: HubClient = HubClient(), baseDirectory: URL? = nil) {
+    /// - Throws: When `baseDirectory` is `nil` and the default root cannot be established — see
+    ///   `ModelStorageLayout.defaultBaseDirectory()`.
+    public init(hub: HubClient = HubClient(), baseDirectory: URL? = nil) throws {
         self.hub = hub
-        self.baseDirectory = baseDirectory ?? ModelStorageLayout.defaultBaseDirectory()
+        self.baseDirectory = try baseDirectory ?? ModelStorageLayout.defaultBaseDirectory()
     }
 
     /// Fetches the repository files matching the patterns and returns the local directory.
     ///
     /// A complete snapshot already on disk is returned without touching the network, reporting a
-    /// single completed progress value; passing `useLatest` forces the download anyway. Any
-    /// failure is reported as `LLMLocalError.downloadFailed(modelId:reason:)`, including an
-    /// identifier that is not in `namespace/name` form.
+    /// single completed progress value; passing `useLatest` forces the download anyway. A transfer
+    /// failure is reported as `LLMLocalError.downloadFailed(modelId:reason:)`, as is an identifier
+    /// that is not in `namespace/name` form.
+    ///
+    /// If the destination directory is there but cannot be read, this throws
+    /// `LLMLocalError.storageUnreadable(path:reason:)` instead of downloading. Treating that as
+    /// "not downloaded" is what pulls the whole model down again over the copy already on disk, and
+    /// these are multi-gigabyte transfers on a device the user is paying for bandwidth on.
     ///
     /// - Parameters:
     ///   - id: Hub repository identifier, as `namespace/name`.
@@ -58,7 +65,7 @@ public struct DestinationHubDownloader: Downloader {
         let destination = ModelStorageLayout.destination(for: repoID, base: baseDirectory)
 
         // Skip the download when a complete snapshot is already present, unless useLatest is set.
-        if !useLatest, ModelStorageLayout.hasCompleteSnapshot(at: destination) {
+        if !useLatest, try ModelStorageLayout.snapshotState(at: destination) == .complete {
             let progress = Progress(totalUnitCount: 1)
             progress.completedUnitCount = 1
             progressHandler(progress)
