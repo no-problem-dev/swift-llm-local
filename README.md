@@ -64,7 +64,7 @@ for try await token in await service.generate(
 ```swift
 // Package.swift
 dependencies: [
-    .package(url: "https://github.com/no-problem-dev/swift-llm-local.git", .upToNextMajor(from: "3.0.0"))
+    .package(url: "https://github.com/no-problem-dev/swift-llm-local.git", from: "4.0.0")
 ]
 ```
 
