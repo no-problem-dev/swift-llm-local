@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Tests for the MLX → canonical tool call bridge, which had none. They pin the payload contract:
+  `ToolCall.arguments` is always a valid JSON object, `{}` for a call with no arguments rather
+  than empty bytes, and every `JSONValue` shape MLX can hand over — nested objects, arrays, nulls,
+  quotes, escapes, non-ASCII — survives the round trip unchanged.
+
 ## [6.0.0] - 2026-08-11
 
 ### Removed
