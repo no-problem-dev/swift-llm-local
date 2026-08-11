@@ -15,11 +15,23 @@ import PersistenceFileSystem
 /// to it, so the same entry can describe different weights once the upstream repository moves.
 ///
 /// "Registered" therefore means an entry exists, not that complete bytes are on disk.
-/// ``isCached(_:)`` answers from the JSON file alone, and a decode failure in the store surfaces
-/// as an empty registry rather than an error — after which downloaded models look absent while
-/// their files stay on disk. To ask the file system instead, use `LocalModelInventory` in the MLX
-/// module, which requires `config.json` plus a `*.safetensors` (or `*.safetensors.index.json`)
-/// file before calling a model downloaded.
+/// ``isCached(_:)`` answers from the JSON file alone. To ask the file system instead, use
+/// `LocalModelInventory` in the MLX module, which requires `config.json` plus a `*.safetensors`
+/// (or `*.safetensors.index.json`) file before calling a model downloaded.
+///
+/// ## An unreadable registry is not an empty one
+///
+/// Every method here reads the registry file on first use, and a file that is there but will not
+/// read or decode throws ``LLMLocalError/registryUnreadable(reason:)`` rather than answering with
+/// an empty registry. Only a registry that was never written reads as empty.
+///
+/// The distinction is load-bearing in both directions. Downwards, every mutating method is a
+/// load-mutate-save over the whole file: one that treated a corrupt registry as empty would write
+/// that emptiness back, destroy a file that was still recoverable by hand, and orphan the model
+/// directories the lost entries pointed at — ``deleteCache(for:)`` could never free them again.
+/// Upwards, a caller that heard "empty" would offer to download models the device is already
+/// holding gigabytes of. Nothing is cached from a failed read, so the next call tries again and
+/// succeeds once the file is repaired or removed.
 ///
 /// A download is staged through the Hugging Face cache and then copied into place, so it needs
 /// roughly twice the model's size on disk while it runs, and the staged copy is left behind in
@@ -36,8 +48,8 @@ public actor ModelRegistry {
     /// Whether the store has already been read into memory.
     private var isLoaded: Bool = false
 
-    /// Backing store for the registry JSON. Reports an unreadable or corrupt file as an empty
-    /// registry rather than throwing.
+    /// Backing store for the registry JSON. A missing file reads as an empty registry; one that is
+    /// there but will not read or decode throws.
     private let cache: any RegistryStore<CachedModelInfo>
 
     /// Performs the transfer for ``downloadWithProgress(_:)``.
@@ -87,9 +99,20 @@ public actor ModelRegistry {
     // MARK: - Private Helpers
 
     /// Reads the store into memory on first use; later calls return immediately.
-    private func ensureLoaded() async {
+    ///
+    /// A read that fails leaves the registry unloaded rather than empty, so the caller's operation
+    /// stops here — before any save could overwrite the file it could not read — and a later call
+    /// reads again.
+    ///
+    /// - Throws: ``LLMLocalError/registryUnreadable(reason:)`` when the registry file exists but
+    ///   will not read or decode.
+    private func ensureLoaded() async throws {
         guard !isLoaded else { return }
-        cachedMetadata = await cache.load()
+        do {
+            cachedMetadata = try await cache.load()
+        } catch {
+            throw LLMLocalError.registryUnreadable(reason: error.localizedDescription)
+        }
         isLoaded = true
     }
 
@@ -97,9 +120,13 @@ public actor ModelRegistry {
 
     /// Every registered model, in no particular order.
     ///
-    /// Reads the registry file on the first call.
-    public func cachedModels() async -> [CachedModelInfo] {
-        await ensureLoaded()
+    /// Reads the registry file on the first call. An empty array means nothing is registered, and
+    /// is never how an unreadable registry is reported.
+    ///
+    /// - Throws: ``LLMLocalError/registryUnreadable(reason:)`` when the registry file exists but
+    ///   will not read or decode.
+    public func cachedModels() async throws -> [CachedModelInfo] {
+        try await ensureLoaded()
         return Array(cachedMetadata.values)
     }
 
@@ -110,9 +137,12 @@ public actor ModelRegistry {
     /// is whether usable weights are on disk.
     ///
     /// - Parameter spec: Model to look up by ``ModelSpec/id``.
-    /// - Returns: `true` when an entry exists.
-    public func isCached(_ spec: ModelSpec) async -> Bool {
-        await ensureLoaded()
+    /// - Returns: `true` when an entry exists. `false` means the registry was read and holds no
+    ///   entry for this model, not that the registry could not be consulted.
+    /// - Throws: ``LLMLocalError/registryUnreadable(reason:)`` when the registry file exists but
+    ///   will not read or decode.
+    public func isCached(_ spec: ModelSpec) async throws -> Bool {
+        try await ensureLoaded()
         return cachedMetadata[spec.id] != nil
     }
 
@@ -120,10 +150,13 @@ public actor ModelRegistry {
     ///
     /// The numbers are whatever was passed to
     /// ``registerModel(_:sizeInBytes:modelFilesPath:)``; nothing is measured on disk, so entries
-    /// whose files are gone still count, and files not covered by an entry never do. No error is
-    /// produced despite the throwing signature.
+    /// whose files are gone still count, and files not covered by an entry never do.
+    ///
+    /// - Throws: ``LLMLocalError/registryUnreadable(reason:)`` when the registry file exists but
+    ///   will not read or decode. Zero therefore means nothing is registered, not that the sizes
+    ///   could not be found.
     public func totalCacheSize() async throws -> Int64 {
-        await ensureLoaded()
+        try await ensureLoaded()
         return cachedMetadata.values.reduce(0) { $0 + $1.sizeInBytes }
     }
 
@@ -138,9 +171,11 @@ public actor ModelRegistry {
     /// running process — the next load simply has to download the model again.
     ///
     /// - Parameter spec: Model to remove. An unregistered model still triggers a registry save.
-    /// - Throws: When the registry file cannot be written.
+    /// - Throws: ``LLMLocalError/registryUnreadable(reason:)`` when the registry cannot be read, in
+    ///   which case nothing is deleted and nothing is written; otherwise when the registry file
+    ///   cannot be written.
     public func deleteCache(for spec: ModelSpec) async throws {
-        await ensureLoaded()
+        try await ensureLoaded()
         if let info = cachedMetadata[spec.id], let filesPath = info.modelFilesPath {
             try? FileManager.default.removeItem(at: filesPath)
         }
@@ -153,9 +188,11 @@ public actor ModelRegistry {
     /// Same caveat as ``deleteCache(for:)``: entries without a `modelFilesPath` leave their bytes
     /// on disk with nothing left to point at them.
     ///
-    /// - Throws: When the registry file cannot be written.
+    /// - Throws: ``LLMLocalError/registryUnreadable(reason:)`` when the registry cannot be read, in
+    ///   which case no files are deleted and nothing is written; otherwise when the registry file
+    ///   cannot be written.
     public func clearAllCache() async throws {
-        await ensureLoaded()
+        try await ensureLoaded()
         for info in cachedMetadata.values {
             if let filesPath = info.modelFilesPath {
                 try? FileManager.default.removeItem(at: filesPath)
@@ -179,13 +216,16 @@ public actor ModelRegistry {
     ///   - spec: Model to record.
     ///   - sizeInBytes: Size to record, in bytes.
     ///   - modelFilesPath: Directory holding the downloaded files, deleted on eviction.
-    /// - Throws: When the registry file cannot be written.
+    /// - Throws: ``LLMLocalError/registryUnreadable(reason:)`` when the registry cannot be read, in
+    ///   which case nothing is recorded and the unreadable file is left as it was rather than
+    ///   replaced by a registry holding this entry alone; otherwise when the registry file cannot
+    ///   be written.
     public func registerModel(
         _ spec: ModelSpec,
         sizeInBytes: Int64,
         modelFilesPath: URL? = nil
     ) async throws {
-        await ensureLoaded()
+        try await ensureLoaded()
         let info = CachedModelInfo(
             modelId: spec.id,
             displayName: spec.displayName,
@@ -217,6 +257,11 @@ public actor ModelRegistry {
     /// The entry it registers has no `modelFilesPath`, so ``deleteCache(for:)`` will not free the
     /// downloaded bytes afterwards. Byte counts come from the delegate; the default stub reports a
     /// fixed 1 MB and transfers nothing.
+    ///
+    /// Registration is the last step, so an unreadable registry fails the stream with
+    /// ``LLMLocalError/registryUnreadable(reason:)`` *after* the bytes have already been fetched.
+    /// The download is not wasted — the files are where the delegate put them — but nothing records
+    /// them, so read the registry before starting a download the caller cannot afford to repeat.
     ///
     /// - Parameter spec: Model to download.
     /// - Returns: A stream that finishes once the model is registered, or fails with the

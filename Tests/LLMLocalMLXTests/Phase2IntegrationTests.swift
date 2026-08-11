@@ -187,7 +187,7 @@ struct Phase2IntegrationTests {
         }
 
         // Verify not cached
-        let isCached = await registry.isCached(source)
+        let isCached = try await registry.isCached(source)
         #expect(isCached == false, "Non-existent adapter should not be cached")
     }
 }

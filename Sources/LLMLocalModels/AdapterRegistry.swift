@@ -128,6 +128,18 @@ public struct AdapterInfo: Sendable, Codable {
 /// built model container on every load, unloading the model drops it, and nothing is written back
 /// to the base model directory. One downloaded base can therefore be reused with several adapters.
 ///
+/// ## An unreadable registry is not an empty one
+///
+/// Every method here reads the registry file on first use, and a file that is there but will not
+/// read or decode throws ``LLMLocalError/registryUnreadable(reason:)`` rather than answering with
+/// an empty registry. Only a registry that was never written reads as empty.
+///
+/// Answering "empty" would be destructive twice over: ``resolve(_:)`` would re-download every
+/// adapter over the files already sitting at those paths, and the save that follows would replace
+/// a registry file that was still recoverable by hand with one holding a single entry. Throwing
+/// stops both before either happens. Nothing is cached from a failed read, so the next call tries
+/// again and succeeds once the file is repaired or removed.
+///
 /// ## Versions
 ///
 /// A GitHub source encodes tag and asset in its cache key, so a new tag is simply a new entry —
@@ -146,7 +158,7 @@ public struct AdapterInfo: Sendable, Codable {
 /// )
 ///
 /// // Check whether a newer version is available
-/// let needsUpdate = await registry.isUpdateAvailable(
+/// let needsUpdate = try await registry.isUpdateAvailable(
 ///     for: source, latestTag: "v2.0"
 /// )
 /// ```
@@ -161,9 +173,8 @@ public actor AdapterRegistry {
     /// Whether the store has already been read into memory.
     private var isLoaded: Bool = false
 
-    /// Backing store for the registry JSON. Reports an unreadable or corrupt file as an empty
-    /// registry rather than throwing, after which cached adapters are re-downloaded over their
-    /// existing files.
+    /// Backing store for the registry JSON. A missing file reads as an empty registry; one that is
+    /// there but will not read or decode throws.
     private let cache: any RegistryStore<AdapterInfo>
 
     /// Performs the downloads. Defaults to a stub that writes a placeholder.
@@ -202,9 +213,20 @@ public actor AdapterRegistry {
     // MARK: - Private Helpers
 
     /// Reads the store into memory on first use; later calls return immediately.
-    private func ensureLoaded() async {
+    ///
+    /// A read that fails leaves the registry unloaded rather than empty, so the caller's operation
+    /// stops here — before any download or save could act on a registry that was never read — and
+    /// a later call reads again.
+    ///
+    /// - Throws: ``LLMLocalError/registryUnreadable(reason:)`` when the registry file exists but
+    ///   will not read or decode.
+    private func ensureLoaded() async throws {
         guard !isLoaded else { return }
-        adapterRegistry = await cache.load()
+        do {
+            adapterRegistry = try await cache.load()
+        } catch {
+            throw LLMLocalError.registryUnreadable(reason: error.localizedDescription)
+        }
         isLoaded = true
     }
 
@@ -222,10 +244,12 @@ public actor AdapterRegistry {
     ///
     /// - Parameter source: Adapter to resolve.
     /// - Returns: Local URL for the adapter, which the MLX backend loads as an adapter directory.
-    /// - Throws: ``LLMLocalError/adapterMergeFailed(reason:)`` when a local adapter is missing, and
-    ///   whatever the network delegate or the registry save throws.
+    /// - Throws: ``LLMLocalError/adapterMergeFailed(reason:)`` when a local adapter is missing,
+    ///   ``LLMLocalError/registryUnreadable(reason:)`` when the registry cannot be read — raised
+    ///   before the delegate is asked for anything, so no download is started and no file is
+    ///   overwritten — and whatever the network delegate or the registry save throws.
     public func resolve(_ source: AdapterSource) async throws -> URL {
-        await ensureLoaded()
+        try await ensureLoaded()
         switch source {
         case .local(let path):
             guard FileManager.default.fileExists(atPath: path.path()) else {
@@ -283,8 +307,14 @@ public actor AdapterRegistry {
     ///
     /// Entries can outlive their files; the recorded paths are not checked. Local sources never
     /// appear here, since ``resolve(_:)`` does not record them.
-    public func cachedAdapters() async -> [AdapterInfo] {
-        await ensureLoaded()
+    ///
+    /// An empty array means nothing is recorded, and is never how an unreadable registry is
+    /// reported.
+    ///
+    /// - Throws: ``LLMLocalError/registryUnreadable(reason:)`` when the registry file exists but
+    ///   will not read or decode.
+    public func cachedAdapters() async throws -> [AdapterInfo] {
+        try await ensureLoaded()
         return Array(adapterRegistry.values)
     }
 
@@ -294,9 +324,12 @@ public actor AdapterRegistry {
     /// source always answers `false`, because resolving one records nothing.
     ///
     /// - Parameter source: Adapter to look up.
-    /// - Returns: `true` when an entry exists for the source's cache key.
-    public func isCached(_ source: AdapterSource) async -> Bool {
-        await ensureLoaded()
+    /// - Returns: `true` when an entry exists for the source's cache key. `false` means the
+    ///   registry was read and holds no such entry, not that the registry could not be consulted.
+    /// - Throws: ``LLMLocalError/registryUnreadable(reason:)`` when the registry file exists but
+    ///   will not read or decode.
+    public func isCached(_ source: AdapterSource) async throws -> Bool {
+        try await ensureLoaded()
         let key = Self.cacheKey(for: source)
         return adapterRegistry[key] != nil
     }
@@ -309,9 +342,11 @@ public actor AdapterRegistry {
     /// refresh a Hugging Face adapter.
     ///
     /// - Parameter source: Adapter to forget. An unknown source still triggers a registry save.
-    /// - Throws: When the registry file cannot be written.
+    /// - Throws: ``LLMLocalError/registryUnreadable(reason:)`` when the registry cannot be read, in
+    ///   which case nothing is forgotten and nothing is written; otherwise when the registry file
+    ///   cannot be written.
     public func deleteAdapter(for source: AdapterSource) async throws {
-        await ensureLoaded()
+        try await ensureLoaded()
         let key = Self.cacheKey(for: source)
         adapterRegistry.removeValue(forKey: key)
         try await cache.save(adapterRegistry)
@@ -322,9 +357,11 @@ public actor AdapterRegistry {
     /// The files under the adapter directory stay and lose their last reference, so reclaiming
     /// that space means sweeping the directory separately.
     ///
-    /// - Throws: When the registry file cannot be written.
+    /// - Throws: ``LLMLocalError/registryUnreadable(reason:)`` when the registry cannot be read, in
+    ///   which case nothing is forgotten and nothing is written; otherwise when the registry file
+    ///   cannot be written.
     public func clearAll() async throws {
-        await ensureLoaded()
+        try await ensureLoaded()
         adapterRegistry.removeAll()
         try await cache.save(adapterRegistry)
     }
@@ -340,10 +377,13 @@ public actor AdapterRegistry {
     ///   - source: Adapter to check.
     ///   - latestTag: Latest version tag, obtained elsewhere.
     /// - Returns: `true` when the adapter is unrecorded or its recorded version differs.
+    /// - Throws: ``LLMLocalError/registryUnreadable(reason:)`` when the registry file exists but
+    ///   will not read or decode. An unreadable registry is not reported as `true`, which would
+    ///   read as "unrecorded, go and fetch it".
     public func isUpdateAvailable(
         for source: AdapterSource, latestTag: String
-    ) async -> Bool {
-        await ensureLoaded()
+    ) async throws -> Bool {
+        try await ensureLoaded()
         let key = Self.cacheKey(for: source)
         guard let info = adapterRegistry[key] else { return true }
         return info.version != latestTag

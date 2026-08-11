@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING** — `ModelRegistry` and `AdapterRegistry` no longer report a registry file they could
+  not read as an empty registry. A file that exists but will not read or decode now throws
+  `LLMLocalError.registryUnreadable(reason:)`; only a registry that was never written still reads
+  as empty. `ModelRegistry.cachedModels()` and `isCached(_:)`, and `AdapterRegistry`'s
+  `cachedAdapters()`, `isCached(_:)` and `isUpdateAvailable(for:latestTag:)`, gained `throws` to
+  carry it.
+
+  The two states called for opposite responses and were being given the same answer. Downwards,
+  every mutating method is a load-mutate-save over the whole file, so treating an unreadable
+  registry as empty wrote that emptiness back over a file that was still recoverable by hand and
+  orphaned the model directories the lost entries pointed at — `deleteCache(for:)` could never free
+  them again. Upwards, a caller that heard "nothing is downloaded" re-fetched gigabytes the device
+  was already holding, and `AdapterRegistry.resolve(_:)` downloaded over the adapter files already
+  sitting at those paths. Nothing is cached from a failed read, so the next call reads again and
+  succeeds once the file is repaired or removed.
+
+- Raised the swift-persistence pin to 3.0.0, whose `RegistryStore.load()` throws rather than
+  returning a default. This package had been swallowing that distinction one layer further up.
+
+### Added
+
+- `LLMLocalError.registryUnreadable(reason:)`.
+
 ## [4.0.0] - 2026-08-11
 
 ### Removed

@@ -208,7 +208,7 @@ struct DownloadProgressTests {
             for try await _ in stream {}
 
             // Assert
-            let isCached = await registry.isCached(spec)
+            let isCached = try await registry.isCached(spec)
             #expect(isCached == true)
         }
     }
@@ -327,7 +327,7 @@ struct DownloadProgressTests {
             for try await _ in stream {}
 
             // Assert
-            let models = await registry.cachedModels()
+            let models = try await registry.cachedModels()
             #expect(models.count == 1)
             #expect(models[0].sizeInBytes == 2_500_000)
         }
@@ -386,7 +386,7 @@ struct DownloadProgressTests {
             }
 
             // Assert - model should NOT be cached
-            let isCached = await registry.isCached(spec)
+            let isCached = try await registry.isCached(spec)
             #expect(isCached == false)
         }
     }
@@ -450,7 +450,7 @@ struct DownloadProgressTests {
             #expect(updates[0].fraction == 0.0)
 
             // Model should NOT be registered since download was cancelled
-            let isCached = await registry.isCached(spec)
+            let isCached = try await registry.isCached(spec)
             #expect(isCached == false)
         }
     }

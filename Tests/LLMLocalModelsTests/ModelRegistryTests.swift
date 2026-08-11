@@ -49,7 +49,7 @@ struct ModelRegistryTests {
             let manager = ModelRegistry(cacheDirectory: dir)
 
             // Act
-            let models = await manager.cachedModels()
+            let models = try await manager.cachedModels()
 
             // Assert
             #expect(models.isEmpty)
@@ -65,7 +65,7 @@ struct ModelRegistryTests {
 
             // Act
             try await manager.registerModel(spec, sizeInBytes: 500_000)
-            let models = await manager.cachedModels()
+            let models = try await manager.cachedModels()
 
             // Assert
             #expect(models.count == 1)
@@ -86,7 +86,7 @@ struct ModelRegistryTests {
             // Act
             try await manager.registerModel(spec1, sizeInBytes: 100)
             try await manager.registerModel(spec2, sizeInBytes: 200)
-            let models = await manager.cachedModels()
+            let models = try await manager.cachedModels()
 
             // Assert
             #expect(models.count == 2)
@@ -110,7 +110,7 @@ struct ModelRegistryTests {
             let spec = ModelRegistryTests.sampleSpec()
 
             // Act
-            let result = await manager.isCached(spec)
+            let result = try await manager.isCached(spec)
 
             // Assert
             #expect(result == false)
@@ -126,7 +126,7 @@ struct ModelRegistryTests {
             try await manager.registerModel(spec, sizeInBytes: 1000)
 
             // Act
-            let result = await manager.isCached(spec)
+            let result = try await manager.isCached(spec)
 
             // Assert
             #expect(result == true)
@@ -143,7 +143,7 @@ struct ModelRegistryTests {
             try await manager.registerModel(spec1, sizeInBytes: 1000)
 
             // Act
-            let result = await manager.isCached(spec2)
+            let result = try await manager.isCached(spec2)
 
             // Assert
             #expect(result == false)
@@ -222,9 +222,9 @@ struct ModelRegistryTests {
             try await manager.deleteCache(for: spec)
 
             // Assert
-            let isCached = await manager.isCached(spec)
+            let isCached = try await manager.isCached(spec)
             #expect(isCached == false)
-            let models = await manager.cachedModels()
+            let models = try await manager.cachedModels()
             #expect(models.isEmpty)
         }
 
@@ -243,11 +243,11 @@ struct ModelRegistryTests {
             try await manager.deleteCache(for: spec1)
 
             // Assert
-            let isCachedA = await manager.isCached(spec1)
-            let isCachedB = await manager.isCached(spec2)
+            let isCachedA = try await manager.isCached(spec1)
+            let isCachedB = try await manager.isCached(spec2)
             #expect(isCachedA == false)
             #expect(isCachedB == true)
-            let models = await manager.cachedModels()
+            let models = try await manager.cachedModels()
             #expect(models.count == 1)
             #expect(models[0].modelId == "model-b")
         }
@@ -304,7 +304,7 @@ struct ModelRegistryTests {
             try await manager.clearAllCache()
 
             // Assert
-            let models = await manager.cachedModels()
+            let models = try await manager.cachedModels()
             #expect(models.isEmpty)
             let size = try await manager.totalCacheSize()
             #expect(size == 0)
@@ -319,7 +319,7 @@ struct ModelRegistryTests {
 
             // Act & Assert - should not throw
             try await manager.clearAllCache()
-            let models = await manager.cachedModels()
+            let models = try await manager.cachedModels()
             #expect(models.isEmpty)
         }
     }
@@ -342,7 +342,7 @@ struct ModelRegistryTests {
 
             // Assert - create new registry instance and verify data persists
             let registry2 = ModelRegistry(cacheDirectory: dir)
-            let models = await registry2.cachedModels()
+            let models = try await registry2.cachedModels()
             #expect(models.count == 1)
             #expect(models[0].modelId == spec.id)
         }
@@ -361,7 +361,7 @@ struct ModelRegistryTests {
 
             // Assert - new instance should see empty registry
             let registry2 = ModelRegistry(cacheDirectory: dir)
-            let models = await registry2.cachedModels()
+            let models = try await registry2.cachedModels()
             #expect(models.isEmpty)
         }
 
@@ -381,7 +381,7 @@ struct ModelRegistryTests {
 
             // Assert - new instance should see empty registry
             let registry2 = ModelRegistry(cacheDirectory: dir)
-            let models = await registry2.cachedModels()
+            let models = try await registry2.cachedModels()
             #expect(models.isEmpty)
         }
     }
@@ -404,7 +404,7 @@ struct ModelRegistryTests {
             try await manager.registerModel(spec, sizeInBytes: 1000)
 
             // Assert
-            let models = await manager.cachedModels()
+            let models = try await manager.cachedModels()
             #expect(models.count == 1)
             let info = models[0]
             #expect(info.downloadedAt >= before)
@@ -424,7 +424,7 @@ struct ModelRegistryTests {
             try await manager.registerModel(spec, sizeInBytes: 2000)
 
             // Assert - should have only one entry with updated size
-            let models = await manager.cachedModels()
+            let models = try await manager.cachedModels()
             #expect(models.count == 1)
             #expect(models[0].sizeInBytes == 2000)
         }
@@ -464,7 +464,7 @@ struct ModelRegistryTests {
 
             // Assert - files should be deleted
             #expect(!FileManager.default.fileExists(atPath: modelFilesDir.path))
-            let isCached = await manager.isCached(spec)
+            let isCached = try await manager.isCached(spec)
             #expect(isCached == false)
         }
 
@@ -505,7 +505,7 @@ struct ModelRegistryTests {
             // Assert
             #expect(!FileManager.default.fileExists(atPath: filesDir1.path))
             #expect(!FileManager.default.fileExists(atPath: filesDir2.path))
-            let models = await manager.cachedModels()
+            let models = try await manager.cachedModels()
             #expect(models.isEmpty)
         }
 
@@ -520,7 +520,7 @@ struct ModelRegistryTests {
 
             // Act & Assert - should not throw
             try await manager.deleteCache(for: spec)
-            let isCached = await manager.isCached(spec)
+            let isCached = try await manager.isCached(spec)
             #expect(isCached == false)
         }
     }
@@ -538,17 +538,17 @@ struct ModelRegistryTests {
 
             // Act
             let manager = ModelRegistry(cacheDirectory: dir)
-            let models = await manager.cachedModels()
+            let models = try await manager.cachedModels()
 
             // Assert
             #expect(models.isEmpty)
         }
 
         @Test("initializes with default cache directory")
-        func initializesWithDefaultDirectory() async {
+        func initializesWithDefaultDirectory() async throws {
             // Act - should not crash with nil (uses default)
             let registry = ModelRegistry()
-            let models = await registry.cachedModels()
+            let models = try await registry.cachedModels()
 
             // Assert
             #expect(models.isEmpty)

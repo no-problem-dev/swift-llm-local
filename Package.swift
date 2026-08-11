@@ -19,7 +19,7 @@ let package = Package(
         // Canonical LLM types (ToolDefinition, ToolCall, JSONSchema)
         .package(url: "https://github.com/no-problem-dev/swift-llm-client.git", from: "4.0.0"),
         // Persistence abstractions (RegistryStore)
-        .package(url: "https://github.com/no-problem-dev/swift-persistence.git", .upToNextMajor(from: "2.0.0")),
+        .package(url: "https://github.com/no-problem-dev/swift-persistence.git", from: "3.0.0"),
         // MLX LLM inference
         .package(url: "https://github.com/ml-explore/mlx-swift-lm", from: "3.31.3"),
         // Hugging Face Hub download / tokenizer (mlx-swift-lm 3.x は Downloader/TokenizerLoader を消費側が注入する設計)

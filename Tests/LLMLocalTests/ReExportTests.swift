@@ -40,10 +40,10 @@ struct ReExportTests {
     }
 
     @Test("LLMLocalModels types are accessible via import LLMLocal")
-    func modelsTypesAccessible() async {
+    func modelsTypesAccessible() async throws {
         // ModelRegistry
         let registry = ModelRegistry()
-        let models = await registry.cachedModels()
+        let models = try await registry.cachedModels()
         #expect(models.isEmpty)
     }
 

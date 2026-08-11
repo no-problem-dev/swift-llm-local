@@ -129,6 +129,7 @@ private let everyCase: [LLMLocalError] = [
     .cancelled,
     .adapterMergeFailed(reason: "Dimension mismatch"),
     .toolCallsUnsupported(modelId: "gemma-2b"),
+    .registryUnreadable(reason: "Decoding failed for key 'registry': truncated JSON"),
 ]
 
 /// Exhaustive re-statement of the expected copy, used to prove `everyCase` covers the enum.
@@ -148,6 +149,8 @@ private func expectedDescription(_ error: LLMLocalError) -> String {
         "Failed to merge the adapter: \(reason)"
     case .toolCallsUnsupported(let modelId):
         "Model '\(modelId)' does not support tool calls."
+    case .registryUnreadable(let reason):
+        "The registry of downloaded items could not be read: \(reason)"
     }
 }
 

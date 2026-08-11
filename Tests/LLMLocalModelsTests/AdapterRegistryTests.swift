@@ -163,7 +163,7 @@ struct AdapterRegistryTests {
 
             // Assert
             #expect(FileManager.default.fileExists(atPath: result.path()))
-            let isCached = await registry.isCached(source)
+            let isCached = try await registry.isCached(source)
             #expect(isCached == true)
         }
 
@@ -204,7 +204,7 @@ struct AdapterRegistryTests {
 
             // Assert
             #expect(FileManager.default.fileExists(atPath: result.path()))
-            let isCached = await registry.isCached(source)
+            let isCached = try await registry.isCached(source)
             #expect(isCached == true)
         }
 
@@ -247,7 +247,7 @@ struct AdapterRegistryTests {
             )
 
             // Act
-            let result = await registry.isUpdateAvailable(for: source, latestTag: "v2.0")
+            let result = try await registry.isUpdateAvailable(for: source, latestTag: "v2.0")
 
             // Assert
             #expect(result == true)
@@ -269,7 +269,7 @@ struct AdapterRegistryTests {
             _ = try await registry.resolve(source)
 
             // Act
-            let result = await registry.isUpdateAvailable(for: source, latestTag: "v1.0")
+            let result = try await registry.isUpdateAvailable(for: source, latestTag: "v1.0")
 
             // Assert
             #expect(result == false)
@@ -291,7 +291,7 @@ struct AdapterRegistryTests {
             _ = try await registry.resolve(source)
 
             // Act
-            let result = await registry.isUpdateAvailable(for: source, latestTag: "v2.0")
+            let result = try await registry.isUpdateAvailable(for: source, latestTag: "v2.0")
 
             // Assert
             #expect(result == true)
@@ -314,7 +314,7 @@ struct AdapterRegistryTests {
             )
 
             // Act
-            let adapters = await registry.cachedAdapters()
+            let adapters = try await registry.cachedAdapters()
 
             // Assert
             #expect(adapters.isEmpty)
@@ -337,7 +337,7 @@ struct AdapterRegistryTests {
             _ = try await registry.resolve(source2)
 
             // Act
-            let adapters = await registry.cachedAdapters()
+            let adapters = try await registry.cachedAdapters()
 
             // Assert
             #expect(adapters.count == 2)
@@ -366,7 +366,7 @@ struct AdapterRegistryTests {
             )
 
             // Act
-            let result = await registry.isCached(source)
+            let result = try await registry.isCached(source)
 
             // Assert
             #expect(result == false)
@@ -387,7 +387,7 @@ struct AdapterRegistryTests {
             _ = try await registry.resolve(source)
 
             // Act
-            let result = await registry.isCached(source)
+            let result = try await registry.isCached(source)
 
             // Assert
             #expect(result == true)
@@ -419,11 +419,11 @@ struct AdapterRegistryTests {
             try await registry.deleteAdapter(for: source1)
 
             // Assert
-            let isCached1 = await registry.isCached(source1)
-            let isCached2 = await registry.isCached(source2)
+            let isCached1 = try await registry.isCached(source1)
+            let isCached2 = try await registry.isCached(source2)
             #expect(isCached1 == false)
             #expect(isCached2 == true)
-            let adapters = await registry.cachedAdapters()
+            let adapters = try await registry.cachedAdapters()
             #expect(adapters.count == 1)
         }
     }
@@ -453,7 +453,7 @@ struct AdapterRegistryTests {
             try await registry.clearAll()
 
             // Assert
-            let adapters = await registry.cachedAdapters()
+            let adapters = try await registry.cachedAdapters()
             #expect(adapters.isEmpty)
         }
     }
@@ -483,7 +483,7 @@ struct AdapterRegistryTests {
             let registry2 = AdapterRegistry(
                 adapterDirectory: dir, networkDelegate: mockDelegate
             )
-            let adapters = await registry2.cachedAdapters()
+            let adapters = try await registry2.cachedAdapters()
             #expect(adapters.count == 1)
             #expect(adapters[0].key == AdapterRegistry.cacheKey(for: source))
         }
@@ -510,10 +510,10 @@ struct AdapterRegistryTests {
             let registry2 = AdapterRegistry(
                 adapterDirectory: dir, networkDelegate: mockDelegate
             )
-            let adapters = await registry2.cachedAdapters()
+            let adapters = try await registry2.cachedAdapters()
             #expect(adapters.count == 2)
-            let isCached1 = await registry2.isCached(source1)
-            let isCached2 = await registry2.isCached(source2)
+            let isCached1 = try await registry2.isCached(source1)
+            let isCached2 = try await registry2.isCached(source2)
             #expect(isCached1 == true)
             #expect(isCached2 == true)
         }
