@@ -44,13 +44,14 @@ public actor ModelRegistry {
     private let downloadDelegate: any DownloadProgressDelegate
 
     /// Backing storage for ``backgroundDownloader``.
-    private let _backgroundDownloader: BackgroundDownloader
+    private let _backgroundDownloader: BackgroundDownloader?
 
-    /// Pause and resume bookkeeping for downloads the app drives itself.
+    /// Pause and resume bookkeeping for downloads the app drives itself, when one was injected.
     ///
-    /// Not involved in ``downloadWithProgress(_:)``, which goes through the download delegate
-    /// instead.
-    public var backgroundDownloader: BackgroundDownloader {
+    /// `nil` unless the app supplied a downloader: a ``BackgroundDownloader`` needs a delegate that
+    /// actually moves bytes, and the registry has none to give it. Not involved in
+    /// ``downloadWithProgress(_:)``, which goes through the download delegate instead.
+    public var backgroundDownloader: BackgroundDownloader? {
         _backgroundDownloader
     }
 
@@ -63,8 +64,9 @@ public actor ModelRegistry {
     ///     cache directory is used.
     ///   - downloadDelegate: Performs the transfer in ``downloadWithProgress(_:)``. When `nil`, a
     ///     stub reports a fixed 1 MB size and moves no bytes.
-    ///   - backgroundDownloader: Pause and resume bookkeeping. When `nil`, one is created against
-    ///     `bg-downloads` inside the cache directory.
+    ///   - backgroundDownloader: Pause and resume bookkeeping, exposed as-is through
+    ///     ``backgroundDownloader``. When `nil` that property stays `nil`; nothing is created on
+    ///     the caller's behalf.
     public init(
         cacheDirectory: URL? = nil,
         registryStore: (any RegistryStore<CachedModelInfo>)? = nil,
@@ -80,9 +82,6 @@ public actor ModelRegistry {
             ?? FileSystemRegistryStore<CachedModelInfo>(directory: dir)
         self.downloadDelegate = downloadDelegate ?? StubDownloadDelegate()
         self._backgroundDownloader = backgroundDownloader
-            ?? BackgroundDownloader(
-                storageDirectory: dir.appendingPathComponent("bg-downloads")
-            )
     }
 
     // MARK: - Private Helpers

@@ -5,10 +5,10 @@ import LLMLocalClient
 
 /// The stage a tracked download is in.
 ///
-/// ``BackgroundDownloader`` keeps one of these per URL. Only `downloading` and `paused` are ever
-/// observable: `completed` and `failed` are assigned and the entry removed within the same actor
-/// step, so no caller can read them.
-public enum DownloadState: Sendable {
+/// ``BackgroundDownloader`` keeps one of these per URL, and only for as long as the URL is being
+/// tracked: an entry is removed the moment its transfer finishes or fails, so these two cases are
+/// the whole observable lifecycle.
+public enum DownloadState: Sendable, Equatable {
     /// A transfer has been handed to the delegate and has not returned yet.
     case downloading
 
@@ -18,14 +18,6 @@ public enum DownloadState: Sendable {
     /// so a paused URL always looks resumable even when there is nothing to resume from.
     /// - Parameter resumeData: Bytes the delegate returned when the transfer was cancelled.
     case paused(resumeData: Data)
-
-    /// The transfer finished and the file is at the reported location.
-    /// - Parameter localURL: Location the delegate reported for the finished file.
-    case completed(localURL: URL)
-
-    /// The delegate threw while transferring.
-    /// - Parameter error: The error that was rethrown to the caller.
-    case failed(error: any Error)
 }
 
 // MARK: - BackgroundDownloadError
@@ -38,13 +30,6 @@ public enum BackgroundDownloadError: Error, Sendable, Equatable {
     /// Pause was requested for a URL that is not being tracked, including one that already
     /// finished.
     case notDownloading
-
-    /// Writing resume data to persistent storage failed.
-    ///
-    /// ``BackgroundDownloader`` holds resume data in memory only and never throws this; it exists
-    /// for delegates that persist their own.
-    /// - Parameter reason: Human-readable description of the failure.
-    case resumeDataPersistenceFailed(reason: String)
 }
 
 // MARK: - BackgroundDownloadDelegate
@@ -53,9 +38,8 @@ public enum BackgroundDownloadError: Error, Sendable, Equatable {
 ///
 /// ``BackgroundDownloader`` owns only the bookkeeping — which URLs are in flight and which resume
 /// data belongs to them — and hands every transfer here. Nothing in this package implements this
-/// protocol on top of `URLSession`, so whether a transfer survives app suspension, and whether a
-/// background session's completion handler is involved at all, is decided entirely by the
-/// conforming type the app injects.
+/// protocol, so whether a transfer survives app suspension, and whether a `URLSession` background
+/// session is involved at all, is decided entirely by the conforming type the app injects.
 public protocol BackgroundDownloadDelegate: Sendable {
     /// Starts a transfer, continuing from resume data when it is supplied.
     ///
@@ -67,24 +51,6 @@ public protocol BackgroundDownloadDelegate: Sendable {
     /// - Returns: Location of the finished file on disk.
     func startDownload(url: URL, resumeData: Data?) async throws -> URL
 
-    /// Reports whether the delegate itself holds resume data for a URL.
-    ///
-    /// ``BackgroundDownloader`` keeps its own resume-data table and never calls this, so it only
-    /// matters to code that talks to a delegate directly.
-    ///
-    /// - Parameter url: Remote URL to check.
-    /// - Returns: `true` when the delegate can resume this URL.
-    func canResume(for url: URL) -> Bool
-
-    /// Returns the delegate's own resume data for a URL.
-    ///
-    /// Not called by ``BackgroundDownloader``, which passes the resume data it stored itself into
-    /// `startDownload(url:resumeData:)`.
-    ///
-    /// - Parameter url: Remote URL to look up.
-    /// - Returns: Resume data held by the delegate, or `nil`.
-    func resumeData(for url: URL) -> Data?
-
     /// Stops an in-flight transfer and hands back resume data when the transport supports it.
     ///
     /// Called for both pause and cancel. Returning `nil` is taken as "not resumable": a pause
@@ -95,53 +61,20 @@ public protocol BackgroundDownloadDelegate: Sendable {
     func cancelDownload(for url: URL) async throws -> Data?
 }
 
-// MARK: - StubBackgroundDownloadDelegate
-
-/// Default delegate that performs no I/O.
-///
-/// Used when no delegate is injected. `startDownload(url:resumeData:)` returns a path in the
-/// temporary directory built from the URL's last path component without creating any file, and
-/// pause and cancel report no resume data. A downloader left on this delegate therefore reports
-/// instant success while nothing is downloaded.
-struct StubBackgroundDownloadDelegate: BackgroundDownloadDelegate, Sendable {
-
-    init() {}
-
-    func startDownload(url: URL, resumeData: Data?) async throws -> URL {
-        FileManager.default.temporaryDirectory
-            .appendingPathComponent(url.lastPathComponent)
-    }
-
-    func canResume(for url: URL) -> Bool {
-        false
-    }
-
-    func resumeData(for url: URL) -> Data? {
-        nil
-    }
-
-    func cancelDownload(for url: URL) async throws -> Data? {
-        nil
-    }
-}
-
 // MARK: - BackgroundDownloader
 
 /// Tracks pause, resume, and cancel state for long-running model downloads.
 ///
 /// This actor is bookkeeping only. It records which URLs are in flight, keeps the resume data a
-/// pause produced, and forwards every transfer to a ``BackgroundDownloadDelegate``. It creates no
-/// `URLSession` of its own — background or foreground — and reports no progress; use
-/// ``ModelRegistry/downloadWithProgress(_:)`` when byte counts are needed.
+/// pause produced, and forwards every transfer to the ``BackgroundDownloadDelegate`` it was
+/// created with. It creates no `URLSession` — background or foreground — and reports no progress;
+/// use ``ModelRegistry/downloadWithProgress(_:)`` when byte counts are needed. The delegate is
+/// required precisely because this type moves no bytes on its own: without one there would be
+/// nothing to track.
 ///
-/// Nothing survives the process. Resume data is held in memory, so a download interrupted by app
-/// termination restarts from the first byte, and so does one interrupted by suspension unless the
-/// injected delegate arranges otherwise. The `storageDirectory` passed to the initializer is
-/// stored but never created or written to.
-///
-/// ``sessionIdentifier`` is a constant offered to an app that wires up its own background session
-/// and its app-delegate completion handler; this type does not use it. Whether transfers continue
-/// while the app is suspended depends solely on the delegate.
+/// Nothing survives the process. Resume data is held in memory and written nowhere, so a download
+/// interrupted by app termination restarts from the first byte, and so does one interrupted by
+/// suspension unless the injected delegate arranges otherwise.
 ///
 /// Every query hops onto the actor, so an answer from ``isDownloading(_:)`` or
 /// ``hasResumeData(for:)`` can already be stale by the time the caller acts on it.
@@ -149,48 +82,28 @@ struct StubBackgroundDownloadDelegate: BackgroundDownloadDelegate, Sendable {
 /// ## Usage
 ///
 /// ```swift
-/// let downloader = BackgroundDownloader()
+/// let downloader = BackgroundDownloader(delegate: myURLSessionDelegate)
 /// let localURL = try await downloader.download(from: remoteURL)
 /// ```
 public actor BackgroundDownloader {
 
-    /// Identifier reserved for an app-owned background download session.
-    ///
-    /// Nothing in this package creates a session with it.
-    public static let sessionIdentifier = "com.llmlocal.background-download"
-
-    /// Transfers in flight. Entries are dropped as soon as they finish or fail, so completed and
-    /// failed states never linger here.
+    /// Transfers in flight. Entries are dropped as soon as they finish or fail.
     private var activeDownloads: [URL: DownloadState] = [:]
 
-    /// Resume data from paused transfers. Memory only — it is not written to `storageDirectory`
-    /// and does not survive process exit.
+    /// Resume data from paused transfers. Memory only — it is written nowhere and does not survive
+    /// process exit.
     private var resumeDataStore: [URL: Data] = [:]
 
-    /// Directory the caller nominated for resume data. Never created, read, or written.
-    private let storageDirectory: URL
-
-    /// Performs the transfers. Defaults to a stub that moves no bytes.
+    /// Performs the transfers.
     private let delegate: any BackgroundDownloadDelegate
 
     /// Creates a downloader that tracks state in memory and delegates every transfer.
     ///
-    /// - Parameters:
-    ///   - storageDirectory: Directory nominated for resume data. It is retained but never touched,
-    ///     so passing one changes no behaviour. Defaults to
-    ///     `~/Library/Application Support/LLMLocal/bg-downloads`.
-    ///   - delegate: Performs the transfers. When `nil`,
-    ///     ``StubBackgroundDownloadDelegate`` is used and downloads complete instantly without
-    ///     fetching anything.
-    public init(
-        storageDirectory: URL? = nil,
-        delegate: (any BackgroundDownloadDelegate)? = nil
-    ) {
-        self.storageDirectory = storageDirectory
-            ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
-                .first!
-                .appendingPathComponent("LLMLocal/bg-downloads")
-        self.delegate = delegate ?? StubBackgroundDownloadDelegate()
+    /// - Parameter delegate: Performs the transfers. There is no default: this type moves no bytes
+    ///   itself, so a downloader without a delegate could only ever report success for work nobody
+    ///   did.
+    public init(delegate: any BackgroundDownloadDelegate) {
+        self.delegate = delegate
     }
 
     // MARK: - Public API
@@ -221,17 +134,11 @@ public actor BackgroundDownloader {
                 resumeData: existingResumeData
             )
 
-            // Mark as completed
-            activeDownloads[url] = .completed(localURL: localURL)
-
-            // Clean up
             activeDownloads.removeValue(forKey: url)
             resumeDataStore.removeValue(forKey: url)
 
             return localURL
         } catch {
-            // Mark as failed
-            activeDownloads[url] = .failed(error: error)
             activeDownloads.removeValue(forKey: url)
             throw error
         }
@@ -253,16 +160,10 @@ public actor BackgroundDownloader {
         }
 
         // Get resume data from the delegate
-        let data = try await delegate.cancelDownload(for: url)
+        let data = try await delegate.cancelDownload(for: url) ?? Data()
 
-        if let data {
-            resumeDataStore[url] = data
-            activeDownloads[url] = .paused(resumeData: data)
-        } else {
-            // Even without data from delegate, mark as paused
-            activeDownloads[url] = .paused(resumeData: Data())
-            resumeDataStore[url] = Data()
-        }
+        resumeDataStore[url] = data
+        activeDownloads[url] = .paused(resumeData: data)
     }
 
     /// Restarts a paused transfer from its stored resume data.
@@ -304,11 +205,7 @@ public actor BackgroundDownloader {
     /// - Parameter url: Remote URL to check.
     /// - Returns: `true` while the delegate call for this URL has not returned.
     public func isDownloading(_ url: URL) -> Bool {
-        guard let state = activeDownloads[url] else { return false }
-        if case .downloading = state {
-            return true
-        }
-        return false
+        activeDownloads[url] == .downloading
     }
 
     /// Reports whether a pause left resume data for the URL.
@@ -327,10 +224,7 @@ public actor BackgroundDownloader {
     /// The order is undefined — the entries come from a dictionary.
     public func activeDownloadURLs() -> [URL] {
         activeDownloads.compactMap { url, state in
-            if case .downloading = state {
-                return url
-            }
-            return nil
+            state == .downloading ? url : nil
         }
     }
 

@@ -4,11 +4,15 @@ import Foundation
 ///
 /// The cases divide into three groups by what the caller should do. Retrying the same call can
 /// work for ``downloadFailed(modelId:reason:)`` and ``loadInProgress``. Retrying is pointless until
-/// something changes for ``loadFailed(modelId:reason:)``, ``adapterMergeFailed(reason:)``,
-/// ``unsupportedModelFormat(_:)``, ``insufficientMemory(required:available:)``, and
-/// ``insufficientStorage(required:available:)`` — free memory or disk, fix the spec, or offer a
-/// smaller model. ``modelNotLoaded`` and ``toolCallsUnsupported(modelId:)`` are caller mistakes to
-/// fix in code, and ``cancelled`` is not a failure at all.
+/// something changes for ``loadFailed(modelId:reason:)`` and ``adapterMergeFailed(reason:)`` — fix
+/// the spec, free memory, or offer a smaller model. ``modelNotLoaded`` and
+/// ``toolCallsUnsupported(modelId:)`` are caller mistakes to fix in code, and ``cancelled`` is not
+/// a failure at all.
+///
+/// Every case here is raised by this package. A device that is out of memory or disk shows up as
+/// ``loadFailed(modelId:reason:)`` or ``downloadFailed(modelId:reason:)`` rather than as a case of
+/// its own, so ask ``MemoryMonitor`` whether a spec fits *before* starting a load you cannot
+/// finish.
 public enum LLMLocalError: Error, Sendable, Equatable {
     /// Fetching the model's weights failed.
     ///
@@ -33,27 +37,6 @@ public enum LLMLocalError: Error, Sendable, Equatable {
     ///   - modelId: Identifier of the model that failed to load.
     ///   - reason: Underlying error text, meant for logs rather than the user.
     case loadFailed(modelId: String, reason: String)
-
-    /// The device does not have enough memory to hold the model.
-    ///
-    /// Backends in this package do not raise it — an out-of-memory load surfaces as
-    /// ``loadFailed(modelId:reason:)`` — because the check belongs before the load. Ask the memory
-    /// monitor whether a spec fits and offer a smaller one instead of starting a load that will die.
-    ///
-    /// - Parameters:
-    ///   - required: Bytes the model needs.
-    ///   - available: Bytes the process may still use.
-    case insufficientMemory(required: Int, available: Int)
-
-    /// There is not enough free disk space to store the model's weights.
-    ///
-    /// Reserved for downloaders that check before they start; nothing in this package raises it
-    /// today. Recovery is user action — free space or pick a smaller model — not a retry.
-    ///
-    /// - Parameters:
-    ///   - required: Bytes the download needs.
-    ///   - available: Bytes free on the volume.
-    case insufficientStorage(required: Int64, available: Int64)
 
     /// Generation was requested before any model was loaded.
     ///
@@ -83,15 +66,6 @@ public enum LLMLocalError: Error, Sendable, Equatable {
     /// - Parameter reason: What went wrong, meant for logs rather than the user.
     case adapterMergeFailed(reason: String)
 
-    /// The weights are in a format the runtime cannot read.
-    ///
-    /// Reserved for backends that inspect the format before loading; the MLX backend reports the
-    /// same situation as ``loadFailed(modelId:reason:)``. Not recoverable — the model has to be
-    /// converted or replaced.
-    ///
-    /// - Parameter format: The format that was found.
-    case unsupportedModelFormat(String)
-
     /// Tools were passed to a model that cannot call them.
     ///
     /// Failing loudly is the point. If the tools were dropped silently the model would answer from
@@ -111,30 +85,24 @@ extension LLMLocalError: LocalizedError {
     /// Without the `LocalizedError` conformance, `localizedDescription` degrades to
     /// "...LLMLocalError error N." and every associated value — the model id, the downloader's
     /// reason string — is lost at exactly the moment someone is trying to read the error. The text
-    /// is Japanese and is not localized, so treat it as a message for a Japanese-language UI or for
-    /// logs, and build your own copy for anything else.
+    /// is English and is not localized, so treat it as developer-facing copy for logs and build
+    /// your own strings for anything a user reads.
     public var errorDescription: String? {
         switch self {
         case .downloadFailed(let modelId, let reason):
-            "モデル '\(modelId)' のダウンロードに失敗しました: \(reason)"
+            "Failed to download model '\(modelId)': \(reason)"
         case .loadFailed(let modelId, let reason):
-            "モデル '\(modelId)' の読み込みに失敗しました: \(reason)"
-        case .insufficientMemory(let required, let available):
-            "メモリ不足です（必要: \(required) バイト / 利用可能: \(available) バイト）"
-        case .insufficientStorage(let required, let available):
-            "ストレージ不足です（必要: \(required) バイト / 利用可能: \(available) バイト）"
+            "Failed to load model '\(modelId)': \(reason)"
         case .modelNotLoaded:
-            "モデルが読み込まれていません"
+            "No model is loaded."
         case .loadInProgress:
-            "モデルの読み込みが既に進行中です"
+            "A model load is already in progress."
         case .cancelled:
-            "操作がキャンセルされました"
+            "The operation was cancelled."
         case .adapterMergeFailed(let reason):
-            "アダプターのマージに失敗しました: \(reason)"
-        case .unsupportedModelFormat(let format):
-            "サポートされていないモデル形式です: \(format)"
+            "Failed to merge the adapter: \(reason)"
         case .toolCallsUnsupported(let modelId):
-            "モデル '\(modelId)' はツールコールに対応していません"
+            "Model '\(modelId)' does not support tool calls."
         }
     }
 }

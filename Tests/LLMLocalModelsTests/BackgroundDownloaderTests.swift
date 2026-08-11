@@ -8,17 +8,19 @@ import LLMLocalClient
 /// Mock delegate that simulates background download operations without network access.
 struct MockBackgroundDownloadDelegate: BackgroundDownloadDelegate, Sendable {
     let shouldThrow: Bool
-    let simulatedResumeData: Data?
     let simulatedLocalURL: URL?
+
+    /// What `cancelDownload(for:)` hands back. `nil` models a transport that cannot resume.
+    let cancelResumeData: Data?
 
     init(
         shouldThrow: Bool = false,
-        simulatedResumeData: Data? = nil,
-        simulatedLocalURL: URL? = nil
+        simulatedLocalURL: URL? = nil,
+        cancelResumeData: Data? = Data("mock-resume".utf8)
     ) {
         self.shouldThrow = shouldThrow
-        self.simulatedResumeData = simulatedResumeData
         self.simulatedLocalURL = simulatedLocalURL
+        self.cancelResumeData = cancelResumeData
     }
 
     func startDownload(url: URL, resumeData: Data?) async throws -> URL {
@@ -33,16 +35,28 @@ struct MockBackgroundDownloadDelegate: BackgroundDownloadDelegate, Sendable {
                 .appendingPathComponent("mock-download-\(url.lastPathComponent)")
     }
 
-    func canResume(for url: URL) -> Bool {
-        simulatedResumeData != nil
+    func cancelDownload(for url: URL) async throws -> Data? {
+        cancelResumeData
+    }
+}
+
+/// Records the resume data each `startDownload` call received, so the resume path can be asserted.
+actor RecordingBackgroundDownloadDelegate: BackgroundDownloadDelegate {
+    private(set) var receivedResumeData: [Data?] = []
+    private let cancelResumeData: Data?
+
+    init(cancelResumeData: Data? = Data("recorded-resume".utf8)) {
+        self.cancelResumeData = cancelResumeData
     }
 
-    func resumeData(for url: URL) -> Data? {
-        simulatedResumeData
+    func startDownload(url: URL, resumeData: Data?) async throws -> URL {
+        receivedResumeData.append(resumeData)
+        return FileManager.default.temporaryDirectory
+            .appendingPathComponent("recorded-\(url.lastPathComponent)")
     }
 
     func cancelDownload(for url: URL) async throws -> Data? {
-        Data("mock-resume".utf8)
+        cancelResumeData
     }
 }
 
@@ -60,7 +74,6 @@ private func removeTempDir(_ url: URL) {
 }
 
 private let testURL = URL(string: "https://huggingface.co/mlx-community/test-model/resolve/main/model.safetensors")!
-private let testURL2 = URL(string: "https://huggingface.co/mlx-community/test-model-2/resolve/main/model.safetensors")!
 
 // MARK: - DownloadState Tests
 
@@ -73,11 +86,7 @@ struct DownloadStateTests {
         let state = DownloadState.downloading
 
         // Assert
-        if case .downloading = state {
-            // Pass
-        } else {
-            Issue.record("Expected .downloading state")
-        }
+        #expect(state == .downloading)
     }
 
     @Test("paused state stores resume data")
@@ -95,38 +104,6 @@ struct DownloadStateTests {
             Issue.record("Expected .paused state")
         }
     }
-
-    @Test("completed state stores local URL")
-    func completedStateStoresLocalURL() {
-        // Arrange
-        let url = URL(fileURLWithPath: "/tmp/model.safetensors")
-
-        // Act
-        let state = DownloadState.completed(localURL: url)
-
-        // Assert
-        if case .completed(let localURL) = state {
-            #expect(localURL == url)
-        } else {
-            Issue.record("Expected .completed state")
-        }
-    }
-
-    @Test("failed state stores error")
-    func failedStateStoresError() {
-        // Arrange
-        let error = LLMLocalError.downloadFailed(modelId: "test", reason: "failed")
-
-        // Act
-        let state = DownloadState.failed(error: error)
-
-        // Assert
-        if case .failed(let storedError) = state {
-            #expect(storedError is LLMLocalError)
-        } else {
-            Issue.record("Expected .failed state")
-        }
-    }
 }
 
 // MARK: - BackgroundDownloader Initialization Tests
@@ -134,52 +111,17 @@ struct DownloadStateTests {
 @Suite("BackgroundDownloader initialization")
 struct BackgroundDownloaderInitTests {
 
-    @Test("initializes with default storage directory")
-    func initializesWithDefaultStorageDirectory() async {
-        // Act
-        let downloader = BackgroundDownloader()
-
-        // Assert
-        let urls = await downloader.activeDownloadURLs()
-        #expect(urls.isEmpty)
-    }
-
-    @Test("initializes with custom storage directory")
-    func initializesWithCustomStorageDirectory() async throws {
-        // Arrange
-        let dir = try makeTempDir()
-        defer { removeTempDir(dir) }
-
-        // Act
-        let downloader = BackgroundDownloader(storageDirectory: dir)
-
-        // Assert
-        let urls = await downloader.activeDownloadURLs()
-        #expect(urls.isEmpty)
-    }
-
-    @Test("initializes with custom delegate")
+    @Test("initializes with an injected delegate and tracks nothing")
     func initializesWithCustomDelegate() async throws {
         // Arrange
-        let dir = try makeTempDir()
-        defer { removeTempDir(dir) }
         let delegate = MockBackgroundDownloadDelegate()
 
         // Act
-        let downloader = BackgroundDownloader(
-            storageDirectory: dir,
-            delegate: delegate
-        )
+        let downloader = BackgroundDownloader(delegate: delegate)
 
         // Assert
         let urls = await downloader.activeDownloadURLs()
         #expect(urls.isEmpty)
-    }
-
-    @Test("session identifier has correct value")
-    func sessionIdentifierHasCorrectValue() {
-        // Assert
-        #expect(BackgroundDownloader.sessionIdentifier == "com.llmlocal.background-download")
     }
 }
 
@@ -191,15 +133,10 @@ struct BackgroundDownloaderDownloadFlowTests {
     @Test("start download returns completed local URL")
     func startDownloadReturnsCompletedLocalURL() async throws {
         // Arrange
-        let dir = try makeTempDir()
-        defer { removeTempDir(dir) }
         let expectedURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("mock-download-model.safetensors")
         let delegate = MockBackgroundDownloadDelegate(simulatedLocalURL: expectedURL)
-        let downloader = BackgroundDownloader(
-            storageDirectory: dir,
-            delegate: delegate
-        )
+        let downloader = BackgroundDownloader(delegate: delegate)
 
         // Act
         let result = try await downloader.download(from: testURL)
@@ -215,10 +152,7 @@ struct BackgroundDownloaderDownloadFlowTests {
         defer { removeTempDir(dir) }
         let localPath = dir.appendingPathComponent("downloaded-model.bin")
         let delegate = MockBackgroundDownloadDelegate(simulatedLocalURL: localPath)
-        let downloader = BackgroundDownloader(
-            storageDirectory: dir,
-            delegate: delegate
-        )
+        let downloader = BackgroundDownloader(delegate: delegate)
 
         // Act
         let result = try await downloader.download(from: testURL)
@@ -230,9 +164,7 @@ struct BackgroundDownloaderDownloadFlowTests {
     @Test("isDownloading returns false when no downloads active")
     func isDownloadingReturnsFalseWhenNoDownloads() async throws {
         // Arrange
-        let dir = try makeTempDir()
-        defer { removeTempDir(dir) }
-        let downloader = BackgroundDownloader(storageDirectory: dir)
+        let downloader = BackgroundDownloader(delegate: MockBackgroundDownloadDelegate())
 
         // Act
         let result = await downloader.isDownloading(testURL)
@@ -244,13 +176,8 @@ struct BackgroundDownloaderDownloadFlowTests {
     @Test("isDownloading returns false after download completes")
     func isDownloadingReturnsFalseAfterCompletion() async throws {
         // Arrange
-        let dir = try makeTempDir()
-        defer { removeTempDir(dir) }
         let delegate = MockBackgroundDownloadDelegate()
-        let downloader = BackgroundDownloader(
-            storageDirectory: dir,
-            delegate: delegate
-        )
+        let downloader = BackgroundDownloader(delegate: delegate)
 
         // Act
         _ = try await downloader.download(from: testURL)
@@ -263,13 +190,8 @@ struct BackgroundDownloaderDownloadFlowTests {
     @Test("activeDownloadURLs is empty after download completes")
     func activeDownloadURLsEmptyAfterCompletion() async throws {
         // Arrange
-        let dir = try makeTempDir()
-        defer { removeTempDir(dir) }
         let delegate = MockBackgroundDownloadDelegate()
-        let downloader = BackgroundDownloader(
-            storageDirectory: dir,
-            delegate: delegate
-        )
+        let downloader = BackgroundDownloader(delegate: delegate)
 
         // Act
         _ = try await downloader.download(from: testURL)
@@ -288,16 +210,10 @@ struct BackgroundDownloaderPauseResumeFlowTests {
     @Test("pause stores resume data via delegate")
     func pauseStoresResumeData() async throws {
         // Arrange
-        let dir = try makeTempDir()
-        defer { removeTempDir(dir) }
         let delegate = MockBackgroundDownloadDelegate()
-        let downloader = BackgroundDownloader(
-            storageDirectory: dir,
-            delegate: delegate
-        )
+        let downloader = BackgroundDownloader(delegate: delegate)
 
-        // Simulate an active download by starting one that we can pause
-        // We need to mark the URL as downloading first
+        // Simulate an active download by marking the URL as downloading
         await downloader.markAsDownloading(testURL)
 
         // Act
@@ -311,9 +227,7 @@ struct BackgroundDownloaderPauseResumeFlowTests {
     @Test("hasResumeData returns false when no resume data exists")
     func hasResumeDataReturnsFalseWhenNoData() async throws {
         // Arrange
-        let dir = try makeTempDir()
-        defer { removeTempDir(dir) }
-        let downloader = BackgroundDownloader(storageDirectory: dir)
+        let downloader = BackgroundDownloader(delegate: MockBackgroundDownloadDelegate())
 
         // Act
         let result = await downloader.hasResumeData(for: testURL)
@@ -322,39 +236,50 @@ struct BackgroundDownloaderPauseResumeFlowTests {
         #expect(result == false)
     }
 
-    @Test("resume uses stored resume data")
+    @Test("resume hands the stored resume data back to the delegate")
     func resumeUsesStoredResumeData() async throws {
         // Arrange
-        let dir = try makeTempDir()
-        defer { removeTempDir(dir) }
         let resumeData = Data("test-resume-data".utf8)
-        let delegate = MockBackgroundDownloadDelegate(simulatedResumeData: resumeData)
-        let downloader = BackgroundDownloader(
-            storageDirectory: dir,
-            delegate: delegate
-        )
+        let delegate = RecordingBackgroundDownloadDelegate(cancelResumeData: resumeData)
+        let downloader = BackgroundDownloader(delegate: delegate)
 
         // Simulate paused state with resume data
         await downloader.markAsDownloading(testURL)
         try await downloader.pause(url: testURL)
 
         // Act
-        let result = try await downloader.resume(url: testURL)
+        _ = try await downloader.resume(url: testURL)
 
         // Assert
-        #expect(result != URL(fileURLWithPath: ""))
+        let received = await delegate.receivedResumeData
+        #expect(received == [resumeData])
+    }
+
+    /// A pause the transport could not make resumable still marks the URL paused, and the restart
+    /// receives empty data rather than nothing.
+    @Test("pause with no delegate resume data stores empty data")
+    func pauseWithoutDelegateDataStoresEmpty() async throws {
+        // Arrange
+        let delegate = RecordingBackgroundDownloadDelegate(cancelResumeData: nil)
+        let downloader = BackgroundDownloader(delegate: delegate)
+        await downloader.markAsDownloading(testURL)
+
+        // Act
+        try await downloader.pause(url: testURL)
+        _ = try await downloader.resume(url: testURL)
+
+        // Assert
+        let hasData = await downloader.hasResumeData(for: testURL)
+        #expect(hasData == false) // Cleared once the transfer finished.
+        let received = await delegate.receivedResumeData
+        #expect(received == [Data()])
     }
 
     @Test("resume without prior pause throws error")
     func resumeWithoutPriorPauseThrows() async throws {
         // Arrange
-        let dir = try makeTempDir()
-        defer { removeTempDir(dir) }
         let delegate = MockBackgroundDownloadDelegate()
-        let downloader = BackgroundDownloader(
-            storageDirectory: dir,
-            delegate: delegate
-        )
+        let downloader = BackgroundDownloader(delegate: delegate)
 
         // Act & Assert
         await #expect(throws: BackgroundDownloadError.self) {
@@ -365,13 +290,8 @@ struct BackgroundDownloaderPauseResumeFlowTests {
     @Test("hasResumeData returns true after pause")
     func hasResumeDataReturnsTrueAfterPause() async throws {
         // Arrange
-        let dir = try makeTempDir()
-        defer { removeTempDir(dir) }
         let delegate = MockBackgroundDownloadDelegate()
-        let downloader = BackgroundDownloader(
-            storageDirectory: dir,
-            delegate: delegate
-        )
+        let downloader = BackgroundDownloader(delegate: delegate)
         await downloader.markAsDownloading(testURL)
 
         // Act
@@ -391,13 +311,8 @@ struct BackgroundDownloaderCancelFlowTests {
     @Test("cancel removes from active downloads")
     func cancelRemovesFromActiveDownloads() async throws {
         // Arrange
-        let dir = try makeTempDir()
-        defer { removeTempDir(dir) }
         let delegate = MockBackgroundDownloadDelegate()
-        let downloader = BackgroundDownloader(
-            storageDirectory: dir,
-            delegate: delegate
-        )
+        let downloader = BackgroundDownloader(delegate: delegate)
         await downloader.markAsDownloading(testURL)
 
         // Act
@@ -411,13 +326,8 @@ struct BackgroundDownloaderCancelFlowTests {
     @Test("cancel clears resume data")
     func cancelClearsResumeData() async throws {
         // Arrange
-        let dir = try makeTempDir()
-        defer { removeTempDir(dir) }
         let delegate = MockBackgroundDownloadDelegate()
-        let downloader = BackgroundDownloader(
-            storageDirectory: dir,
-            delegate: delegate
-        )
+        let downloader = BackgroundDownloader(delegate: delegate)
         await downloader.markAsDownloading(testURL)
         try await downloader.pause(url: testURL)
 
@@ -436,13 +346,8 @@ struct BackgroundDownloaderCancelFlowTests {
     @Test("cancel non-existent download is no-op")
     func cancelNonExistentDownloadIsNoOp() async throws {
         // Arrange
-        let dir = try makeTempDir()
-        defer { removeTempDir(dir) }
         let delegate = MockBackgroundDownloadDelegate()
-        let downloader = BackgroundDownloader(
-            storageDirectory: dir,
-            delegate: delegate
-        )
+        let downloader = BackgroundDownloader(delegate: delegate)
 
         // Act & Assert - should not throw
         try await downloader.cancel(url: testURL)
@@ -460,13 +365,8 @@ struct BackgroundDownloaderErrorHandlingTests {
     @Test("download failure propagates error from delegate")
     func downloadFailurePropagatesError() async throws {
         // Arrange
-        let dir = try makeTempDir()
-        defer { removeTempDir(dir) }
         let delegate = MockBackgroundDownloadDelegate(shouldThrow: true)
-        let downloader = BackgroundDownloader(
-            storageDirectory: dir,
-            delegate: delegate
-        )
+        let downloader = BackgroundDownloader(delegate: delegate)
 
         // Act & Assert
         await #expect(throws: LLMLocalError.self) {
@@ -474,16 +374,11 @@ struct BackgroundDownloaderErrorHandlingTests {
         }
     }
 
-    @Test("download failure sets failed state")
-    func downloadFailureSetsFailed() async throws {
+    @Test("download failure clears the in-flight entry")
+    func downloadFailureClearsInFlightEntry() async throws {
         // Arrange
-        let dir = try makeTempDir()
-        defer { removeTempDir(dir) }
         let delegate = MockBackgroundDownloadDelegate(shouldThrow: true)
-        let downloader = BackgroundDownloader(
-            storageDirectory: dir,
-            delegate: delegate
-        )
+        let downloader = BackgroundDownloader(delegate: delegate)
 
         // Act
         do {
@@ -500,13 +395,8 @@ struct BackgroundDownloaderErrorHandlingTests {
     @Test("resume with no resume data throws noResumeData error")
     func resumeWithNoResumeDataThrows() async throws {
         // Arrange
-        let dir = try makeTempDir()
-        defer { removeTempDir(dir) }
         let delegate = MockBackgroundDownloadDelegate()
-        let downloader = BackgroundDownloader(
-            storageDirectory: dir,
-            delegate: delegate
-        )
+        let downloader = BackgroundDownloader(delegate: delegate)
 
         // Act & Assert
         await #expect(throws: BackgroundDownloadError.noResumeData) {
@@ -517,13 +407,8 @@ struct BackgroundDownloaderErrorHandlingTests {
     @Test("pause non-active download throws notDownloading error")
     func pauseNonActiveDownloadThrows() async throws {
         // Arrange
-        let dir = try makeTempDir()
-        defer { removeTempDir(dir) }
         let delegate = MockBackgroundDownloadDelegate()
-        let downloader = BackgroundDownloader(
-            storageDirectory: dir,
-            delegate: delegate
-        )
+        let downloader = BackgroundDownloader(delegate: delegate)
 
         // Act & Assert
         await #expect(throws: BackgroundDownloadError.notDownloading) {
@@ -548,8 +433,10 @@ struct ModelRegistryBackgroundDownloaderTests {
         try? FileManager.default.removeItem(at: url)
     }
 
-    @Test("ModelRegistry exposes background downloader")
-    func modelManagerExposesBackgroundDownloader() async throws {
+    /// The registry has no delegate that moves bytes, so it must not conjure a downloader that
+    /// would report instant success for transfers nobody performed.
+    @Test("registry hands back no downloader when none was injected")
+    func registryWithoutInjectedDownloaderHasNone() async throws {
         // Arrange
         let dir = try Self.makeTempDir()
         defer { Self.removeTempDir(dir) }
@@ -559,35 +446,16 @@ struct ModelRegistryBackgroundDownloaderTests {
         let downloader = await registry.backgroundDownloader
 
         // Assert
-        let urls = await downloader.activeDownloadURLs()
-        #expect(urls.isEmpty)
+        #expect(downloader == nil)
     }
 
-    @Test("background downloader uses storage directory under cache directory")
-    func backgroundDownloaderUsesCorrectStorageDirectory() async throws {
-        // Arrange
-        let dir = try Self.makeTempDir()
-        defer { Self.removeTempDir(dir) }
-        let registry = ModelRegistry(cacheDirectory: dir)
-
-        // Act
-        let downloader = await registry.backgroundDownloader
-
-        // Assert - downloader should be functional
-        let hasResumeData = await downloader.hasResumeData(for: testURL)
-        #expect(hasResumeData == false)
-    }
-
-    @Test("background downloader can be used with custom delegate")
-    func backgroundDownloaderWithCustomDelegate() async throws {
+    @Test("registry exposes the downloader it was given")
+    func registryExposesInjectedDownloader() async throws {
         // Arrange
         let dir = try Self.makeTempDir()
         defer { Self.removeTempDir(dir) }
         let delegate = MockBackgroundDownloadDelegate()
-        let bgDownloader = BackgroundDownloader(
-            storageDirectory: dir.appendingPathComponent("bg-downloads"),
-            delegate: delegate
-        )
+        let bgDownloader = BackgroundDownloader(delegate: delegate)
         let registry = ModelRegistry(
             cacheDirectory: dir,
             backgroundDownloader: bgDownloader
@@ -597,61 +465,7 @@ struct ModelRegistryBackgroundDownloaderTests {
         let downloader = await registry.backgroundDownloader
 
         // Assert
-        let urls = await downloader.activeDownloadURLs()
-        #expect(urls.isEmpty)
-    }
-}
-
-// MARK: - StubBackgroundDownloadDelegate Tests
-
-@Suite("StubBackgroundDownloadDelegate")
-struct StubBackgroundDownloadDelegateTests {
-
-    @Test("stub delegate returns simulated local URL")
-    func stubDelegateReturnsSimulatedLocalURL() async throws {
-        // Arrange
-        let delegate = StubBackgroundDownloadDelegate()
-
-        // Act
-        let result = try await delegate.startDownload(url: testURL, resumeData: nil)
-
-        // Assert
-        #expect(result.lastPathComponent == "model.safetensors")
-    }
-
-    @Test("stub delegate canResume returns false")
-    func stubDelegateCanResumeReturnsFalse() {
-        // Arrange
-        let delegate = StubBackgroundDownloadDelegate()
-
-        // Act
-        let result = delegate.canResume(for: testURL)
-
-        // Assert
-        #expect(result == false)
-    }
-
-    @Test("stub delegate resumeData returns nil")
-    func stubDelegateResumeDataReturnsNil() {
-        // Arrange
-        let delegate = StubBackgroundDownloadDelegate()
-
-        // Act
-        let result = delegate.resumeData(for: testURL)
-
-        // Assert
-        #expect(result == nil)
-    }
-
-    @Test("stub delegate cancelDownload returns nil")
-    func stubDelegateCancelDownloadReturnsNil() async throws {
-        // Arrange
-        let delegate = StubBackgroundDownloadDelegate()
-
-        // Act
-        let result = try await delegate.cancelDownload(for: testURL)
-
-        // Assert
-        #expect(result == nil)
+        let urls = await downloader?.activeDownloadURLs()
+        #expect(urls == [])
     }
 }

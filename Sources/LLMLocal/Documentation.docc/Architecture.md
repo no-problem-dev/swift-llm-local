@@ -26,11 +26,11 @@ Everything about model artifacts as *files*: `ModelRegistry`, which records what
 installed, `AdapterRegistry` for LoRA adapters, and `BackgroundDownloader`.
 
 `BackgroundDownloader` is bookkeeping, not a transfer engine. It tracks which downloads are in
-flight and holds resume data in memory, and delegates every actual transfer to an injected
-`BackgroundDownloadDelegate`; the built-in delegate is a stub that fetches nothing. Whether a
-download survives app suspension is therefore a property of the delegate you supply, not of this
-type. The transfers the package performs on its own go through `DestinationHubDownloader` in
-`LLMLocalMLX`.
+flight and holds resume data in memory, and delegates every actual transfer to a
+`BackgroundDownloadDelegate` you must supply — there is no default, because a downloader that moves
+no bytes could only ever report success for work nobody did. Whether a download survives app
+suspension is therefore a property of that delegate, not of this type. The transfers the package
+performs on its own go through `DestinationHubDownloader` in `LLMLocalMLX`.
 
 `LLMLocalModels` is not a package product. You cannot import it directly; its types reach you
 re-exported through the umbrella. That is deliberate — model storage is an implementation detail of

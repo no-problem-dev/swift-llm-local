@@ -6,6 +6,9 @@ import LLMLocalClient
 // MARK: - Mock Backend for ModelSwitcher Tests
 
 /// A mock backend that tracks load/unload calls for testing ModelSwitcher.
+///
+/// It honours the `LLMLocalBackend` residency contract: exactly one model is held, and loading a
+/// different spec replaces the previous one.
 actor MockSwitcherBackend: LLMLocalBackend {
     private var _loadedModel: ModelSpec?
     private(set) var loadCallCount = 0
@@ -73,8 +76,8 @@ private func makeSpec(
 @Suite("ModelSwitcher initialization")
 struct ModelSwitcherInitTests {
 
-    @Test("default maxLoadedModels is 1")
-    func defaultMaxLoadedModelsIsOne() async {
+    @Test("no model is loaded before the first ensureLoaded")
+    func noModelLoadedInitially() async {
         // Arrange
         let backend = MockSwitcherBackend()
 
@@ -82,32 +85,8 @@ struct ModelSwitcherInitTests {
         let switcher = ModelSwitcher(backend: backend)
 
         // Assert
-        #expect(switcher.maxLoadedModels == 1)
-    }
-
-    @Test("custom maxLoadedModels is set correctly")
-    func customMaxLoadedModels() async {
-        // Arrange
-        let backend = MockSwitcherBackend()
-
-        // Act
-        let switcher = ModelSwitcher(backend: backend, maxLoadedModels: 3)
-
-        // Assert
-        #expect(switcher.maxLoadedModels == 3)
-    }
-
-    @Test("loadedCount starts at 0")
-    func loadedCountStartsAtZero() async {
-        // Arrange
-        let backend = MockSwitcherBackend()
-        let switcher = ModelSwitcher(backend: backend)
-
-        // Act
-        let count = await switcher.loadedCount()
-
-        // Assert
-        #expect(count == 0)
+        let loaded = await switcher.loadedModel()
+        #expect(loaded == nil)
     }
 }
 
@@ -127,8 +106,8 @@ struct ModelSwitcherEnsureLoadedTests {
         try await switcher.ensureLoaded(spec)
 
         // Assert
-        let count = await switcher.loadedCount()
-        #expect(count == 1)
+        let loaded = await switcher.loadedModel()
+        #expect(loaded == spec)
         let loadCount = await backend.loadCallCount
         #expect(loadCount == 1)
     }
@@ -147,27 +126,8 @@ struct ModelSwitcherEnsureLoadedTests {
         // Assert
         let loadCount = await backend.loadCallCount
         #expect(loadCount == 1) // Should only load once
-        let count = await switcher.loadedCount()
-        #expect(count == 1)
-    }
-
-    @Test("loading different model works")
-    func loadingDifferentModelWorks() async throws {
-        // Arrange
-        let backend = MockSwitcherBackend()
-        let switcher = ModelSwitcher(backend: backend, maxLoadedModels: 2)
-        let specA = makeSpec(id: "model-a")
-        let specB = makeSpec(id: "model-b")
-
-        // Act
-        try await switcher.ensureLoaded(specA)
-        try await switcher.ensureLoaded(specB)
-
-        // Assert
-        let count = await switcher.loadedCount()
-        #expect(count == 2)
-        let loadCount = await backend.loadCallCount
-        #expect(loadCount == 2)
+        let loaded = await switcher.loadedModel()
+        #expect(loaded == spec)
     }
 
     @Test("isLoaded returns true after loading")
@@ -184,132 +144,81 @@ struct ModelSwitcherEnsureLoadedTests {
         let loaded = await switcher.isLoaded(spec)
         #expect(loaded == true)
     }
-
-    @Test("loadedModelSpecs returns loaded models in most-recent-first order")
-    func loadedModelSpecsReturnsLoadedModels() async throws {
-        // Arrange
-        let backend = MockSwitcherBackend()
-        let switcher = ModelSwitcher(backend: backend, maxLoadedModels: 3)
-        let specA = makeSpec(id: "model-a")
-        let specB = makeSpec(id: "model-b")
-        let specC = makeSpec(id: "model-c")
-
-        // Act
-        try await switcher.ensureLoaded(specA)
-        try await switcher.ensureLoaded(specB)
-        try await switcher.ensureLoaded(specC)
-
-        // Assert
-        let specs = await switcher.loadedModelSpecs()
-        #expect(specs.count == 3)
-        // Most recently loaded first
-        #expect(specs[0] == specC)
-        #expect(specs[1] == specB)
-        #expect(specs[2] == specA)
-    }
 }
 
-// MARK: - LRU Eviction Tests
+// MARK: - Single-Residency Tests
 
-@Suite("ModelSwitcher LRU eviction")
-struct ModelSwitcherLRUEvictionTests {
+@Suite("ModelSwitcher single residency")
+struct ModelSwitcherSingleResidencyTests {
 
-    @Test("at capacity, loading new model evicts LRU")
-    func atCapacityEvictsLRU() async throws {
+    @Test("loading a second model reports only the second as loaded")
+    func secondModelDisplacesFirst() async throws {
         // Arrange
         let backend = MockSwitcherBackend()
-        let switcher = ModelSwitcher(backend: backend, maxLoadedModels: 2)
+        let switcher = ModelSwitcher(backend: backend)
         let specA = makeSpec(id: "model-a")
         let specB = makeSpec(id: "model-b")
-        let specC = makeSpec(id: "model-c")
-
-        // Act: Load A, then B (at capacity), then C (should evict A)
-        try await switcher.ensureLoaded(specA)
-        try await switcher.ensureLoaded(specB)
-        try await switcher.ensureLoaded(specC)
-
-        // Assert
-        let isALoaded = await switcher.isLoaded(specA)
-        #expect(isALoaded == false) // A was evicted (LRU)
-        let isBLoaded = await switcher.isLoaded(specB)
-        #expect(isBLoaded == true)
-        let isCLoaded = await switcher.isLoaded(specC)
-        #expect(isCLoaded == true)
-        let count = await switcher.loadedCount()
-        #expect(count == 2)
-    }
-
-    @Test("most recently accessed model is not evicted")
-    func mostRecentlyAccessedNotEvicted() async throws {
-        // Arrange
-        let backend = MockSwitcherBackend()
-        let switcher = ModelSwitcher(backend: backend, maxLoadedModels: 2)
-        let specA = makeSpec(id: "model-a")
-        let specB = makeSpec(id: "model-b")
-        let specC = makeSpec(id: "model-c")
-
-        // Act: Load A, B, then access A again (updates access time), then load C
-        try await switcher.ensureLoaded(specA)
-        try await switcher.ensureLoaded(specB)
-        // Access A again to update its timestamp
-        try await switcher.ensureLoaded(specA)
-        // Now load C -- B should be evicted (it's LRU), not A
-        try await switcher.ensureLoaded(specC)
-
-        // Assert
-        let isALoaded = await switcher.isLoaded(specA)
-        #expect(isALoaded == true) // A was recently accessed
-        let isBLoaded = await switcher.isLoaded(specB)
-        #expect(isBLoaded == false) // B was evicted (LRU)
-        let isCLoaded = await switcher.isLoaded(specC)
-        #expect(isCLoaded == true)
-    }
-
-    @Test("loadedCount stays at max after eviction")
-    func loadedCountStaysAtMaxAfterEviction() async throws {
-        // Arrange
-        let backend = MockSwitcherBackend()
-        let switcher = ModelSwitcher(backend: backend, maxLoadedModels: 2)
-        let specA = makeSpec(id: "model-a")
-        let specB = makeSpec(id: "model-b")
-        let specC = makeSpec(id: "model-c")
 
         // Act
         try await switcher.ensureLoaded(specA)
         try await switcher.ensureLoaded(specB)
-        try await switcher.ensureLoaded(specC)
+
+        // Assert: the backend holds exactly one model, and the switcher says so.
+        let isALoaded = await switcher.isLoaded(specA)
+        #expect(isALoaded == false)
+        let isBLoaded = await switcher.isLoaded(specB)
+        #expect(isBLoaded == true)
+        let loaded = await switcher.loadedModel()
+        #expect(loaded == specB)
+    }
+
+    /// The invariant the tracker used to break: a model the backend has released must never be
+    /// reported as loaded. A memory warning, `LLMLocalService.prefetch(_:)`, or any direct
+    /// `unloadModel()` moves the backend without telling the switcher.
+    @Test("a model the backend released behind the switcher's back is not reported as loaded")
+    func externalUnloadIsReflected() async throws {
+        // Arrange
+        let backend = MockSwitcherBackend()
+        let switcher = ModelSwitcher(backend: backend)
+        let spec = makeSpec(id: "model-a")
+        try await switcher.ensureLoaded(spec)
+        #expect(await switcher.isLoaded(spec) == true)
+
+        // Act: something other than the switcher frees the weights.
+        await backend.unloadModel()
 
         // Assert
-        let count = await switcher.loadedCount()
-        #expect(count == 2)
+        let isLoaded = await switcher.isLoaded(spec)
+        #expect(isLoaded == false)
+        let loaded = await switcher.loadedModel()
+        #expect(loaded == nil)
     }
 
-    @Test("accessing a loaded model updates its access time")
-    func accessingModelUpdatesAccessTime() async throws {
+    /// The mirror image: the switcher must not deny a model the backend really is holding, or
+    /// `ensureLoaded` would pay for a redundant multi-gigabyte load.
+    @Test("a model loaded on the backend directly is reported as loaded")
+    func externalLoadIsReflected() async throws {
         // Arrange
         let backend = MockSwitcherBackend()
-        let switcher = ModelSwitcher(backend: backend, maxLoadedModels: 3)
-        let specA = makeSpec(id: "model-a")
-        let specB = makeSpec(id: "model-b")
-        let specC = makeSpec(id: "model-c")
+        let switcher = ModelSwitcher(backend: backend)
+        let spec = makeSpec(id: "model-a")
 
-        // Act: Load A, B, C, then access A
-        try await switcher.ensureLoaded(specA)
-        try await switcher.ensureLoaded(specB)
-        try await switcher.ensureLoaded(specC)
-        // Access A to bump its timestamp
-        try await switcher.ensureLoaded(specA)
+        // Act: something other than the switcher loads the weights.
+        try await backend.loadModel(spec)
 
-        // Assert: A should now be the most recently accessed
-        let specs = await switcher.loadedModelSpecs()
-        #expect(specs[0] == specA) // Most recently accessed first
+        // Assert
+        let isLoaded = await switcher.isLoaded(spec)
+        #expect(isLoaded == true)
+        try await switcher.ensureLoaded(spec)
+        let loadCount = await backend.loadCallCount
+        #expect(loadCount == 1) // No redundant reload.
     }
 
-    @Test("with capacity 1, switching models evicts previous")
-    func capacity1SwitchingEvictsPrevious() async throws {
+    @Test("switching models asks the backend to load the replacement")
+    func switchingModelsLoadsReplacement() async throws {
         // Arrange
         let backend = MockSwitcherBackend()
-        let switcher = ModelSwitcher(backend: backend, maxLoadedModels: 1)
+        let switcher = ModelSwitcher(backend: backend)
         let specA = makeSpec(id: "model-a")
         let specB = makeSpec(id: "model-b")
 
@@ -318,15 +227,8 @@ struct ModelSwitcherLRUEvictionTests {
         try await switcher.ensureLoaded(specB)
 
         // Assert
-        let isALoaded = await switcher.isLoaded(specA)
-        #expect(isALoaded == false) // A was evicted
-        let isBLoaded = await switcher.isLoaded(specB)
-        #expect(isBLoaded == true)
-        let count = await switcher.loadedCount()
-        #expect(count == 1)
-        // Backend should have been asked to unload before loading new model
-        let unloadCount = await backend.unloadCallCount
-        #expect(unloadCount == 1)
+        let history = await backend.loadedModelHistory
+        #expect(history == [specA, specB])
     }
 }
 
@@ -335,11 +237,30 @@ struct ModelSwitcherLRUEvictionTests {
 @Suite("ModelSwitcher unload")
 struct ModelSwitcherUnloadTests {
 
-    @Test("unload specific model removes it")
-    func unloadSpecificModelRemovesIt() async throws {
+    @Test("unloading the resident model frees it")
+    func unloadResidentModelFreesIt() async throws {
         // Arrange
         let backend = MockSwitcherBackend()
-        let switcher = ModelSwitcher(backend: backend, maxLoadedModels: 2)
+        let switcher = ModelSwitcher(backend: backend)
+        let spec = makeSpec(id: "model-a")
+        try await switcher.ensureLoaded(spec)
+
+        // Act
+        await switcher.unload(spec)
+
+        // Assert
+        let isLoaded = await switcher.isLoaded(spec)
+        #expect(isLoaded == false)
+        let unloadCount = await backend.unloadCallCount
+        #expect(unloadCount == 1)
+    }
+
+    /// Unloading a displaced model must not free the model that took its place.
+    @Test("unloading a model the backend no longer holds leaves the resident one alone")
+    func unloadDisplacedModelLeavesResidentAlone() async throws {
+        // Arrange
+        let backend = MockSwitcherBackend()
+        let switcher = ModelSwitcher(backend: backend)
         let specA = makeSpec(id: "model-a")
         let specB = makeSpec(id: "model-b")
         try await switcher.ensureLoaded(specA)
@@ -349,34 +270,28 @@ struct ModelSwitcherUnloadTests {
         await switcher.unload(specA)
 
         // Assert
-        let isALoaded = await switcher.isLoaded(specA)
-        #expect(isALoaded == false)
         let isBLoaded = await switcher.isLoaded(specB)
         #expect(isBLoaded == true)
-        let count = await switcher.loadedCount()
-        #expect(count == 1)
+        let unloadCount = await backend.unloadCallCount
+        #expect(unloadCount == 0)
     }
 
     @Test("unloadAll clears everything")
     func unloadAllClearsEverything() async throws {
         // Arrange
         let backend = MockSwitcherBackend()
-        let switcher = ModelSwitcher(backend: backend, maxLoadedModels: 3)
-        let specA = makeSpec(id: "model-a")
-        let specB = makeSpec(id: "model-b")
-        try await switcher.ensureLoaded(specA)
-        try await switcher.ensureLoaded(specB)
+        let switcher = ModelSwitcher(backend: backend)
+        let spec = makeSpec(id: "model-a")
+        try await switcher.ensureLoaded(spec)
 
         // Act
         await switcher.unloadAll()
 
         // Assert
-        let count = await switcher.loadedCount()
-        #expect(count == 0)
-        let isALoaded = await switcher.isLoaded(specA)
-        #expect(isALoaded == false)
-        let isBLoaded = await switcher.isLoaded(specB)
-        #expect(isBLoaded == false)
+        let loaded = await switcher.loadedModel()
+        #expect(loaded == nil)
+        let isLoaded = await switcher.isLoaded(spec)
+        #expect(isLoaded == false)
     }
 
     @Test("unloading non-loaded model is no-op")
@@ -390,8 +305,8 @@ struct ModelSwitcherUnloadTests {
         await switcher.unload(spec)
 
         // Assert
-        let count = await switcher.loadedCount()
-        #expect(count == 0)
+        let loaded = await switcher.loadedModel()
+        #expect(loaded == nil)
         let unloadCount = await backend.unloadCallCount
         #expect(unloadCount == 0) // Backend should not be called
     }
@@ -422,7 +337,7 @@ struct LLMLocalServiceModelSwitcherTests {
         defer { Self.removeTempDir(dir) }
         let backend = MockSwitcherBackend()
         let modelRegistry = ModelRegistry(cacheDirectory: dir)
-        let switcher = ModelSwitcher(backend: backend, maxLoadedModels: 2)
+        let switcher = ModelSwitcher(backend: backend)
         let service = LLMLocalService(
             backend: backend,
             modelRegistry: modelRegistry,
@@ -469,14 +384,14 @@ struct LLMLocalServiceModelSwitcherTests {
         #expect(loadCount == 1)
     }
 
-    @Test("loadedModelSpecs reflects generated models")
-    func loadedModelSpecsReflectsGeneratedModels() async throws {
+    @Test("loadedModel reflects the most recently generated-with model")
+    func loadedModelReflectsGeneratedModel() async throws {
         // Arrange
         let dir = try Self.makeTempDir()
         defer { Self.removeTempDir(dir) }
         let backend = MockSwitcherBackend()
         let modelRegistry = ModelRegistry(cacheDirectory: dir)
-        let switcher = ModelSwitcher(backend: backend, maxLoadedModels: 3)
+        let switcher = ModelSwitcher(backend: backend)
         let service = LLMLocalService(
             backend: backend,
             modelRegistry: modelRegistry,
@@ -491,11 +406,9 @@ struct LLMLocalServiceModelSwitcherTests {
         let streamB = await service.generate(model: specB, prompt: "Hello")
         for try await _ in streamB {}
 
-        // Assert
-        let specs = await switcher.loadedModelSpecs()
-        #expect(specs.count == 2)
-        #expect(specs.contains(specA))
-        #expect(specs.contains(specB))
+        // Assert: only the second is resident.
+        let loaded = await switcher.loadedModel()
+        #expect(loaded == specB)
     }
 
     @Test("service backward compatibility with nil modelSwitcher")
@@ -539,9 +452,9 @@ struct ModelSwitcherErrorTests {
         await #expect(throws: LLMLocalError.self) {
             try await switcher.ensureLoaded(spec)
         }
-        // Model should not be tracked after failed load
-        let count = await switcher.loadedCount()
-        #expect(count == 0)
+        // Model should not be reported loaded after a failed load
+        let loaded = await switcher.loadedModel()
+        #expect(loaded == nil)
     }
 
     @Test("isLoaded returns false for never-loaded model")

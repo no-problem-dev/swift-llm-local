@@ -16,7 +16,7 @@ Run open LLMs entirely on iOS and macOS devices, through Apple MLX. No API key, 
 - **Agent integration** — `LocalAgentClient` conforms to `swift-llm-client`'s `AgentCapableClient`, so a local model drops into the same agent loop as a cloud provider
 - **Tool calling** — per-model support is recorded in `ModelProfile.toolCallSupport`; passing tools to a model that cannot do it throws instead of degrading silently
 - **Memory monitoring** — models are unloaded under pressure, because the alternative on iOS is the OS terminating the app
-- **Multi-model switching** — LRU eviction, so a second model replaces the first rather than joining it
+- **Multi-model switching** — one model is resident at a time, so a second replaces the first rather than joining it
 - **LoRA adapters** — loaded from Hugging Face, GitHub Releases, or local files
 
 ## Quick Start

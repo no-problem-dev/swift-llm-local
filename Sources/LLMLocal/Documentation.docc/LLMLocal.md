@@ -37,16 +37,16 @@ model, on the order of gigabytes. Treat the first run as a download, not a reque
 than as their own import; the target that declares them is not a package product. Use them to see
 what has been installed, to track transfers in flight, and to attach LoRA adapters.
 
-`BackgroundDownloader` tracks state and delegates the transfer itself to an injected
-`BackgroundDownloadDelegate` — the built-in one fetches nothing. Model weights the package fetches
-on its own go through `DestinationHubDownloader`, which is driven from the MLX backend.
+`BackgroundDownloader` tracks state and delegates the transfer itself to a
+`BackgroundDownloadDelegate` you supply; it has no default and performs no I/O of its own. Model
+weights the package fetches go through `DestinationHubDownloader`, driven from the MLX backend.
 
 ### Keeping the app alive
 
 Model weights are resident memory, and on iOS exceeding what the process is allowed does not throw
 — the app is terminated. `MLXBackend` keeps one model resident and unloads the previous one before
-loading the next, ``ModelSwitcher`` tracks which that is, and `MemoryMonitor` unloads on a system
-low-memory notification.
+loading the next, ``ModelSwitcher`` reports which that is by asking the backend, and
+`MemoryMonitor` unloads on a system low-memory notification.
 
 Its headroom arithmetic is advisory, though: nothing calls `isModelCompatible(_:)` for you. Check a
 model against the device before you load it.

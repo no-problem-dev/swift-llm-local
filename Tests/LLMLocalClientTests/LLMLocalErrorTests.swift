@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import LLMLocalClient
 
@@ -25,28 +26,6 @@ struct LLMLocalErrorTests {
             #expect(reason == "Corrupted weights")
         } else {
             Issue.record("Expected loadFailed case")
-        }
-    }
-
-    @Test("insufficientMemory preserves required and available")
-    func insufficientMemory() {
-        let error = LLMLocalError.insufficientMemory(required: 8_000_000_000, available: 4_000_000_000)
-        if case .insufficientMemory(let required, let available) = error {
-            #expect(required == 8_000_000_000)
-            #expect(available == 4_000_000_000)
-        } else {
-            Issue.record("Expected insufficientMemory case")
-        }
-    }
-
-    @Test("insufficientStorage preserves required and available")
-    func insufficientStorage() {
-        let error = LLMLocalError.insufficientStorage(required: 20_000_000_000, available: 5_000_000_000)
-        if case .insufficientStorage(let required, let available) = error {
-            #expect(required == 20_000_000_000)
-            #expect(available == 5_000_000_000)
-        } else {
-            Issue.record("Expected insufficientStorage case")
         }
     }
 
@@ -78,13 +57,13 @@ struct LLMLocalErrorTests {
         }
     }
 
-    @Test("unsupportedModelFormat preserves format string")
-    func unsupportedModelFormat() {
-        let error = LLMLocalError.unsupportedModelFormat("ONNX")
-        if case .unsupportedModelFormat(let format) = error {
-            #expect(format == "ONNX")
+    @Test("toolCallsUnsupported preserves modelId")
+    func toolCallsUnsupported() {
+        let error = LLMLocalError.toolCallsUnsupported(modelId: "gemma-2b")
+        if case .toolCallsUnsupported(let modelId) = error {
+            #expect(modelId == "gemma-2b")
         } else {
-            Issue.record("Expected unsupportedModelFormat case")
+            Issue.record("Expected toolCallsUnsupported case")
         }
     }
 
@@ -133,6 +112,79 @@ struct LLMLocalErrorTests {
         let error = LLMLocalError.modelNotLoaded
         let result = await sendAcrossBoundary(error)
         #expect(result == .modelNotLoaded)
+    }
+}
+
+// MARK: - errorDescription
+
+/// One value per case, so the descriptions below can be checked exhaustively.
+///
+/// `describe(_:)` switches over this enum without a `default`, so adding a case to
+/// `LLMLocalError` breaks compilation here until its description is covered too.
+private let everyCase: [LLMLocalError] = [
+    .downloadFailed(modelId: "llama-3", reason: "Network timeout"),
+    .loadFailed(modelId: "mistral-7b", reason: "Corrupted weights"),
+    .modelNotLoaded,
+    .loadInProgress,
+    .cancelled,
+    .adapterMergeFailed(reason: "Dimension mismatch"),
+    .toolCallsUnsupported(modelId: "gemma-2b"),
+]
+
+/// Exhaustive re-statement of the expected copy, used to prove `everyCase` covers the enum.
+private func expectedDescription(_ error: LLMLocalError) -> String {
+    switch error {
+    case .downloadFailed(let modelId, let reason):
+        "Failed to download model '\(modelId)': \(reason)"
+    case .loadFailed(let modelId, let reason):
+        "Failed to load model '\(modelId)': \(reason)"
+    case .modelNotLoaded:
+        "No model is loaded."
+    case .loadInProgress:
+        "A model load is already in progress."
+    case .cancelled:
+        "The operation was cancelled."
+    case .adapterMergeFailed(let reason):
+        "Failed to merge the adapter: \(reason)"
+    case .toolCallsUnsupported(let modelId):
+        "Model '\(modelId)' does not support tool calls."
+    }
+}
+
+@Suite("LLMLocalError errorDescription")
+struct LLMLocalErrorDescriptionTests {
+
+    @Test("every case describes itself in English")
+    func everyCaseIsEnglish() {
+        for error in everyCase {
+            #expect(error.errorDescription == expectedDescription(error))
+        }
+    }
+
+    /// The descriptions reach consumers' error handling, so they must not carry Japanese copy that
+    /// an English-language app would surface verbatim.
+    @Test("no description contains Japanese characters")
+    func noJapaneseInDescriptions() {
+        // Hiragana, katakana, CJK ideographs, and the CJK punctuation used in the old copy.
+        let japanese = CharacterSet(charactersIn: "\u{3040}"..."\u{30FF}")
+            .union(CharacterSet(charactersIn: "\u{4E00}"..."\u{9FFF}"))
+            .union(CharacterSet(charactersIn: "\u{FF00}"..."\u{FFEF}"))
+
+        for error in everyCase {
+            let description = error.errorDescription ?? ""
+            #expect(!description.isEmpty)
+            #expect(
+                description.rangeOfCharacter(from: japanese) == nil,
+                "Japanese copy leaked into errorDescription: \(description)"
+            )
+        }
+    }
+
+    @Test("localizedDescription keeps the associated values")
+    func localizedDescriptionKeepsValues() {
+        let error = LLMLocalError.downloadFailed(modelId: "llama-3", reason: "Network timeout")
+        #expect(error.localizedDescription.contains("llama-3"))
+        #expect(error.localizedDescription.contains("Network timeout"))
     }
 }
 
