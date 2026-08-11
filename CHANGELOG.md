@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing.
 
+## [3.0.0] - 2026-07-19
+
+### Removed
+- `StubBackgroundDownloadDelegate` is no longer public. It was only ever for internal use.
+
+### Changed
+- Fuller documentation comments, and DocC articles throughout: a rich landing page per module
+  with the overview injected into the combined root, plus a Getting Started article.
+  Documentation comments and DocC rewritten in Japanese, and the README unified as a Japanese
+  and English pair.
+- CI workflows synced to the standard SSOT template (tests + release-on-tag; the old
+  auto-release is gone). DocC is built as combined documentation across every library.
+
+## [2.2.6] - 2026-06-14
+
+### Fixed
+- Handle `MessageContent.document`, following swift-llm-client 3.7.0.
+
 ## [2.2.5] - 2026-06-13
 
 ### Fixed
@@ -201,7 +219,9 @@ around agent delegation (use as an `AgentCapableClient`) as the primary use case
 - **LLMLocalClient** - protocol layer (backend abstraction and shared types)
 - **LLMLocalMLX** - MLX backend implementation
 
-[Unreleased]: https://github.com/no-problem-dev/swift-llm-local/compare/2.2.0...HEAD
+[Unreleased]: https://github.com/no-problem-dev/swift-llm-local/compare/3.0.0...HEAD
+[3.0.0]: https://github.com/no-problem-dev/swift-llm-local/compare/2.2.6...3.0.0
+[2.2.6]: https://github.com/no-problem-dev/swift-llm-local/compare/2.2.5...2.2.6
 [2.2.0]: https://github.com/no-problem-dev/swift-llm-local/compare/2.1.1...2.2.0
 [2.1.1]: https://github.com/no-problem-dev/swift-llm-local/compare/2.1.0...2.1.1
 [2.1.0]: https://github.com/no-problem-dev/swift-llm-local/compare/2.0.2...2.1.0
