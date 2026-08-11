@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [6.0.0] - 2026-08-11
+
 ### Removed
 
 - **BREAKING** — the calls that answer "what is on disk" and "how much memory is there" now throw
