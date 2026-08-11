@@ -1,79 +1,153 @@
 import LLMClient
 import LLMTool
 
-/// ローカル LLM 推論バックエンドの抽象化プロトコル
+/// Contract an on-device inference engine implements so callers can stay engine-agnostic.
 ///
-/// 準拠する型はモデルの読み込み・テキスト生成・モデルライフサイクル管理の機能を提供する。
-/// すべての準拠型は並行アクセスをサポートするため `Sendable` である必要がある。
+/// A conforming type owns the weights, the KV cache, and any conversation state that outlives a
+/// single call, which is why the protocol requires `Sendable` — the shipping implementation
+/// (`MLXBackend` in `LLMLocalMLX`) is an actor. Everything below is the guarantee an implementer
+/// owes its callers, not merely what one backend happens to do.
+///
+/// ## Load and unload ordering
+///
+/// A load must complete before any generation starts. Generating with nothing loaded does not trap:
+/// the returned stream finishes with ``LLMLocalError/modelNotLoaded``. Loading a spec that is
+/// already resident returns immediately without touching the weights, and loading a different spec
+/// replaces the current one — the old model is unloaded before the new one is fetched, so a failed
+/// load leaves the backend with no model rather than the previous one. Loads are not queued: a
+/// second load started while one is in flight fails with ``LLMLocalError/loadInProgress``.
+/// Unloading is safe at any time, including when nothing is loaded.
+///
+/// ## Concurrency
+///
+/// The protocol does not serialize generation, and the two families of entry points differ in how
+/// they behave when calls overlap. `generate` and `generateWithTools` run against one conversation
+/// held by the backend, so overlapping calls interleave their turns into that single history — run
+/// them one at a time per instance. `generateFromMessages` takes the whole conversation as an
+/// argument and holds no history, which makes it the path to use when two conversations share one
+/// backend; the MLX backend additionally detects the overlap and gives the second generation a
+/// private KV cache so prompt-cache contents cannot leak between conversations.
+///
+/// ## Cancellation
+///
+/// Every generation method returns a stream whose producer task is cancelled when the consumer
+/// stops iterating or when the surrounding task is cancelled. Implementers surface that as
+/// ``LLMLocalError/cancelled`` on the stream rather than letting `CancellationError` escape, so
+/// callers only match one error type. Cancelling generation leaves the model loaded.
 public protocol LLMLocalBackend: Sendable {
-    /// 指定されたモデルをメモリに読み込み、推論可能な状態にする。
-    /// - Parameter spec: 読み込むモデルを記述するモデル仕様。
-    /// - Throws: モデルの読み込みに失敗した場合。
+    /// Makes a model resident in memory so that generation can start.
+    ///
+    /// On first use this may download several gigabytes of weights, so treat it as a long
+    /// operation. It returns without work when the same spec is already loaded.
+    ///
+    /// - Parameter spec: Model to make resident.
+    /// - Throws: ``LLMLocalError/loadInProgress`` when another load is running,
+    ///   ``LLMLocalError/adapterMergeFailed(reason:)`` when the spec names an adapter that cannot
+    ///   be resolved or applied, and ``LLMLocalError/loadFailed(modelId:reason:)`` otherwise.
     func loadModel(_ spec: ModelSpec) async throws
 
-    /// 指定されたモデルをメモリに読み込み、ダウンロード進捗を報告する。
+    /// Makes a model resident in memory, reporting progress while its weights are downloaded.
+    ///
+    /// The handler fires only while bytes are being fetched, so a model already on disk loads
+    /// without a single callback. It can run on any task, so hop to the main actor before touching
+    /// UI. Backends that do not implement download reporting inherit a default that never calls it.
     ///
     /// - Parameters:
-    ///   - spec: 読み込むモデルを記述するモデル仕様。
-    ///   - progressHandler: ダウンロード進捗の更新時に呼び出されるクロージャ。
-    /// - Throws: モデルの読み込みに失敗した場合。
+    ///   - spec: Model to make resident.
+    ///   - progressHandler: Called on each download progress update.
+    /// - Throws: The same errors as ``loadModel(_:)``.
     func loadModel(
         _ spec: ModelSpec,
         progressHandler: @Sendable @escaping (DownloadProgress) -> Void
     ) async throws
 
-    /// 指定されたプロンプトからテキストを生成し、トークンをストリーミングで返す。
+    /// Streams the model's answer to a single prompt as text fragments.
+    ///
+    /// A fragment is whatever the detokenizer could emit at that moment — not necessarily a whole
+    /// token, word, or line — so append fragments rather than treating each as a unit. Reasoning
+    /// models emit their `<think>…</think>` span inline here; run the fragments through
+    /// ``ThinkTagParser`` before showing them to a user. This path carries no token counts, so a
+    /// caller that needs measured usage should use `generateWithTools` or `generateFromMessages`.
+    ///
+    /// Implementations may keep a chat session across calls, in which case successive prompts
+    /// accumulate into one conversation until ``resetSession()`` is called.
+    ///
     /// - Parameters:
-    ///   - prompt: 生成元の入力プロンプト。
-    ///   - config: 生成を制御する設定パラメータ。
-    /// - Returns: 生成されたトークン文字列の非同期ストリーム。
+    ///   - prompt: Text sent to the model for this turn.
+    ///   - config: Sampling, KV cache, and thinking-mode settings applied to this call.
     func generate(prompt: String, config: GenerationConfig) -> AsyncThrowingStream<String, Error>
 
-    /// ツール呼び出しをサポートしたレスポンスを生成し、出力チャンクをストリーミングで返す。
+    /// Streams an answer that may also contain tool-call requests.
     ///
-    /// ストリームの各要素はテキストチャンクまたはモデルが解析したツール呼び出しリクエスト。
+    /// Elements are text fragments, tool calls the backend already parsed out of the model's output,
+    /// and at most one trailing ``GenerationInfo`` after the last text. Absence of that record means
+    /// the backend does not measure tokens, not that generation failed. Like `generate`, this runs
+    /// against the backend's conversation state.
+    ///
     /// - Parameters:
-    ///   - prompt: 生成元の入力プロンプト。
-    ///   - config: 生成を制御する設定パラメータ。
-    ///   - tools: モデルが使用可能なツール定義。
-    /// - Returns: ``GenerationOutput`` 値の非同期ストリーム。
+    ///   - prompt: Text sent to the model for this turn.
+    ///   - config: Sampling, KV cache, and thinking-mode settings applied to this call.
+    ///   - tools: Tools the model is allowed to call this turn.
     func generateWithTools(
         prompt: String,
         config: GenerationConfig,
         tools: [ToolDefinition]
     ) -> AsyncThrowingStream<GenerationOutput, Error>
 
-    /// 現在読み込まれているモデルをアンロードし、メモリを解放する。
+    /// Releases the resident model and the memory it holds.
+    ///
+    /// Conversation state and any prompt (KV) cache go with it, so the next generation prefills from
+    /// scratch. Calling it with nothing loaded does nothing.
     func unloadModel() async
 
-    /// モデルが現在読み込まれており推論可能かどうか。
+    /// Whether a model is resident and ready to generate.
+    ///
+    /// It is false while a load is still running, so it cannot be used to detect a load in flight.
     var isLoaded: Bool { get async }
 
-    /// 現在読み込まれているモデルの仕様。モデルが読み込まれていない場合は `nil`。
+    /// Spec of the resident model, or `nil` when none is loaded.
+    ///
+    /// It only becomes non-`nil` once a load succeeds; because the previous model is unloaded before
+    /// a new one is fetched, a failed load leaves this `nil` rather than at the previous spec.
     var currentModel: ModelSpec? { get async }
 
-    /// 現在のシステムプロンプト。設定されていない場合は `nil`。
+    /// System prompt applied to generation, or `nil` when none is set.
+    ///
+    /// Backends that do not implement it inherit a default that always reports `nil`, even after
+    /// ``setSystemPrompt(_:)`` was called.
     var systemPrompt: String? { get async }
 
-    /// 以降の生成に使用するシステムプロンプトを設定する。
+    /// Sets the system prompt used from now on, including for the conversation already in progress.
+    ///
+    /// The prompt outlives model swaps and session resets; pass `nil` to clear it. The default
+    /// implementation does nothing, so on a backend that does not implement it the prompt is
+    /// silently dropped rather than rejected.
     func setSystemPrompt(_ prompt: String?) async
 
-    /// チャットセッションの会話履歴をリセットする。
+    /// Clears the conversation history while keeping the model loaded.
     ///
-    /// モデルは読み込まれたまま保持し、会話のみをクリアする。新しい会話を開始する際に使用する。
+    /// The prompt (KV) cache is dropped along with the history, so the next generation pays full
+    /// prefill again. The system prompt survives.
     func resetSession() async
 
-    /// 構造化メッセージ配列からレスポンスを生成する。
+    /// Streams an answer from an explicit conversation, applying the chat template exactly once.
     ///
-    /// チャットテンプレートは内部で 1 回だけ適用される。
-    /// `MessageFormatter` 等で事前フォーマット + `ChatSession` の二重テンプレート適用を回避するための API。
+    /// Nothing is remembered between calls — the caller passes the full conversation every time —
+    /// which is what makes this the correct path for agent loops and for two conversations sharing
+    /// one backend. It also avoids the double templating that happens when a transcript rendered by
+    /// a message formatter is handed to `generate(prompt:config:)` and the backend's own chat
+    /// template is applied on top.
+    ///
+    /// Statelessness does not mean the prompt is reprocessed in full: the MLX backend keeps the KV
+    /// cache for the prefix this conversation shares with the previous turn and prefills only the
+    /// new suffix. The trailing ``GenerationInfo`` still reports the full templated prompt length
+    /// rather than the number of tokens actually prefilled, so usage stays comparable across turns.
     ///
     /// - Parameters:
-    ///   - messages: 会話履歴のメッセージ配列。
-    ///   - systemPrompt: システムプロンプト（オプション）。
-    ///   - config: 生成を制御する設定パラメータ。
-    ///   - tools: モデルが使用可能なツール定義。
-    /// - Returns: ``GenerationOutput`` 値の非同期ストリーム。
+    ///   - messages: Full conversation to send, oldest first.
+    ///   - systemPrompt: System prompt prepended as a system message, or `nil` for none.
+    ///   - config: Sampling, KV cache, and thinking-mode settings applied to this call.
+    ///   - tools: Tools the model is allowed to call this turn.
     func generateFromMessages(
         messages: [LLMMessage],
         systemPrompt: String?,
@@ -85,20 +159,26 @@ public protocol LLMLocalBackend: Sendable {
 // MARK: - System Prompt
 
 extension LLMLocalBackend {
-    /// デフォルト実装は `nil` を返す。
+    /// Always `nil`, because a backend without session support stores no system prompt.
     public var systemPrompt: String? { nil }
 
-    /// デフォルト実装は何も行わない。
+    /// Discards the prompt on backends that have no session to apply it to.
+    ///
+    /// The call succeeds, so a caller relying on a system prompt gets a model that never saw it.
+    /// Override this wherever the model has a chat template with a system role.
     public func setSystemPrompt(_ prompt: String?) async {}
 
-    /// デフォルト実装は何も行わない。
+    /// Does nothing, because a backend without session state has no history to clear.
     public func resetSession() async {}
 }
 
 // MARK: - Default Implementation
 
 extension LLMLocalBackend {
-    /// プログレスハンドラを無視し、`loadModel(_:)` に委譲するデフォルト実装。
+    /// Loads without reporting progress, ignoring the handler entirely.
+    ///
+    /// The handler is never called — not even once at completion — so UI driven by it shows no
+    /// movement for the whole download. Override this on any backend that can observe byte counts.
     public func loadModel(
         _ spec: ModelSpec,
         progressHandler: @Sendable @escaping (DownloadProgress) -> Void
@@ -106,11 +186,13 @@ extension LLMLocalBackend {
         try await loadModel(spec)
     }
 
-    /// ツールコール非対応バックエンドのデフォルト実装。
+    /// Wraps plain text generation for backends that cannot call tools.
     ///
-    /// ツールが渡された場合は ``LLMLocalError/toolCallsUnsupported(modelId:)`` で失敗する。
-    /// ツールを黙って捨てると呼び出し側が「ツール不要の応答」と誤解釈するためエラーにする。
-    /// ツールが空の場合は `generate` に委譲し、各トークンを `.text` としてラップする。
+    /// A non-empty tool list fails the stream with ``LLMLocalError/toolCallsUnsupported(modelId:)``
+    /// instead of being dropped: a tool-free reply looks to an agent loop like the model decided no
+    /// tool was needed, and the loop ends its turn on an answer the model could not have produced.
+    /// With no tools, each fragment from `generate(prompt:config:)` is forwarded as
+    /// ``GenerationOutput/text(_:)`` and no usage record is emitted.
     public func generateWithTools(
         prompt: String,
         config: GenerationConfig,
@@ -140,7 +222,12 @@ extension LLMLocalBackend {
         }
     }
 
-    /// メッセージをテキストに結合して `generateWithTools` に委譲するデフォルト実装。
+    /// Flattens the conversation into one newline-joined prompt and delegates to tool generation.
+    ///
+    /// Only the text parts of each message survive the join: roles, tool calls, tool results, and
+    /// attachments are dropped, and the backend then applies its own chat template to the flattened
+    /// string. That is acceptable for a single-turn completion backend and wrong for an agent loop,
+    /// so any backend whose model has a chat template should override this.
     public func generateFromMessages(
         messages: [LLMMessage],
         systemPrompt: String?,

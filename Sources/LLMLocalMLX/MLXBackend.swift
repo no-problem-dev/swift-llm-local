@@ -9,23 +9,36 @@ import MLXLLM
 @preconcurrency import MLXLMCommon
 import Tokenizers
 
-/// MLXベースのローカルLLM推論バックエンド
+/// On-device LLM inference backend built on Apple MLX.
 ///
-/// このアクターは mlx-swift-lm API をラップし、``LLMLocalBackend`` への準拠を提供する。
-/// モデルの読み込み、テキスト生成、GPUキャッシュ設定、
-/// およびオプションのLoRAアダプターマージを管理する。
+/// Wraps the mlx-swift-lm API and conforms to `LLMLocalBackend`. It owns model loading,
+/// streaming generation, the MLX GPU buffer cache limit, and optional LoRA/QLoRA adapters.
 ///
-/// ## モデルの取得
+/// ## Memory is the binding constraint
 ///
-/// mlx-swift-lm 3.x はモデル取得を `Downloader` / `TokenizerLoader` として
-/// 消費側が注入する設計。デフォルトでは Hugging Face Hub からダウンロードするが、
-/// 独自のダウンロード戦略（S3、アプリ内バンドル等）を注入できる。
+/// Inference runs inside this process. Model weights, the KV cache, and MLX's buffer cache
+/// all count against the app's memory footprint, and on iOS jetsam terminates the app when
+/// that footprint grows too large — that is a process kill, not an error the caller can catch.
+/// Three things keep it bounded, and only the first is automatic:
 ///
-/// ## アダプターサポート
+/// - the GPU buffer cache limit applied on every load (see ``init(gpuCacheLimit:adapterResolver:downloader:tokenizerLoader:)``),
+/// - `GenerationConfig.maxKVSize` / `kvBits`, which bound and quantize the KV cache,
+/// - the caller checking ``MemoryMonitor/isModelCompatible(_:)`` before loading.
 ///
-/// ``ModelSpec`` が ``AdapterSource`` を含む場合、バックエンドは
-/// ``AdapterResolving`` インスタンスを介してアダプターをローカルURLに解決し、
-/// アダプターパスをMLXモデル読み込みパイプラインに渡す。
+/// This backend never refuses a model for being too large; it will happily load weights
+/// that get the app killed on a smaller device.
+///
+/// ## Model acquisition
+///
+/// mlx-swift-lm 3.x expects the caller to inject `Downloader` and `TokenizerLoader`. The
+/// default downloads from the Hugging Face Hub into an app-owned directory, but a different
+/// strategy (S3, an app bundle, a preloaded directory) can be injected instead.
+///
+/// ## Adapter support
+///
+/// When `ModelSpec` carries an `AdapterSource`, the backend resolves it to a local URL
+/// through an `AdapterResolving` instance and applies it to the loaded model. The adapter
+/// is applied as a layer on the loaded weights, not merged into the files on disk.
 ///
 /// ```swift
 /// let backend = MLXBackend(adapterResolver: adapterManager)
@@ -42,61 +55,73 @@ public actor MLXBackend: LLMLocalBackend {
     private let downloader: any Downloader
     private let tokenizerLoader: any TokenizerLoader
 
-    /// `generateFromMessages` 経路のプロンプト（KV）キャッシュ。
+    /// Prompt (KV) cache carried across turns of the stateless message-array path.
     ///
-    /// ターン間でプロンプトの共通接頭辞を再利用し、毎回フルプロンプトを
-    /// 再 prefill するコストを避けるための保持領域。`ChatSession` の KV 再利用
-    /// と同等の仕組みを、ステートレス API（毎回フルメッセージ配列を受け取る）に
-    /// 適用するために、トークン列を比較して接頭辞一致分のキャッシュを再利用する。
+    /// The stateless API receives the whole message array every call, so without this the
+    /// backend would re-prefill the entire prompt on every turn — the dominant cost of a long
+    /// conversation. Instead the token sequence is compared against the previous turn and the
+    /// cache for the shared prefix is kept, so only the suffix is prefilled. This is the same
+    /// reuse `ChatSession` gets for free from holding its own cache.
     ///
-    /// 単一会話・直列生成のときだけ共有される。`delegate_async` 等で同一バックエンドを
-    /// 複数の会話（host + ワーカー）が並行共有する場合、進行中の生成があれば後続の生成は
-    /// 共有キャッシュに触れず専用の使い捨てキャッシュで回す（``cacheBusy`` で判定）。
+    /// Only sound for a single conversation generating serially. When one backend is shared by
+    /// several concurrent conversations (a host and its workers, for example), a generation that
+    /// starts while another is running gets a private throwaway cache instead, so KV context
+    /// cannot leak between conversations. See ``cacheBusy``.
     private let promptCacheStore = PromptCacheStore()
 
-    /// 共有プロンプトキャッシュが現在いずれかの生成に占有されているか。
-    /// 占有中に始まった別の生成は、KV 文脈の会話間漏れを避けるため共有キャッシュを使わない。
+    /// Whether some generation currently owns the shared prompt cache.
+    ///
+    /// A generation that starts while this is set runs on its own disposable cache, which costs
+    /// a full prefill but keeps one conversation's KV context out of another's.
     private var cacheBusy = false
 
-    /// LoRA/QLoRA アダプターのオプションリゾルバー。
     private let adapterResolver: (any AdapterResolving)?
 
-    /// loadModel 中にキャプチャされた直近の解決済みアダプターURL。
-    /// アダプター解決が期待されるURLを生成し、モデル読み込みパイプラインに
-    /// 渡されることを検証するためにテスト用に公開されている。
+    /// The adapter URL resolved by the most recent load, absent when that model had no adapter.
+    ///
+    /// Exposed so tests can assert that adapter resolution produced the expected URL and that
+    /// the URL reached the model loading pipeline.
     private(set) var lastResolvedAdapterURL: URL?
 
-    /// 新規および既存のチャットセッションに適用されるシステムプロンプト。
+    /// System prompt applied to the chat session, including one that already exists.
     private var _systemPrompt: String?
 
-    /// モデルの読み込みが現在進行中かを追跡する（排他制御用）。
+    /// Set for the duration of a load.
+    ///
+    /// A load started while this is set throws `LLMLocalError.loadInProgress` rather than
+    /// queueing behind the one in flight.
     private var isLoading: Bool = false
 
     // MARK: - Test Accessors
 
-    /// テスト目的でGPUキャッシュ制限を公開する。
+    /// The GPU buffer cache limit that will be pushed to MLX on the next load. Test-only.
     var gpuCacheLimitValue: Int { gpuCacheLimit }
 
-    /// テスト目的でロード状態を公開する。
+    /// Whether a load is in flight. Test-only.
     var isLoadingValue: Bool { isLoading }
 
-    /// アダプターリゾルバーが設定されているかどうか。
+    /// Whether adapter-bearing model specs can be loaded at all. Test-only.
     var hasAdapterResolver: Bool { adapterResolver != nil }
 
     // MARK: - Initialization
 
-    /// 指定されたGPUキャッシュ制限とオプションのアダプターリゾルバーで新しい MLXBackend を作成する。
+    /// Creates a backend with a GPU buffer cache limit and optional adapter resolution.
     ///
     /// - Parameters:
-    ///   - gpuCacheLimit: GPUキャッシュの最大サイズ（バイト単位）。
-    ///     デフォルトは 20 MB（20 * 1024 * 1024）。
-    ///   - adapterResolver: LoRA/QLoRA アダプターソースをローカルファイルURLに解決する
-    ///     オプションの ``AdapterResolving`` インスタンス。`nil` の場合、アダプター付き
-    ///     モデルの読み込みは ``LLMLocalError/adapterMergeFailed(reason:)`` をスローする。
-    ///   - downloader: モデルリポジトリのスナップショットを取得するダウンローダー。
-    ///     デフォルトは Hugging Face Hub。
-    ///   - tokenizerLoader: ローカルディレクトリからトークナイザーを読み込むローダー。
-    ///     デフォルトは swift-transformers の `AutoTokenizer`。
+    ///   - gpuCacheLimit: Upper bound in bytes on MLX's reuse pool of freed GPU buffers,
+    ///     defaulting to 20 MB. MLX recycles intermediate buffers instead of returning them to
+    ///     the allocator, and its own default is derived from Metal's recommended working set —
+    ///     large enough that a long generation run keeps growing the process footprint until
+    ///     iOS jetsam kills the app. Past the limit, older cached buffers are released on the
+    ///     next allocation. This is a process-wide MLX setting written on every load, so the
+    ///     most recently loaded backend's value wins for the whole app.
+    ///   - adapterResolver: Resolves a LoRA/QLoRA `AdapterSource` to a local file URL. When
+    ///     `nil`, loading a spec that carries an adapter throws
+    ///     `LLMLocalError.adapterMergeFailed(reason:)`; specs without an adapter are unaffected.
+    ///   - downloader: Fetches model repository snapshots. Defaults to
+    ///     ``DestinationHubDownloader`` against the Hugging Face Hub.
+    ///   - tokenizerLoader: Loads a tokenizer from a local directory. Defaults to the
+    ///     swift-transformers `AutoTokenizer`.
     public init(
         gpuCacheLimit: Int = 20 * 1024 * 1024,
         adapterResolver: (any AdapterResolving)? = nil,
@@ -105,18 +130,37 @@ public actor MLXBackend: LLMLocalBackend {
     ) {
         self.gpuCacheLimit = gpuCacheLimit
         self.adapterResolver = adapterResolver
-        // swift-huggingface のキャッシュ経路（#hubDownloader）は iOS で LFS 大ファイルの
-        // パス解決に失敗するため、明示 destination 方式の DestinationHubDownloader を既定にする。
+        // The swift-huggingface cache path used by #hubDownloader fails to resolve the cached
+        // path of large LFS files on iOS, so the explicit-destination downloader is the default.
         self.downloader = downloader ?? DestinationHubDownloader()
         self.tokenizerLoader = tokenizerLoader ?? #huggingFaceTokenizerLoader()
     }
 
     // MARK: - LLMLocalBackend
 
+    /// Downloads the model if needed and makes it ready for inference.
+    ///
+    /// Reloading the model that is already loaded is a no-op. Loading a different model unloads
+    /// the current one first, so the device never holds two models at once. Weights are read
+    /// from every `*.safetensors` file in the model directory and evaluated eagerly, so the
+    /// whole quantized weight set is resident in unified memory when this returns — on a
+    /// multi-gigabyte model this read, not the first forward pass, dominates the latency of the
+    /// first token after launch.
+    ///
+    /// - Throws: `LLMLocalError.loadInProgress` if another load is running,
+    ///   `LLMLocalError.adapterMergeFailed(reason:)` if the spec's adapter cannot be resolved,
+    ///   and `LLMLocalError.loadFailed(modelId:reason:)` for download, configuration, and
+    ///   weight-loading failures.
     public func loadModel(_ spec: ModelSpec) async throws {
         try await performLoad(spec, progressHandler: nil)
     }
 
+    /// Loads a model, reporting download progress.
+    ///
+    /// The handler fires only while files are being fetched from the Hub. A `.local` spec, or a
+    /// Hub model whose snapshot is already complete on disk, reports a single completed progress
+    /// value or nothing at all, and the caller then waits through the weight load with no further
+    /// updates.
     public func loadModel(
         _ spec: ModelSpec,
         progressHandler: @Sendable @escaping (DownloadProgress) -> Void
@@ -124,7 +168,11 @@ public actor MLXBackend: LLMLocalBackend {
         try await performLoad(spec, progressHandler: progressHandler)
     }
 
-    /// オプションの進捗報告付きモデル読み込みの共通実装。
+    /// Shared implementation of model loading, with optional progress reporting.
+    ///
+    /// Adapter resolution happens before any MLX call so that a bad adapter fails fast without
+    /// touching the GPU, and the GPU buffer cache limit is written just before the weights are
+    /// read, so it is in force for the load itself.
     private func performLoad(
         _ spec: ModelSpec,
         progressHandler: (@Sendable (DownloadProgress) -> Void)?
@@ -202,6 +250,18 @@ public actor MLXBackend: LLMLocalBackend {
         }
     }
 
+    /// Streams a response to a prompt, appending to the session's running conversation.
+    ///
+    /// Stateful: the underlying chat session keeps its own KV cache and history, so successive
+    /// calls continue one conversation until ``resetSession()`` or a new load. Tools installed by
+    /// an earlier ``generateWithTools(prompt:config:tools:)`` call stay in the session and keep
+    /// being rendered into the prompt template; reset the session to drop them.
+    ///
+    /// Generation on device is a synchronous token loop, not a network stream. The loop runs at
+    /// full speed into an unbounded buffer regardless of how fast the consumer reads, so a slow
+    /// consumer applies no backpressure and only costs memory. Cancelling the consuming task, or
+    /// breaking out of the `for await`, cancels the loop at the next token boundary; the stream
+    /// then finishes with `LLMLocalError.cancelled`, and the token in flight is still computed.
     public nonisolated func generate(
         prompt: String,
         config: GenerationConfig
@@ -221,6 +281,23 @@ public actor MLXBackend: LLMLocalBackend {
         }
     }
 
+    /// Streams a response that may contain tool calls, continuing the session's conversation.
+    ///
+    /// The tools are rendered into the prompt by the model's own chat template, and the model
+    /// answers in whatever textual tool-call syntax it was trained on. MLX picks the matching
+    /// parser from the `model_type` in the model's `config.json` and falls back to the
+    /// `<tool_call>{"name":…,"arguments":{…}}` JSON form when the type is unknown. Text that
+    /// starts to look like a tool call is buffered rather than yielded, so partial syntax never
+    /// reaches the caller.
+    ///
+    /// Malformed tool calls do not surface as errors. If the buffered text never parses, it is
+    /// flushed to the caller as ordinary text; if the model uses a syntax the selected parser
+    /// does not recognize, the call is simply never emitted as `GenerationOutput.toolCall(_:)`.
+    /// A caller that sees prose where it expected a tool call should suspect the format, not a
+    /// dropped event.
+    ///
+    /// Like all generation here this is a synchronous token loop; see
+    /// ``generate(prompt:config:)`` for the cancellation and backpressure behaviour.
     public nonisolated func generateWithTools(
         prompt: String,
         config: GenerationConfig,
@@ -242,6 +319,11 @@ public actor MLXBackend: LLMLocalBackend {
         }
     }
 
+    /// Releases the model, its chat session, and the prompt cache.
+    ///
+    /// Dropping the last reference is what frees the weights; MLX returns the memory as the
+    /// arrays are deallocated. Call this on a memory warning — see ``MemoryMonitor`` — because a
+    /// process that ignores the warning is killed rather than throttled.
     public func unloadModel() async {
         chatSession = nil
         modelContainer = nil
@@ -255,18 +337,44 @@ public actor MLXBackend: LLMLocalBackend {
 
     public var systemPrompt: String? { _systemPrompt }
 
+    /// Sets the system prompt for this and later turns.
+    ///
+    /// Applies to the live chat session too, so the next turn is rendered with the new prompt.
+    /// The KV cache is not invalidated: the prefix that encoded the old system prompt is already
+    /// in it, so on the ``generateFromMessages(messages:systemPrompt:config:tools:)`` path the
+    /// changed prefix is detected by token comparison and re-prefilled, while the stateful
+    /// session keeps its earlier turns as they were generated.
     public func setSystemPrompt(_ prompt: String?) {
         _systemPrompt = prompt
         chatSession?.instructions = prompt
     }
 
+    /// Starts a fresh conversation while keeping the model loaded.
+    ///
+    /// Both KV caches go: the chat session is rebuilt, which drops its cache and history, and
+    /// the prompt cache used by ``generateFromMessages(messages:systemPrompt:config:tools:)`` is
+    /// reset so no context survives into the new conversation. The next turn pays a full prefill.
     public func resetSession() {
         guard let container = modelContainer else { return }
         chatSession = ChatSession(container, instructions: _systemPrompt)
-        // generateFromMessages 経路の KV キャッシュも会話リセットで破棄する。
+        // Reset the generateFromMessages KV cache too, so no context crosses the reset.
         promptCacheStore.reset()
     }
 
+    /// Streams a response from an explicit message array, bypassing the chat session.
+    ///
+    /// Stateless with respect to history: the caller owns the conversation and passes all of it
+    /// every call, so nothing accumulates inside the backend. The chat template is applied
+    /// exactly once, directly through the tokenizer, which is what keeps this path free of the
+    /// double-templating that pre-formatting plus a chat session produces.
+    ///
+    /// The KV cache is still reused across calls by comparing token sequences with the previous
+    /// turn and prefilling only the changed suffix, so a growing conversation does not re-prefill
+    /// from scratch. Non-text content — images, audio, video, documents — is dropped silently,
+    /// and past assistant reasoning blocks are dropped by design.
+    ///
+    /// - Note: The reported prompt token count is the full templated prompt, not the suffix
+    ///   actually fed to MLX, so usage stays comparable across turns whether or not the cache hit.
     public nonisolated func generateFromMessages(
         messages: [LLMMessage],
         systemPrompt: String?,
@@ -292,13 +400,13 @@ public actor MLXBackend: LLMLocalBackend {
 
     // MARK: - Internal Helpers
 
-    /// アダプターが指定されている場合、アダプターソースをローカルURLに解決する。
+    /// Resolves the spec's adapter source to a local URL, if it has one.
     ///
-    /// spec にアダプターがない場合は `nil` を返す。spec にアダプターがあるが
-    /// リゾルバーが設定されていない場合、または解決に失敗した場合はスローする。
+    /// Returns `nil` for a spec with no adapter. Throws when the spec has an adapter but no
+    /// resolver is configured, or when resolution itself fails; either way the error is
+    /// normalized to `LLMLocalError.adapterMergeFailed(reason:)`.
     ///
-    /// テスト容易性のために別メソッドとして抽出されている。
-    /// GPU/Metal アクセスなしで呼び出せる。
+    /// Split out so it can be exercised without GPU or Metal access.
     func resolveAdapter(for spec: ModelSpec) async throws -> URL? {
         guard let adapterSource = spec.adapter else { return nil }
 
@@ -321,8 +429,11 @@ public actor MLXBackend: LLMLocalBackend {
 
     // MARK: - Private Helpers
 
-    /// アクターの分離コンテキスト内で実際の生成処理を実行する。
-    /// Sendable でない `ChatSession` が分離境界を越えて送信されることを回避する。
+    /// Runs generation inside the actor's isolation domain.
+    ///
+    /// `ChatSession` is not `Sendable`, so the work has to happen here rather than in the
+    /// nonisolated stream builder. Cancellation is observed between tokens: the loop checks after
+    /// each chunk and reports `LLMLocalError.cancelled`.
     private func performGenerate(
         prompt: String,
         config: GenerationConfig,
@@ -349,7 +460,10 @@ public actor MLXBackend: LLMLocalBackend {
         }
     }
 
-    /// アクターの分離コンテキスト内でツール呼び出し付き生成処理を実行する。
+    /// Runs tool-enabled generation inside the actor's isolation domain.
+    ///
+    /// The tool specs are installed on the session, so they stay in effect for later turns on
+    /// the same session until it is reset.
     private func performGenerateWithTools(
         prompt: String,
         config: GenerationConfig,
@@ -382,10 +496,16 @@ public actor MLXBackend: LLMLocalBackend {
         }
     }
 
-    /// 構造化メッセージ配列からレスポンスを生成する。
+    /// Generates a response from a structured message array.
     ///
-    /// `ChatSession` を経由せず、トークナイザーの `applyChatTemplate` を直接使用して
-    /// チャットテンプレートを1回だけ適用する。
+    /// Skips `ChatSession` and calls the tokenizer's `applyChatTemplate` directly, so the chat
+    /// template is applied exactly once. The template is the model's own Jinja template from
+    /// `tokenizer_config.json`; a model that ships none makes this throw, but a template that
+    /// merely disagrees with how the checkpoint was trained produces a silently worse model — no
+    /// error, just degraded output.
+    ///
+    /// Work happens inside `ModelContainer.perform`, which serializes access to the
+    /// non-`Sendable` model context.
     private func performGenerateFromMessages(
         messages: [LLMMessage],
         systemPrompt: String?,
@@ -414,8 +534,9 @@ public actor MLXBackend: LLMLocalBackend {
             ? nil : tools.map { $0.toolSpec }
         let parameters = config.mlxParameters
 
-        // 別の生成が進行中なら共有キャッシュを使わない（並行する別会話との KV 文脈漏れを防ぐ）。
-        // 単一会話の直列生成のときだけ共有キャッシュで prefill を再利用する。
+        // Skip the shared cache while another generation holds it, so KV context cannot leak
+        // between concurrent conversations. Prefill reuse applies to serial single-conversation
+        // generation only.
         let useSharedCache = !cacheBusy
         if useSharedCache { cacheBusy = true }
         defer { if useSharedCache { cacheBusy = false } }
@@ -434,12 +555,13 @@ public actor MLXBackend: LLMLocalBackend {
                 let cache: [KVCache]
                 let suffixStart: Int
                 if useSharedCache {
-                    // 直前のターンとの共通接頭辞を再利用し、差分（接尾辞）だけを prefill する。
+                    // Reuse the prefix shared with the previous turn; prefill only the suffix.
                     (cache, suffixStart) = cacheStore.prepare(for: tokens) {
                         context.model.newCache(parameters: parameters)
                     }
                 } else {
-                    // 並行生成: 共有キャッシュを汚さないよう専用キャッシュで全量 prefill する。
+                    // Concurrent generation: prefill everything into a private cache rather than
+                    // contaminating the shared one.
                     cache = context.model.newCache(parameters: parameters)
                     suffixStart = 0
                 }
@@ -462,7 +584,9 @@ public actor MLXBackend: LLMLocalBackend {
                     }
                 }
 
-                // 共有キャッシュを使った場合のみ、次ターンの接頭辞再利用のため状態を記録する。
+                // Record the state for the next turn's prefix reuse, shared cache only. This runs
+                // after a cancelled loop as well: the cache then holds the prompt plus the tokens
+                // generated before the break, which the next turn trims back to the shared prefix.
                 if useSharedCache {
                     cacheStore.commit(tokens: tokens, cache: cache)
                 }
@@ -475,11 +599,14 @@ public actor MLXBackend: LLMLocalBackend {
         }
     }
 
-    /// MLX の生成イベントを ``GenerationOutput`` に変換する。
+    /// Converts an MLX generation event into an output value, correcting the prompt token count.
     ///
-    /// プロンプトキャッシュ再利用時は MLX に投入されるトークンが接尾辞のみになるため、
-    /// `.info` の `promptTokenCount` を「テンプレート適用後の完全なプロンプト長」で
-    /// 上書きし、usage 報告の意味（入力トークン総数）を保つ。
+    /// When the prompt cache hits, MLX only ever sees the suffix, so the count it reports is the
+    /// number of tokens prefilled on this turn rather than the size of the input. The `.info`
+    /// event's prompt token count is overwritten with the length of the fully templated prompt so
+    /// that usage keeps meaning "input tokens" regardless of cache state.
+    ///
+    /// Tokens per second is computed from the generation phase only and excludes prefill.
     private static func mapGeneration(
         _ generation: Generation,
         fullPromptTokenCount: Int
@@ -503,10 +630,14 @@ public actor MLXBackend: LLMLocalBackend {
 
     // MARK: - LLMMessage → MLX Format Conversion
 
-    /// `LLMMessage` を MLX 互換のメッセージディクショナリに変換する。
+    /// Converts a canonical message into the message dictionaries the chat template expects.
     ///
-    /// 1つの `LLMMessage` が複数の MLX メッセージに変換される場合がある
-    /// （例: ツール結果は個別の "tool" ロールメッセージになる）。
+    /// One message can expand into several: tool results each become their own `"tool"` role
+    /// message, emitted before the user's text so the model reads results in order. Assistant
+    /// tool calls are rendered in the OpenAI `tool_calls` shape, with arguments as a JSON string.
+    ///
+    /// Image, audio, video, and document content is dropped — this backend runs text-only models,
+    /// and the caller gets no signal that the attachment went missing.
     private static func convertToMLXFormat(_ message: LLMMessage) -> [[String: any Sendable]] {
         var result: [[String: any Sendable]] = []
 
@@ -533,11 +664,10 @@ public actor MLXBackend: LLMLocalBackend {
             case .image, .audio, .video, .document:
                 break
             case .thinking:
-                // 過去ターンの思考（reasoning）は履歴に含めない。
-                // Qwen3 系をはじめ thinking 対応モデルの公式ガイダンスは
-                // 「マルチターンの履歴にはモデルの最終出力のみを残し、思考内容は
-                // 含めない」こと。再注入するとコンテキストを浪費し、チャット
-                // テンプレートの思考区間処理と二重化して出力品質を下げるため破棄する。
+                // Reasoning from earlier turns is not replayed into the history. The published
+                // guidance for thinking models, Qwen3 among them, is to keep only the final
+                // output in multi-turn history. Re-injecting the reasoning burns context and
+                // collides with the template's own handling of thinking spans, degrading output.
                 break
             }
         }
@@ -575,35 +705,42 @@ public actor MLXBackend: LLMLocalBackend {
 
 // MARK: - Prompt (KV) Cache Reuse
 
-/// `generateFromMessages` 経路でターン間の KV キャッシュを再利用する保持領域。
+/// Holds a KV cache between turns so a stateless caller can skip re-prefilling the prompt.
 ///
-/// `applyChatTemplate` 後のトークン列を直前ターンと比較し、共通接頭辞分の
-/// キャッシュを温存して差分だけを prefill させる（標準的なプロンプトキャッシュ手法）。
+/// Compares the token sequence produced by `applyChatTemplate` against the previous turn, keeps
+/// the cache covering the shared prefix, and lets the caller prefill only the difference. The KV
+/// cache grows with context length — every token in the conversation keeps its keys and values
+/// resident — so on device this store trades memory that would otherwise be recomputed against
+/// prefill time. Bounding that growth is the caller's job, through `GenerationConfig.maxKVSize`
+/// (which switches MLX to a rotating cache that evicts oldest-first) and `kvBits`.
 ///
-/// ## スレッド安全性
+/// ## Thread safety
 ///
-/// 本クラスへのアクセスは ``MLXBackend`` がすべて `ModelContainer.perform`
-/// （actor で直列化）の内側から行うため、`@unchecked Sendable` とする。
-/// `MLXLMCommon.KVCache` が `Sendable` でないため Swift の検査は通せないが、
-/// 直列実行の不変条件で安全性を担保する。並行生成はサポートしない。
+/// Marked `@unchecked Sendable` because ``MLXBackend`` only ever touches it from inside
+/// `ModelContainer.perform`, which serializes on an actor. `MLXLMCommon.KVCache` is not
+/// `Sendable`, so the compiler cannot verify this; the safety argument is the serial-execution
+/// invariant. Concurrent generation against one store is not supported.
 final class PromptCacheStore: @unchecked Sendable {
-    /// 現在キャッシュが表現するトークン列（直近に投入した完全プロンプト）。
+    /// The full prompt the retained cache currently represents.
     private var tokens: [Int] = []
-    /// 直近の生成で構築・更新された KV キャッシュ。
     private var cache: [KVCache]?
 
-    /// キャッシュを破棄する（モデル切替・会話リセット・アンロード時）。
+    /// Discards the cache, for model switches, conversation resets, and unloads.
     func reset() {
         tokens = []
         cache = nil
     }
 
-    /// 新しい完全プロンプト `newTokens` に対し、再利用すべきキャッシュと
-    /// prefill を開始する接尾辞位置を返す。
+    /// Returns the cache to generate with and the token index where prefill should start.
     ///
-    /// - 再利用不能（初回・接頭辞不一致・トリム不可）なら新規キャッシュ + 位置 0。
-    /// - 再利用可能なら共通接頭辞 `p` までトリムしたキャッシュ + 位置 `p`。
-    ///   モデルがロジットを出すため最低 1 トークンは必ず投入する。
+    /// Falls back to a fresh cache starting at index 0 on the first turn, when the prefixes
+    /// diverge, or when the retained cache cannot be trimmed — a rotating cache that has already
+    /// wrapped past its size limit has lost the evicted entries and is no longer trimmable, so a
+    /// long conversation under `maxKVSize` eventually pays full prefills again.
+    ///
+    /// Otherwise it trims the cache back to the shared prefix of length `p` and starts prefill
+    /// there. At least one token is always prefilled, since the model needs an input to produce
+    /// logits from.
     func prepare(
         for newTokens: [Int],
         makeCache: () -> [KVCache]
@@ -613,14 +750,14 @@ final class PromptCacheStore: @unchecked Sendable {
         }
 
         var prefix = Self.commonPrefixLength(tokens, newTokens)
-        // 最低 1 トークンは prefill する必要がある。
+        // At least one token has to be prefilled.
         if prefix >= newTokens.count { prefix = newTokens.count - 1 }
         guard prefix > 0 else {
             return (freshCache(makeCache), 0)
         }
 
-        // 既存キャッシュには「前回プロンプト + 前回生成分」が入っている。
-        // 先頭 `prefix` トークンだけを残すよう末尾をトリムする。
+        // The retained cache holds the previous prompt plus what was generated from it, so trim
+        // from the end until only the first `prefix` tokens remain.
         let offset = existing.first?.offset ?? 0
         let trimCount = offset - prefix
         if trimCount > 0 {
@@ -633,7 +770,7 @@ final class PromptCacheStore: @unchecked Sendable {
         return (existing, prefix)
     }
 
-    /// 生成完了後、次ターンの再利用に備えて状態を記録する。
+    /// Records the prompt and cache a finished generation leaves behind, for the next turn.
     func commit(tokens: [Int], cache: [KVCache]) {
         self.tokens = tokens
         self.cache = cache
@@ -646,7 +783,7 @@ final class PromptCacheStore: @unchecked Sendable {
         return fresh
     }
 
-    /// 2 つのトークン列の共通接頭辞長を返す。
+    /// Returns how many leading tokens two sequences share.
     static func commonPrefixLength(_ a: [Int], _ b: [Int]) -> Int {
         let limit = min(a.count, b.count)
         var i = 0
@@ -658,9 +795,13 @@ final class PromptCacheStore: @unchecked Sendable {
 // MARK: - MLX Generation → GenerationOutput
 
 extension GenerationOutput {
-    /// MLX の ``MLXLMCommon.Generation`` イベントを ``GenerationOutput`` に変換する。
+    /// Converts an MLX generation event into an output value.
     ///
-    /// 対応するイベントがない場合（未知のケース）は `nil` を返す。
+    /// Returns `nil` for event kinds this package does not know about, which are then dropped
+    /// from the stream rather than surfaced as errors.
+    ///
+    /// The prompt token count is taken from MLX as-is, which is correct for the chat session
+    /// paths because they always feed the full prompt.
     init?(_ generation: Generation) {
         switch generation {
         case .chunk(let text):

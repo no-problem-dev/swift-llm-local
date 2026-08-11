@@ -5,35 +5,41 @@ import PersistenceFileSystem
 
 // MARK: - AdapterNetworkDelegate
 
-/// リモートソースからアダプターファイルをダウンロードするプロトコル
+/// Fetches adapter files from a remote source.
 ///
-/// GitHub Releases や Hugging Face Hub からのアダプターファイル取得に関する
-/// 実際のネットワーク操作を処理する。テスト用の依存性注入を可能にするプロトコル。
+/// ``AdapterRegistry`` decides what to fetch and where it goes; the conforming type moves the
+/// bytes. The destination it is handed is the path the registry later returns from
+/// ``AdapterRegistry/resolve(_:)``, and the MLX backend feeds that path to the model loader as an
+/// adapter *directory* — so an implementation has to materialize a directory holding the adapter
+/// weights and config there, not a single file.
 public protocol AdapterNetworkDelegate: Sendable {
-    /// GitHub Release からアダプターをダウンロードする。
+    /// Downloads a release asset from GitHub.
     ///
     /// - Parameters:
-    ///   - repo: GitHub リポジトリ（例: "owner/repo"）。
-    ///   - tag: リリースタグ（例: "v1.0"）。
-    ///   - asset: アセットファイル名（例: "adapter.safetensors"）。
-    ///   - destination: ダウンロードファイルを保存するローカルファイルURL。
+    ///   - repo: Repository in `owner/name` form.
+    ///   - tag: Release tag, which the registry also records as the adapter's version.
+    ///   - asset: Asset file name within the release.
+    ///   - destination: Path to materialize; see the protocol discussion for its shape.
     func downloadGitHubRelease(
         repo: String, tag: String, asset: String, destination: URL
     ) async throws
 
-    /// Hugging Face Hub からアダプターをダウンロードする。
+    /// Downloads an adapter repository from Hugging Face Hub.
     ///
     /// - Parameters:
-    ///   - id: Hugging Face のモデル/アダプター識別子（例: "user/adapter"）。
-    ///   - destination: ダウンロードファイルを保存するローカルファイルURL。
+    ///   - id: Repository id in `user/name` form. No revision is involved, and the registry
+    ///     records this id as the adapter's version.
+    ///   - destination: Path to materialize; see the protocol discussion for its shape.
     func downloadHuggingFace(id: String, destination: URL) async throws
 }
 
 // MARK: - StubAdapterNetworkDelegate
 
-/// ネットワークアクセスなしでプレースホルダーファイルを作成するスタブデリゲート。
+/// Default delegate that writes a placeholder instead of downloading.
 ///
-/// 実際のネットワークデリゲートが提供されない場合のデフォルトとして使用される。
+/// Used when no network delegate is injected. It creates the parent directory and writes a short
+/// marker string at the destination path, which is enough for the registry to record a cache entry
+/// but is not something a model can load.
 struct StubAdapterNetworkDelegate: AdapterNetworkDelegate {
     func downloadGitHubRelease(
         repo: String, tag: String, asset: String, destination: URL
@@ -56,34 +62,32 @@ struct StubAdapterNetworkDelegate: AdapterNetworkDelegate {
 
 // MARK: - AdapterInfo
 
-/// キャッシュされたアダプターの情報
+/// An adapter recorded as downloaded, with the version and path kept for it.
 ///
-/// ローカルにダウンロード・キャッシュされたアダプターのバージョン、ソース、
-/// ダウンロード日時、ローカルファイルパスを追跡する。
+/// Persisted in the adapter registry JSON. Nothing here ties the adapter to a base model; see
+/// ``AdapterRegistry`` for what that omission costs.
 public struct AdapterInfo: Sendable, Codable {
-    /// アダプターソースから導出された一意のキャッシュキー。
+    /// Key derived from the source, unique per source.
+    ///
+    /// Doubles as the file name under the adapter directory, so it is also the on-disk location.
     public let key: String
 
-    /// バージョン識別子（例: リリースタグまたは HuggingFace モデルID）。
+    /// Version marker used for update checks.
+    ///
+    /// The release tag for a GitHub source, and the repository id itself for a Hugging Face source
+    /// — which makes Hugging Face entries compare against tags they can never equal.
     public let version: String
 
-    /// 元のソース指定。
     public let source: AdapterSource
 
-    /// アダプターがダウンロードされた日時。
     public let downloadedAt: Date
 
-    /// ローカルにキャッシュされたアダプターファイルのパス。
+    /// Path the registry hands out for this adapter.
+    ///
+    /// `adapterDirectory/{key}` for downloaded adapters, or the caller's own path for a local
+    /// source. The MLX backend loads it as an adapter directory.
     public let localPath: URL
 
-    /// 新しいアダプター情報を作成する。
-    ///
-    /// - Parameters:
-    ///   - key: 一意のキャッシュキー。
-    ///   - version: バージョン識別子。
-    ///   - source: 元のアダプターソース。
-    ///   - downloadedAt: アダプターがダウンロードされた日時。
-    ///   - localPath: ローカルにキャッシュされたファイルのパス。
     public init(
         key: String,
         version: String,
@@ -101,53 +105,79 @@ public struct AdapterInfo: Sendable, Codable {
 
 // MARK: - AdapterRegistry
 
-/// LoRA アダプターのダウンロード・バージョン管理・ローカルストレージを管理するアクター
+/// Downloads LoRA adapters, keeps them on disk, and records what was fetched.
 ///
-/// `AdapterRegistry` は各種ソース（GitHub Releases、HuggingFace、ローカルパス）
-/// からのアダプターダウンロードと、バージョン追跡によるローカルキャッシュ管理を行う。
+/// Sources are GitHub release assets, Hugging Face repositories, or local paths. ``resolve(_:)``
+/// turns any of them into a local URL, downloading first when needed. It has exactly the shape the
+/// MLX backend expects of an adapter resolver but does not declare the conformance, so wiring this
+/// registry into the backend means adding `extension AdapterRegistry: AdapterResolving {}` in the
+/// app.
+///
+/// ## Adapters are not matched against base models
+///
+/// A LoRA adapter is trained against one specific base model, and nothing here knows which. The
+/// cache key comes from the adapter source alone, ``ModelSpec`` pairs a base and an adapter with
+/// no compatibility check, and resolving succeeds for any pairing. A mismatch is caught only when
+/// MLX loads the adapter into the model, and surfaces as
+/// ``LLMLocalError/loadFailed(modelId:reason:)`` from `loadModel` — after the multi-gigabyte base
+/// weights have already been downloaded and read. Errors from this registry itself arrive earlier
+/// and as ``LLMLocalError/adapterMergeFailed(reason:)``, because the backend resolves the adapter
+/// before it touches MLX.
+///
+/// Adapters are applied at load time rather than fused: MLX loads the adapter into the freshly
+/// built model container on every load, unloading the model drops it, and nothing is written back
+/// to the base model directory. One downloaded base can therefore be reused with several adapters.
+///
+/// ## Versions
+///
+/// A GitHub source encodes tag and asset in its cache key, so a new tag is simply a new entry —
+/// the previous entry and its file stay behind. A Hugging Face source has no version dimension at
+/// all: once cached, ``resolve(_:)`` returns the same file no matter what changed upstream, and
+/// only forgetting the entry with ``deleteAdapter(for:)`` forces a fresh download.
 ///
 /// ## Usage
 ///
 /// ```swift
 /// let registry = AdapterRegistry()
 ///
-/// // アダプターソースをローカルファイルURLに解決
+/// // Resolve an adapter source to a local file URL
 /// let localURL = try await registry.resolve(
 ///     .gitHubRelease(repo: "owner/repo", tag: "v1.0", asset: "adapter.safetensors")
 /// )
 ///
-/// // 新しいバージョンが利用可能か確認
+/// // Check whether a newer version is available
 /// let needsUpdate = await registry.isUpdateAvailable(
 ///     for: source, latestTag: "v2.0"
 /// )
 /// ```
 public actor AdapterRegistry {
 
-    /// アダプターファイルが保存されるディレクトリ。
+    /// Directory holding the downloaded adapters and the registry JSON.
     private let adapterDirectory: URL
 
-    /// ダウンロード済みアダプターのインメモリレジストリ。
-    /// AdapterSource から導出された一意のキーをキーとする。
+    /// Loaded entries, keyed by the cache key derived from each source.
     private var adapterRegistry: [String: AdapterInfo] = [:]
 
-    /// ストアからの初回ロードが完了しているかどうか。
+    /// Whether the store has already been read into memory.
     private var isLoaded: Bool = false
 
-    /// アダプターレジストリを永続化するストア。
+    /// Backing store for the registry JSON. Reports an unreadable or corrupt file as an empty
+    /// registry rather than throwing, after which cached adapters are re-downloaded over their
+    /// existing files.
     private let cache: any RegistryStore<AdapterInfo>
 
-    /// アダプターダウンロード用のネットワークデリゲート（テスト用に注入可能）。
+    /// Performs the downloads. Defaults to a stub that writes a placeholder.
     private let networkDelegate: any AdapterNetworkDelegate
 
-    /// 新しいアダプターレジストリを作成する。
+    /// Creates a registry that stores adapters in a directory and records them in a JSON file.
     ///
     /// - Parameters:
-    ///   - adapterDirectory: アダプターファイルとレジストリを保存するディレクトリ。
-    ///     デフォルトは `~/Library/Application Support/LLMLocal/adapters`。
-    ///   - registryStore: レジストリの永続化ストア。
-    ///     `nil` の場合、アダプターディレクトリの `adapter-registry.json` を使用する。
-    ///   - networkDelegate: ダウンロードを実行するオプションのデリゲート。
-    ///     `nil` の場合、プレースホルダーファイルを作成するスタブデリゲートを使用する。
+    ///   - adapterDirectory: Directory for the adapter files and the registry. Defaults to
+    ///     `~/Library/Application Support/LLMLocal/adapters`.
+    ///   - registryStore: Persistence for the entries. When `nil`, `adapter-registry.json` inside
+    ///     the adapter directory is used.
+    ///   - networkDelegate: Performs the downloads. When `nil`, a stub writes a placeholder file
+    ///     and no bytes are fetched.
     public init(
         adapterDirectory: URL? = nil,
         registryStore: (any RegistryStore<AdapterInfo>)? = nil,
@@ -171,7 +201,7 @@ public actor AdapterRegistry {
 
     // MARK: - Private Helpers
 
-    /// ストアからのデータが未ロードの場合、非同期でロードする。
+    /// Reads the store into memory on first use; later calls return immediately.
     private func ensureLoaded() async {
         guard !isLoaded else { return }
         adapterRegistry = await cache.load()
@@ -180,15 +210,20 @@ public actor AdapterRegistry {
 
     // MARK: - Public API
 
-    /// AdapterSource をローカルファイルURLに解決する。
+    /// Returns a local URL for an adapter, downloading it first when it is not cached.
     ///
-    /// まだキャッシュされていない場合はアダプターをダウンロードする。
-    /// ローカルソースの場合はファイルの存在を検証し、パスを直接返す。
+    /// A local source is checked for existence and returned untouched — nothing is copied into the
+    /// adapter directory and no entry is recorded, so the file stays owned by the caller. A remote
+    /// source is downloaded to `adapterDirectory/{cacheKey}` and its entry saved before the URL is
+    /// returned; a Hugging Face source that is already recorded is returned from the registry
+    /// without any freshness check.
     ///
-    /// - Parameter source: 解決するアダプターソース。
-    /// - Returns: アダプターを指すローカルファイルURL。
-    /// - Throws: ローカルアダプターが見つからない場合は ``LLMLocalError/adapterMergeFailed(reason:)``、
-    ///   リモート取得に失敗した場合はダウンロードエラー。
+    /// Nothing verifies that the adapter fits the base model it is about to be loaded into.
+    ///
+    /// - Parameter source: Adapter to resolve.
+    /// - Returns: Local URL for the adapter, which the MLX backend loads as an adapter directory.
+    /// - Throws: ``LLMLocalError/adapterMergeFailed(reason:)`` when a local adapter is missing, and
+    ///   whatever the network delegate or the registry save throws.
     public func resolve(_ source: AdapterSource) async throws -> URL {
         await ensureLoaded()
         switch source {
@@ -244,30 +279,37 @@ public actor AdapterRegistry {
         }
     }
 
-    /// すべてのキャッシュ済みアダプターを返す。
+    /// Every recorded adapter, in no particular order.
     ///
-    /// - Returns: キャッシュされた全アダプターの ``AdapterInfo`` 配列。
+    /// Entries can outlive their files; the recorded paths are not checked. Local sources never
+    /// appear here, since ``resolve(_:)`` does not record them.
     public func cachedAdapters() async -> [AdapterInfo] {
         await ensureLoaded()
         return Array(adapterRegistry.values)
     }
 
-    /// アダプターがキャッシュされているか確認する。
+    /// Reports whether an adapter has a registry entry.
     ///
-    /// - Parameter source: 確認するアダプターソース。
-    /// - Returns: アダプターがダウンロード・キャッシュ済みの場合は `true`。
+    /// Answered from the registry alone, without checking the file at the recorded path. A local
+    /// source always answers `false`, because resolving one records nothing.
+    ///
+    /// - Parameter source: Adapter to look up.
+    /// - Returns: `true` when an entry exists for the source's cache key.
     public func isCached(_ source: AdapterSource) async -> Bool {
         await ensureLoaded()
         let key = Self.cacheKey(for: source)
         return adapterRegistry[key] != nil
     }
 
-    /// キャッシュされたアダプターのレジストリエントリを削除する。
+    /// Forgets an adapter, leaving its downloaded file on disk.
     ///
-    /// アダプターがキャッシュされていない場合、このメソッドは何もしない。
+    /// Only the registry entry goes; the file under the adapter directory is untouched, so this
+    /// frees no space and is safe to call while a model has the adapter loaded. Its real use is
+    /// forcing the next ``resolve(_:)`` to download again over the same path — the only way to
+    /// refresh a Hugging Face adapter.
     ///
-    /// - Parameter source: 削除するアダプターソース。
-    /// - Throws: レジストリの永続化に失敗した場合のエラー。
+    /// - Parameter source: Adapter to forget. An unknown source still triggers a registry save.
+    /// - Throws: When the registry file cannot be written.
     public func deleteAdapter(for source: AdapterSource) async throws {
         await ensureLoaded()
         let key = Self.cacheKey(for: source)
@@ -275,24 +317,29 @@ public actor AdapterRegistry {
         try await cache.save(adapterRegistry)
     }
 
-    /// すべてのキャッシュ済みアダプターレジストリエントリを削除する。
+    /// Forgets every adapter, leaving the downloaded files on disk.
     ///
-    /// - Throws: レジストリの永続化に失敗した場合のエラー。
+    /// The files under the adapter directory stay and lose their last reference, so reclaiming
+    /// that space means sweeping the directory separately.
+    ///
+    /// - Throws: When the registry file cannot be written.
     public func clearAll() async throws {
         await ensureLoaded()
         adapterRegistry.removeAll()
         try await cache.save(adapterRegistry)
     }
 
-    /// キャッシュされたアダプターの新しいバージョンが利用可能か確認する。
+    /// Reports whether a recorded adapter's version differs from a tag the caller already looked up.
     ///
-    /// アダプターがキャッシュされていないか、キャッシュされたバージョンが
-    /// 指定された最新タグと異なる場合に `true` を返す。
+    /// Nothing is fetched here — the latest tag has to be obtained elsewhere; this only compares.
+    /// An adapter with no entry answers `true`. For a Hugging Face source the recorded version is
+    /// the repository id rather than a tag, so the comparison is meaningless and ``resolve(_:)``
+    /// would not re-download regardless of the answer.
     ///
     /// - Parameters:
-    ///   - source: 確認するアダプターソース。
-    ///   - latestTag: 比較対象の最新バージョンタグ。
-    /// - Returns: アップデートが利用可能な場合は `true`。
+    ///   - source: Adapter to check.
+    ///   - latestTag: Latest version tag, obtained elsewhere.
+    /// - Returns: `true` when the adapter is unrecorded or its recorded version differs.
     public func isUpdateAvailable(
         for source: AdapterSource, latestTag: String
     ) async -> Bool {
@@ -304,16 +351,18 @@ public actor AdapterRegistry {
 
     // MARK: - Internal Helpers
 
-    /// アダプターソースの一意のキャッシュキーを生成する。
+    /// Builds the cache key for an adapter source.
     ///
-    /// キーのフォーマットはソースタイプにより異なる:
-    /// - GitHub Release: `gh--{owner}--{repo}--{tag}--{asset}`
-    /// - HuggingFace: `hf--{/ を -- に置換した id}`
+    /// The key is also the file name used under the adapter directory, so it has to stay
+    /// path-safe. Shape by source:
+    /// - GitHub release: `gh--{owner}--{repo}--{tag}--{asset}`
+    /// - Hugging Face: `hf--{id, slashes replaced by --}`
     /// - Local: `local--{filename}`
     ///
-    /// - Parameter source: アダプターソース。
-    /// - Returns: 辞書キーおよびファイルシステム安全なディレクトリ/ファイル名として
-    ///   使用可能な一意の文字列キー。
+    /// Only the repository id's slashes are replaced, so a tag or asset name containing a path
+    /// separator produces a key that nests when it is appended to the directory.
+    ///
+    /// - Parameter source: Adapter source to key.
     static func cacheKey(for source: AdapterSource) -> String {
         switch source {
         case .gitHubRelease(let repo, let tag, let asset):

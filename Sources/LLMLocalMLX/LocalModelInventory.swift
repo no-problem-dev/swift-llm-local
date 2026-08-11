@@ -1,35 +1,36 @@
 import Foundation
 import LLMLocalClient
 
-/// ディスク上にダウンロード済みのモデルを列挙・問い合わせ・削除する在庫（インベントリ）。
+/// Lists, measures, and deletes the models already on disk.
 ///
-/// ``DestinationHubDownloader`` が書き込んだ保存先（`ModelStorageLayout`）を**ディスクの実体として
-/// 読み取る**ため、モデルがメモリにロードされていなくても、アプリ再起動後でも正しく
-/// 「ダウンロード済みか」を判定できる。インメモリのレジストリに依存しない。
+/// Every answer comes from reading the filesystem locations ``DestinationHubDownloader`` writes
+/// to, never from an in-memory registry, so "is this downloaded" stays correct when nothing is
+/// loaded and across app launches. That matters because these are multi-gigabyte files the user
+/// may also have removed through iOS storage management.
 ///
-/// ## 使用例
+/// ## Usage
 ///
 /// ```swift
 /// let inventory = LocalModelInventory()
 /// let downloaded = inventory.downloadedModels(among: ModelPresets.all)
-/// if inventory.isDownloaded(ModelPresets.qwen3_5_2B) { /* 選択可能にする */ }
-/// try inventory.delete(ModelPresets.qwen3_5_2B)  // 容量解放
+/// if inventory.isDownloaded(ModelPresets.qwen3_5_2B) { /* offer it for selection */ }
+/// try inventory.delete(ModelPresets.qwen3_5_2B)  // reclaim the storage
 /// ```
 public struct LocalModelInventory: Sendable {
 
-    /// モデルが保存されているルートディレクトリ。
-    /// 既定は ``DestinationHubDownloader`` と同じ Application Support 配下。
     private let baseDirectory: URL
 
-    /// - Parameter baseDirectory: モデル保存ルート。`nil` で既定（DL 先と一致）。
+    /// - Parameter baseDirectory: Root the models were downloaded into. Pass `nil` for the
+    ///   default, which is where ``DestinationHubDownloader`` writes; pass the same custom root
+    ///   here if the downloader was given one, or every model reads as missing.
     public init(baseDirectory: URL? = nil) {
         self.baseDirectory = baseDirectory ?? ModelStorageLayout.defaultBaseDirectory()
     }
 
-    /// 指定モデルがディスク上に**完全な形で**ダウンロード済みかを返す。
+    /// Whether the model is on disk complete enough to load.
     ///
-    /// - Parameter spec: 確認するモデル仕様。
-    /// - Returns: 設定 + 重みが揃っていれば `true`。
+    /// True only when both the configuration and the weights are present, so a download
+    /// interrupted partway reads as not downloaded rather than loading and failing.
     public func isDownloaded(_ spec: ModelSpec) -> Bool {
         guard let dir = ModelStorageLayout.directory(for: spec, base: baseDirectory) else {
             return false
@@ -37,13 +38,14 @@ public struct LocalModelInventory: Sendable {
         return ModelStorageLayout.hasCompleteSnapshot(at: dir)
     }
 
-    /// 候補のうちダウンロード済みのものだけを ``DownloadedModel`` として返す。
+    /// Returns the candidates that are on disk, newest download first.
     ///
-    /// 実サイズ・DL 時刻の近似（ディレクトリ mtime）込み。HF Hub のスナップショットは
-    /// アプリ側のモデル ID と独立に保存されるため、列挙には候補リスト（プリセット等）を渡す。
+    /// Each result carries its real size on disk and an approximate download time taken from the
+    /// directory's modification date. Candidates have to be supplied because snapshots are stored
+    /// under their Hub repository path, which cannot be mapped back to the app's model IDs — the
+    /// directory tree alone cannot be enumerated into `ModelSpec` values.
     ///
-    /// - Parameter specs: 確認するモデル仕様の候補。
-    /// - Returns: ダウンロード済みモデルの配列（DL 時刻の新しい順）。
+    /// - Parameter specs: The model specs to look for, typically the app's presets.
     public func downloadedModels(among specs: [ModelSpec]) -> [DownloadedModel] {
         specs.compactMap { spec -> DownloadedModel? in
             guard let dir = ModelStorageLayout.directory(for: spec, base: baseDirectory),
@@ -59,7 +61,10 @@ public struct LocalModelInventory: Sendable {
         .sorted { ($0.downloadedAt ?? .distantPast) > ($1.downloadedAt ?? .distantPast) }
     }
 
-    /// 指定モデルのディスク実サイズ（バイト単位）。未ダウンロードなら `nil`。
+    /// Size of the model on disk in bytes, absent when it is not fully downloaded.
+    ///
+    /// Measured by walking the directory, so it reflects allocated size rather than the sum the
+    /// Hub advertises.
     public func diskSize(of spec: ModelSpec) -> Int64? {
         guard let dir = ModelStorageLayout.directory(for: spec, base: baseDirectory),
               ModelStorageLayout.hasCompleteSnapshot(at: dir)
@@ -67,20 +72,20 @@ public struct LocalModelInventory: Sendable {
         return ModelStorageLayout.directorySize(at: dir)
     }
 
-    /// ダウンロード済みモデルの合計ディスク使用量（バイト単位）。
+    /// Total bytes the downloaded candidates occupy on disk.
     public func totalDiskSize(among specs: [ModelSpec]) -> Int64 {
         downloadedModels(among: specs).reduce(0) { $0 + ($1.sizeInBytes ?? 0) }
     }
 
-    /// 指定モデルのダウンロード済みファイルをディスクから削除する（容量解放）。
+    /// Deletes the model's downloaded files to reclaim storage.
     ///
-    /// `.local` 指定のモデルは外部所有のため削除しない（no-op）。
-    /// 未ダウンロードの場合も何もしない。
+    /// Does nothing for a model that is not downloaded, and nothing for a `.local` spec: those
+    /// files belong to whoever supplied the path. Deleting a model that is currently loaded is
+    /// allowed and does not unload it — the weights are already in memory.
     ///
-    /// - Parameter spec: 削除するモデル仕様。
-    /// - Throws: ディレクトリ削除に失敗した場合。
+    /// - Throws: If removing the directory fails.
     public func delete(_ spec: ModelSpec) throws {
-        // 外部所有の `.local` は削除対象にしない（誤って利用者のファイルを消さない）。
+        // Never delete an externally owned `.local` model; those files are not ours to remove.
         guard case .huggingFace = spec.base,
               let dir = ModelStorageLayout.directory(for: spec, base: baseDirectory),
               FileManager.default.fileExists(atPath: dir.path)

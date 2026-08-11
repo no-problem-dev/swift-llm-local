@@ -56,10 +56,10 @@ struct ThinkTagParserTests {
         var results: [ThinkTagParser.ParsedChunk] = []
 
         results += parser.process("<thi")
-        #expect(results.isEmpty) // バッファリング中
+        #expect(results.isEmpty) // still buffering: could be a tag or literal text
 
         results += parser.process("nk>")
-        #expect(results.isEmpty) // タグ消費、thinking 状態へ
+        #expect(results.isEmpty) // tag consumed, now in the thinking state; the tag itself is not emitted
 
         results += parser.process("reasoning")
         results += parser.process("</think>")
@@ -98,7 +98,8 @@ struct ThinkTagParserTests {
         }
         results += parser.finalize()
 
-        // thinking と text が正しく分離されている（チャンク数は問わない）
+        // Joining first: character-at-a-time feeding splits the run into an unspecified number of
+        // chunks, so only the thinking/text separation is pinned, not the chunk boundaries.
         let thinkingText = results.compactMap {
             if case .thinking(let t) = $0 { return t } else { return nil }
         }.joined()

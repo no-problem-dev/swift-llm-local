@@ -1,23 +1,31 @@
 import Foundation
 import LLMLocalClient
 
-/// メモリ情報を提供するプロトコル
+/// Source of the memory numbers used to decide what a device can run.
 ///
-/// 準拠する型はデバイスの総メモリと利用可能メモリの値を提供する。
-/// テスト容易性のための依存性注入を可能にし、テストでシステム照会の代わりに
-/// モックプロバイダーを使用できる。
+/// Exists so tests can substitute fixed numbers for whatever the running device happens to
+/// report; production code uses the system implementation.
 public protocol MemoryProvider: Sendable {
-    /// デバイスの物理メモリ総量をバイト単位で返す。
+    /// The device's total physical memory in bytes.
     func totalMemoryBytes() -> UInt64
 
-    /// 現在利用可能なメモリをバイト単位で返す。
+    /// Memory available for use right now, in bytes.
+    ///
+    /// The meaning is platform-specific. On iOS-family platforms this is headroom left to this
+    /// process before the system kills it; elsewhere it is an estimate of reclaimable system
+    /// memory. Neither is this process's current footprint.
     func availableMemoryBytes() -> UInt64
 }
 
-/// `ProcessInfo` とプラットフォーム固有APIを使用するシステム実装
+/// Memory numbers read from the OS.
 ///
-/// iOS/tvOS/watchOS では `os_proc_available_memory()` を、
-/// macOS では Mach API 経由の `vm_statistics64` をフォールバックとして使用する。
+/// On iOS, tvOS, and watchOS, available memory is `os_proc_available_memory()`: the bytes this
+/// process may still allocate before it exceeds its jetsam limit. That is a per-process budget,
+/// not free system RAM, and it is what actually decides whether the app survives.
+///
+/// On macOS there is no such call, so free plus inactive pages from Mach's `vm_statistics64`
+/// stand in — a system-wide estimate of what could be reclaimed, which is a much looser bound
+/// than the iOS budget. If the Mach query fails, half of physical memory is returned as a guess.
 struct SystemMemoryProvider: MemoryProvider, Sendable {
     func totalMemoryBytes() -> UInt64 {
         UInt64(ProcessInfo.processInfo.physicalMemory)
@@ -53,10 +61,18 @@ struct SystemMemoryProvider: MemoryProvider, Sendable {
     }
 }
 
-/// デバイスメモリを監視し、メモリ適応型の設定を提供するアクター
+/// Memory admission checks and memory-warning observation for on-device inference.
 ///
-/// `MemoryMonitor` は `os_proc_available_memory()` を使用して利用可能メモリを追跡し、
-/// メモリ警告通知を監視してモデルのアンロードをトリガーする。
+/// Answers two questions the caller has to ask before and during a load: how big a model this
+/// device can hold, and when to give the memory back. Neither is enforced anywhere else —
+/// ``MLXBackend`` will load whatever it is given.
+///
+/// The stakes differ from a server: exceeding the budget on iOS means jetsam terminates the app.
+/// There is no allocation failure to catch and no error to show the user, so the check has to
+/// happen before the load, and a memory warning has to be treated as the last chance to unload.
+///
+/// This is event-driven, not sampled. Nothing polls; the actor observes the memory-warning
+/// notification and reads memory numbers only when asked.
 ///
 /// ## Usage
 ///
@@ -70,47 +86,46 @@ struct SystemMemoryProvider: MemoryProvider, Sendable {
 /// ```
 public actor MemoryMonitor {
 
-    /// コンテキスト長推奨のためのメモリ閾値。
+    /// Coarse device classes used to pick a context length.
     public enum DeviceMemoryTier: Sendable, Equatable {
-        /// 8GB以下（例: iPhone 16 Pro）
+        /// Under 12 GB of physical memory, for example an iPhone 16 Pro at 8 GB.
         case standard
-        /// 12GB以上（例: iPhone 17 Pro）
+        /// 12 GB of physical memory or more, for example an iPhone 17 Pro.
         case high
     }
 
-    /// メモリ警告発生時に呼び出されるコールバック。
-    /// コールバックはモデルのアンロードをトリガーする必要がある。
+    /// Called when the system reports memory pressure.
+    ///
+    /// It should unload the model. The process is already close to being killed by the time this
+    /// runs, so the handler is the last opportunity to release the weights.
     public typealias MemoryWarningHandler = @Sendable () async -> Void
 
     private var memoryWarningHandler: MemoryWarningHandler?
     private var isMonitoring: Bool = false
     private var observationTask: Task<Void, Never>?
 
-    /// メモリ情報のプロバイダー。テスト容易性のために注入可能。
     private let memoryProvider: any MemoryProvider
 
-    /// 新しいメモリモニターを作成する。
+    /// Creates a memory monitor.
     ///
-    /// - Parameter memoryProvider: メモリ情報のプロバイダー。
-    ///   デフォルトはOSに問い合わせる `SystemMemoryProvider`。
+    /// - Parameter memoryProvider: Where the memory numbers come from. Defaults to querying the
+    ///   OS; inject a stub to test admission decisions on a device other than the one running.
     public init(memoryProvider: (any MemoryProvider)? = nil) {
         self.memoryProvider = memoryProvider ?? SystemMemoryProvider()
     }
 
-    /// 監視が現在アクティブかどうか。
+    /// Whether warning observation is currently running.
     ///
-    /// `startMonitoring` と `stopMonitoring` が正しく動作することを検証するために
-    /// テスト目的で公開されている。
+    /// Exposed so tests can assert that starting and stopping take effect.
     public var isCurrentlyMonitoring: Bool {
         isMonitoring
     }
 
-    /// デバイスメモリに基づく推奨コンテキスト長を返す。
+    /// Returns a context length the device can afford, in tokens.
     ///
-    /// - 8GB以下: 2048
-    /// - 12GB以上: 4096
-    ///
-    /// - Returns: 推奨コンテキスト長（トークン単位）。
+    /// 2048 below 12 GB of physical memory, 4096 at or above it. The context length is what
+    /// bounds KV cache growth, which is the part of the footprint that keeps climbing during a
+    /// long conversation, so the tier is deliberately conservative rather than tuned per model.
     public func recommendedContextLength() -> Int {
         let tier = deviceMemoryTier()
         switch tier {
@@ -119,9 +134,7 @@ public actor MemoryMonitor {
         }
     }
 
-    /// 物理メモリ総量に基づくデバイスメモリティアを返す。
-    ///
-    /// - Returns: 12GB未満のデバイスは `.standard`、12GB以上は `.high`。
+    /// Classifies the device by physical memory, with 12 GB as the boundary between tiers.
     public func deviceMemoryTier() -> DeviceMemoryTier {
         let totalMemory = memoryProvider.totalMemoryBytes()
         if totalMemory >= 12 * 1024 * 1024 * 1024 { // 12GB
@@ -131,57 +144,53 @@ public actor MemoryMonitor {
         }
     }
 
-    /// デバイスの物理メモリ総量をバイト単位で返す。
-    ///
-    /// - Returns: デバイスの物理メモリ総量のバイト数。
     public func totalMemory() -> UInt64 {
         memoryProvider.totalMemoryBytes()
     }
 
-    /// 現在利用可能なメモリをバイト単位で返す。
+    /// Memory this process can still allocate, in bytes.
     ///
-    /// - Returns: プロセスが現在利用可能なメモリのバイト数。
+    /// On iOS this is the jetsam headroom rather than free RAM, and it moves with what other apps
+    /// and this app's own caches are doing, so it is only meaningful at the moment it is read.
     public func availableMemory() -> UInt64 {
         memoryProvider.availableMemoryBytes()
     }
 
-    /// 指定されたモデルがこのデバイスで実行可能かを判定する。
+    /// Whether the model's estimated memory use fits within the current budget.
     ///
-    /// 判定基準はモデルの推定メモリ使用量 ≤ ``maxAllowedModelMemory()``。
-    ///
-    /// - Parameter spec: 確認するモデル仕様。
-    /// - Returns: モデルが実行可能な場合は `true`。
+    /// Advisory: nothing in the load path consults this. A caller that skips the check and loads
+    /// an oversized model gets a terminated app, not a thrown error.
     public func isModelCompatible(_ spec: ModelSpec) -> Bool {
         Double(spec.estimatedMemoryBytes) <= Double(maxAllowedModelMemory())
     }
 
-    /// デバイスで実行可能なモデルの最大メモリ量をバイト単位で返す。
+    /// The largest model this device should be asked to hold, in bytes.
     ///
-    /// プラットフォームによって拘束条件が異なるため、基準を切り替える:
-    /// - **iOS/tvOS/watchOS**: アプリは物理 RAM の手前で jetsam により強制終了されるため、
-    ///   物理総量ではなく**現在プロセスが利用可能なメモリ**（`os_proc_available_memory()`）を
-    ///   基準にする。重みに加えて KV キャッシュ・活性値・ランタイムの余地を残すため 0.8 を掛ける。
-    /// - **macOS**: ユニファイドメモリで余裕が大きく jetsam 制約も実質ないため、
-    ///   従来どおり物理総メモリの 80% を上限とする。
+    /// The baseline differs by platform because the constraint does:
     ///
-    /// - Returns: 最大許容メモリ量のバイト数。
+    /// - **iOS, tvOS, watchOS**: jetsam kills the app well before physical RAM runs out, so the
+    ///   budget is 80% of what the process may still allocate right now
+    ///   (`os_proc_available_memory()`), not 80% of the device's RAM. The 20% margin covers what
+    ///   the weights alone do not: KV cache, activations, MLX's buffer cache, and the rest of the
+    ///   app.
+    /// - **macOS**: unified memory is plentiful and there is no equivalent per-process kill, so
+    ///   the budget stays at 80% of total physical memory.
     public func maxAllowedModelMemory() -> UInt64 {
         #if os(iOS) || os(tvOS) || os(watchOS)
-        // 利用可能メモリは実行時に変動するため、呼び出し時点の値で判定する。
-        // 物理総量基準だと 8GB 機でも 4〜5GB のモデルを「可」と誤判定し実機クラッシュを招く。
+        // Available memory moves at runtime, so decide from the value at call time. Sizing against
+        // physical total instead passes a 4-5 GB model on an 8 GB device and crashes on hardware.
         return UInt64(Double(memoryProvider.availableMemoryBytes()) * 0.8)
         #else
         return UInt64(Double(memoryProvider.totalMemoryBytes()) * 0.8)
         #endif
     }
 
-    /// メモリ警告の監視を開始する。
+    /// Starts observing memory warnings and calls the handler on each one.
     ///
-    /// メモリ警告が検出されると、ハンドラが呼び出される。
-    /// このメソッドを複数回呼び出すとハンドラは更新されるが、
-    /// 重複するオブザーバーは作成されない。
+    /// Calling this again replaces the handler without adding a second observer, so repeated
+    /// calls are safe. The handler runs for every warning, not once, and should unload the model.
     ///
-    /// - Parameter handler: メモリ警告を受信した際に呼び出されるクロージャ。
+    /// - Parameter handler: Invoked on each memory warning.
     public func startMonitoring(onWarning handler: @escaping MemoryWarningHandler) {
         self.memoryWarningHandler = handler
         guard !isMonitoring else { return }
@@ -200,9 +209,7 @@ public actor MemoryMonitor {
         }
     }
 
-    /// メモリ警告の監視を停止する。
-    ///
-    /// 通知監視タスクをキャンセルし、ハンドラをクリアする。
+    /// Stops observing memory warnings, cancelling the observation task and dropping the handler.
     public func stopMonitoring() {
         observationTask?.cancel()
         observationTask = nil
@@ -214,10 +221,11 @@ public actor MemoryMonitor {
         isMonitoring = value
     }
 
-    /// メモリ警告の通知名。
+    /// Name of the notification treated as a memory warning.
     ///
-    /// iOS では `UIApplication.didReceiveMemoryWarningNotification` に対応する。
-    /// パッケージでの UIKit 依存を避けるために文字列ベースの名前を使用している。
+    /// Spelled as a string so the package does not have to import UIKit; on iOS it is the same
+    /// name as `UIApplication.didReceiveMemoryWarningNotification`. Nothing posts it on macOS, so
+    /// observation there stays idle unless the app posts it itself.
     nonisolated public static let memoryWarningNotificationName = Notification.Name(
         "UIApplicationDidReceiveMemoryWarningNotification"
     )

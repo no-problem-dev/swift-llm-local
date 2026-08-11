@@ -1,63 +1,73 @@
 # ``LLMLocalClient``
 
-ローカル LLM バックエンドの抽象化プロトコルと、全モジュールで共有される型定義を提供するプロトコル層。
+Backend protocol and shared value types, with no dependency on MLX or on the network.
 
 ## Overview
 
-`LLMLocalClient` はパッケージのプロトコル・共有型モジュール。
-バックエンド実装（`LLMLocalMLX`）と上位のアンブレラ（`LLMLocal`）の両方が依存する、
-パッケージ内の最も下位に位置するライブラリターゲット。
+This is the bottom of the package. It declares ``LLMLocalBackend`` and the types that cross every
+layer — ``ModelSpec``, ``GenerationConfig``, ``GenerationStats``, ``LLMLocalError`` — and depends
+only on `swift-llm-client`.
 
-このモジュールだけをインポートすることで、バックエンドの具体的な実装に依存せず
-抽象化された `LLMLocalBackend` プロトコルに対してコードを書ける。
-テスト用のモックバックエンドを注入したい場合や、
-SPM マルチモジュール構成で依存グラフを最小化したい場合に有効。
+Import it when you want to write against the abstraction rather than against MLX. Two cases make
+that worth doing: library targets that would otherwise pull an inference engine into their
+dependency graph, and tests, which need a backend that returns canned tokens instead of one that
+requires Apple Silicon and gigabytes on disk.
 
 ```swift
 import LLMLocalClient
 
-// プロトコルに対してコードを書く
-func configure(backend: any LLMLocalBackend) async throws {
+func warmUp(backend: any LLMLocalBackend) async throws {
     let spec = ModelSpec(
         id: "my-model",
         base: .huggingFace(id: "org/my-model"),
         contextLength: 8192,
         displayName: "My Model",
-        description: "カスタムモデル",
+        description: "Custom fine-tune",
         estimatedMemoryBytes: 2_000_000_000
     )
     try await backend.loadModel(spec)
 }
 ```
 
-このモジュールは `LLMClient` と `LLMTool`（`swift-llm-client` パッケージ）を
-`@_exported import` で再エクスポートしている。
-`LLMLocalClient` をインポートするだけで `ToolDefinition`・`LLMMessage` などの型も使える。
+`estimatedMemoryBytes` on a ``ModelSpec`` is not decoration. It is the number the memory checks
+compare against the device, and getting it wrong means loading a model the process cannot hold.
+
+The module re-exports `LLMClient` and `LLMTool`, so `ToolDefinition`, `LLMMessage`, and `JSONSchema`
+come with it and do not need a second import.
+
+### Reasoning models emit text you must not show
+
+Models with a thinking mode wrap their scratchpad in `<think>` tags. It is generated, it costs time
+and context, and it is not part of the answer. ``ThinkTagParser`` removes it from a token stream,
+including when a tag is split across two chunks.
 
 ## Topics
 
-### バックエンドプロトコル
+### Backend protocol
 
 - ``LLMLocalBackend``
 - ``AdapterResolving``
 
-### モデル定義
+### Model definition
 
 - ``ModelSpec``
 - ``ModelSource``
 - ``AdapterSource``
 
-### 生成設定と統計
+### Generation
 
 - ``GenerationConfig``
+- ``GenerationOutput``
 - ``GenerationStats``
+- ``GenerationInfo``
+- ``ThinkTagParser``
 
-### ダウンロード管理
+### Downloads
 
 - ``DownloadProgress``
 - ``DownloadedModel``
 - ``ModelSizeTier``
 
-### エラー
+### Errors
 
 - ``LLMLocalError``

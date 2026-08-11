@@ -1,64 +1,88 @@
 # ``LLMLocal``
 
-Apple Silicon デバイス上でオンデバイス LLM 推論を実現する Swift パッケージのアンブレラモジュール。
+Umbrella module for running LLMs entirely on the device, with no cloud API in the generation path.
 
 ## Overview
 
-`swift-llm-local` は iOS / macOS 向けのオンデバイス LLM 推論パッケージ。
-クラウド API に依存せず、プライバシーを守りながら LLM をアプリに組み込める。
-Qwen3・Llama などの主要オープンモデルを Apple MLX フレームワーク経由で動かす。
+`swift-llm-local` runs open models — Qwen3, Llama, and others — on Apple Silicon through Apple's
+MLX framework. Nothing leaves the device, there is no API key, and there is no per-token cost. What
+you pay instead is RAM, disk, and battery.
 
-パッケージは次の 3 つの公開ライブラリターゲットで構成される。
-
-- **LLMLocal**（このモジュール）: ``LLMLocalService``・``ModelPresets``・``LocalAgentClient`` を含むアンブレラ。アプリ開発のほとんどのケースはこれ 1 つをインポートするだけで完結する。
-- **LLMLocalClient**: `LLMLocalBackend` プロトコル・`ModelSpec`・`GenerationConfig` などのプロトコル層と共有型。バックエンドを切り替えたい場合や、ライブラリコード（テスト含む）でバックエンドに依存させたくない場合に単体でインポートする。
-- **LLMLocalMLX**: `MLXBackend` の実装モジュール。バックエンドを DI で差し込む設定箇所や、アダプター（LoRA）管理が必要な箇所でインポートする。
-
-### 基本的な使い方
+This module is the umbrella. It declares ``LLMLocalService``, ``ModelPresets``, ``ModelSwitcher``,
+and ``LocalAgentClient``, and re-exports the protocol layer, the model-management layer, and the
+MLX backend, so one import is enough for an app.
 
 ```swift
 import LLMLocal
 
-// サービスを作成
 let service = LLMLocalService(
     backend: MLXBackend(),
     modelRegistry: ModelRegistry()
 )
 
-// プリセットモデルでテキストを生成（ストリーミング）
 for try await token in await service.generate(
     model: ModelPresets.qwen3_4B,
-    prompt: "SwiftUI でリストを作る方法は？"
+    prompt: "How do I make a list in SwiftUI?"
 ) {
     print(token, terminator: "")
 }
 ```
 
-依存を最小化したいライブラリターゲットでは `LLMLocalClient` のみをインポートし、
-DI コンテナで `MLXBackend`（`LLMLocalMLX`）を注入するパターンを使う。
+The first call to a model that is not yet on disk downloads it from the Hugging Face Hub — for a 4B
+model, on the order of gigabytes. Treat the first run as a download, not a request.
 
-詳しいセットアップ手順は <doc:GettingStarted> を参照。
+### Model management
+
+`ModelRegistry`, `AdapterRegistry`, and `BackgroundDownloader` arrive through this module rather
+than as their own import; the target that declares them is not a package product. Use them to see
+what has been installed, to track transfers in flight, and to attach LoRA adapters.
+
+`BackgroundDownloader` tracks state and delegates the transfer itself to an injected
+`BackgroundDownloadDelegate` — the built-in one fetches nothing. Model weights the package fetches
+on its own go through `DestinationHubDownloader`, which is driven from the MLX backend.
+
+### Keeping the app alive
+
+Model weights are resident memory, and on iOS exceeding what the process is allowed does not throw
+— the app is terminated. `MLXBackend` keeps one model resident and unloads the previous one before
+loading the next, ``ModelSwitcher`` tracks which that is, and `MemoryMonitor` unloads on a system
+low-memory notification.
+
+Its headroom arithmetic is advisory, though: nothing calls `isModelCompatible(_:)` for you. Check a
+model against the device before you load it.
+
+```swift
+let monitor = MemoryMonitor()
+let service = LLMLocalService(
+    backend: MLXBackend(),
+    modelRegistry: ModelRegistry(),
+    memoryMonitor: monitor
+)
+await service.startMemoryMonitoring()
+```
+
+### Depending on less
+
+A library target that only needs to *call* a model should import `LLMLocalClient` and take
+`any LLMLocalBackend` by injection — that compiles without MLX and runs against a stub in tests.
+See <doc:Architecture>.
 
 ## Topics
 
-### 基本
+### Getting started
 
 - <doc:GettingStarted>
+- <doc:Architecture>
 
-### モジュール構成
-
-- ``LLMLocalClient``
-- ``LLMLocalMLX``
-
-### サービス
+### Service
 
 - ``LLMLocalService``
 
-### モデルプリセット
+### Models
 
 - ``ModelPresets``
 - ``ModelSwitcher``
 
-### エージェント統合
+### Agent integration
 
 - ``LocalAgentClient``

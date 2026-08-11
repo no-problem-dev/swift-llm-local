@@ -1,21 +1,28 @@
 import Foundation
 
-/// ディスク上に完全な形でダウンロード済みのモデル 1 件。
+/// One model whose files are complete on disk and ready to load without a download.
 ///
-/// 「ダウンロード済み一覧」の表示・容量管理に使う。判定はインメモリのレジストリではなく
-/// **ディスクの実体（完全なスナップショット）を真実**とするため、アプリ再起動後も正しく
-/// 列挙できる。
+/// Membership is decided by looking at the files themselves — a directory counts only when both the
+/// configuration and the weights are there — rather than by consulting a registry the app keeps in
+/// memory. That is what makes the list survive a relaunch and makes an interrupted download absent
+/// rather than listed and broken. Use it to show what is installed and to reclaim disk space.
 public struct DownloadedModel: Sendable, Hashable, Codable, Identifiable {
-    /// 対応する ``ModelSpec`` の `id`。
+    /// Identifier of the ``ModelSpec`` these files belong to.
     public let modelId: String
 
-    /// ディスク上の保存ディレクトリ。
+    /// Directory holding the model's configuration and weights.
     public let directory: URL
 
-    /// ディスク上の実サイズ（バイト単位）。算出できない場合は `nil`。
+    /// Bytes the files occupy on disk, or `nil` when the directory could not be measured.
+    ///
+    /// Measured by walking the directory, so it is the real cost of deleting or keeping the model,
+    /// unlike ``ModelSpec/estimatedMemoryBytes`` which estimates memory while running.
     public let sizeInBytes: Int64?
 
-    /// ダウンロード完了時刻の近似（保存ディレクトリの最終更新日時）。
+    /// When the download most likely finished, or `nil` when the date is unavailable.
+    ///
+    /// Taken from the directory's modification date, so anything that rewrites files inside it moves
+    /// this forward. It is good enough for sorting the list newest first, not for an audit trail.
     public let downloadedAt: Date?
 
     public var id: String { modelId }
@@ -34,7 +41,10 @@ public struct DownloadedModel: Sendable, Hashable, Codable, Identifiable {
 }
 
 extension DownloadedModel {
-    /// 実サイズを人間可読な文字列で返す（例: "2.3 GB"）。不明なら "—"。
+    /// On-disk size formatted for display, such as "2.3 GB", or an em dash when it is unknown.
+    ///
+    /// Uses the file count style, so the number matches what the Files app or Storage settings would
+    /// report for the same directory.
     public var formattedSize: String {
         guard let sizeInBytes else { return "—" }
         let formatter = ByteCountFormatter()

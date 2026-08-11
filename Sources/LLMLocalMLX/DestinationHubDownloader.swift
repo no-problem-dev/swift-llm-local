@@ -3,32 +3,47 @@ import HuggingFace
 import LLMLocalClient
 import MLXLMCommon
 
-/// アプリ管理ディレクトリへ明示 destination でスナップショットを取得する ``Downloader``。
+/// Downloads Hugging Face snapshots into an app-owned directory with an explicit destination.
 ///
-/// ## なぜ独自実装か
+/// ## Why not the stock downloader
 ///
-/// mlx-swift-lm の `#hubDownloader()` が使う swift-huggingface のキャッシュ経路
-/// （`downloadSnapshot(returnCachePath: true)`）は、iOS サンドボックスの
-/// `Caches/huggingface/hub` 上で **LFS 大ファイル（model.safetensors 等）の
-/// キャッシュパス解決に失敗**し `cachedPathResolutionFailed` を投げる。
+/// The cache path used by mlx-swift-lm's `#hubDownloader()` — swift-huggingface's
+/// `downloadSnapshot(returnCachePath: true)` — fails inside the iOS sandbox: resolving the cached
+/// path of a large LFS file such as `model.safetensors` under `Caches/huggingface/hub` throws
+/// `cachedPathResolutionFailed`, so no model can be loaded on device at all.
 ///
-/// 明示 destination を渡す overload（`downloadSnapshot(to:)`）は、キャッシュ解決が
-/// 失敗しても「destination へ move」にフォールバックするため throw しない。
-/// 代わりにキャッシュ照合が効かないため、ダウンロード済みの検出は本実装が
-/// destination ディレクトリの内容で行う。
+/// The explicit-destination overload, `downloadSnapshot(to:)`, falls back to moving the files into
+/// the destination when cache resolution fails, so it does not throw. The cost is that the Hub's
+/// own cache bookkeeping no longer applies, so this type decides for itself whether a model is
+/// already downloaded by inspecting the destination directory.
 public struct DestinationHubDownloader: Downloader {
     private let hub: HubClient
     private let baseDirectory: URL
 
     /// - Parameters:
-    ///   - hub: Hugging Face Hub クライアント。デフォルトは匿名アクセス。
-    ///   - baseDirectory: モデルを配置するルート。デフォルトは
-    ///     Application Support 配下（バックアップ対象外に設定）。
+    ///   - hub: Hugging Face Hub client. The default is anonymous access, which is enough for
+    ///     public model repositories.
+    ///   - baseDirectory: Root to place models under. The default is under Application Support,
+    ///     excluded from backup — see `ModelStorageLayout`. A custom root must be passed to
+    ///     ``LocalModelInventory`` as well, or downloaded models read as missing.
     public init(hub: HubClient = HubClient(), baseDirectory: URL? = nil) {
         self.hub = hub
         self.baseDirectory = baseDirectory ?? ModelStorageLayout.defaultBaseDirectory()
     }
 
+    /// Fetches the repository files matching the patterns and returns the local directory.
+    ///
+    /// A complete snapshot already on disk is returned without touching the network, reporting a
+    /// single completed progress value; passing `useLatest` forces the download anyway. Any
+    /// failure is reported as `LLMLocalError.downloadFailed(modelId:reason:)`, including an
+    /// identifier that is not in `namespace/name` form.
+    ///
+    /// - Parameters:
+    ///   - id: Hub repository identifier, as `namespace/name`.
+    ///   - revision: Branch, tag, or commit. Defaults to `main` when `nil`.
+    ///   - patterns: Glob patterns selecting which files to fetch.
+    ///   - useLatest: Skip the on-disk check and re-fetch from the Hub.
+    ///   - progressHandler: Receives download progress; called on the main actor.
     public func download(
         id: String,
         revision: String?,
@@ -42,7 +57,7 @@ public struct DestinationHubDownloader: Downloader {
 
         let destination = ModelStorageLayout.destination(for: repoID, base: baseDirectory)
 
-        // 既にスナップショットが揃っていれば再ダウンロードしない（useLatest 指定時を除く）。
+        // Skip the download when a complete snapshot is already present, unless useLatest is set.
         if !useLatest, ModelStorageLayout.hasCompleteSnapshot(at: destination) {
             let progress = Progress(totalUnitCount: 1)
             progress.completedUnitCount = 1

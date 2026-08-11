@@ -1,54 +1,76 @@
 import Foundation
 import LLMClient
 
-/// モデルのソース・オプションアダプター・メタデータを含むモデル設定
+/// Everything needed to identify a model, find its weights, and generate with it sensibly.
+///
+/// A spec is a description, not a handle: creating one downloads nothing and loads nothing. It is
+/// what callers pass to a backend, a switcher, or the download inventory, and it is the only thing
+/// those layers know about a model.
+///
+/// Identity is read two different ways, which matters when specs are edited at runtime. The
+/// switcher and the registry key on ``id``, so two specs sharing an id are the same model to them.
+/// A backend compares the whole value, so changing any field — even ``recommendedGeneration`` —
+/// makes the spec unequal to the resident one and forces a reload on the next call.
 public struct ModelSpec: Sendable, Hashable, Codable {
-    /// このモデル仕様の一意識別子。
+    /// Stable identifier for this model, used as the key by the registry, switcher, and inventory.
     public let id: String
 
-    /// ベースモデルの重みの所在。
+    /// Where the base weights come from.
     public let base: ModelSource
 
-    /// ベースモデルに適用するオプションの LoRA/QLoRA アダプター。
+    /// LoRA/QLoRA adapter applied on top of the base weights, or `nil` for the base model alone.
+    ///
+    /// Loading a spec with an adapter requires the backend to have an ``AdapterResolving`` instance;
+    /// without one the load fails with ``LLMLocalError/adapterMergeFailed(reason:)`` rather than
+    /// quietly running the base model.
     public let adapter: AdapterSource?
 
-    /// トークン単位の最大コンテキスト長。
+    /// Context window the model was trained for, in tokens.
+    ///
+    /// This is advisory metadata copied from the model's own configuration. Nothing in this package
+    /// truncates or rejects a prompt against it — the runtime limits that actually bite are
+    /// ``GenerationConfig/maxKVSize`` and device memory.
     public let contextLength: Int
 
-    /// 人間可読な表示名。
+    /// Name to show in a picker or a title.
     public let displayName: String
 
-    /// モデルの人間可読な説明文。
+    /// One-line description for the same UI as the display name.
     public let description: String
 
-    /// モデルの推定メモリ使用量（バイト単位）。
+    /// Rough memory the model occupies while generating, in bytes.
     ///
-    /// 量子化後の推論時に必要なおおよそのメモリ量を示す。
-    /// KV キャッシュやランタイムオーバーヘッドを含む概算値。
+    /// It covers the quantized weights plus KV cache and runtime overhead, so it is larger than the
+    /// download size and only close enough for admission decisions: comparing it against available
+    /// memory before loading, and sorting models into ``ModelSizeTier``.
     public let estimatedMemoryBytes: UInt64
 
-    /// モデルの特性・能力プロファイル。
+    /// What the model is good at — tool calling, languages, modalities, quantization.
     ///
-    /// ツールコール対応度、日本語力、量子化情報などを含む。
+    /// Used to filter candidates before a load, most importantly to avoid handing tools to a model
+    /// whose output format cannot be parsed back into tool calls.
     public let profile: ModelProfile?
 
-    /// このモデルの推奨生成設定（サンプリング・KV キャッシュ・思考モード）。
+    /// Sampling, KV cache, and thinking settings this model actually works well with.
     ///
-    /// モデルカードの推奨サンプリングや、エージェント用途での速度優先設定をここに持たせ、
-    /// 呼び出し側はこれを基準に `maxTokens` などだけを上書きする。
+    /// It carries the model card's recommended sampling and any speed-first choices for agent use,
+    /// so callers should start from this value and override only what the call needs, such as
+    /// ``GenerationConfig/maxTokens``. Starting from ``GenerationConfig/default`` instead silently
+    /// discards the per-model tuning.
     public let recommendedGeneration: GenerationConfig
 
-    /// 新しいモデル仕様を作成する。
+    /// Describes a model without fetching or loading anything.
+    ///
     /// - Parameters:
-    ///   - id: このモデル仕様の一意識別子。
-    ///   - base: ベースモデルの重みの所在。
-    ///   - adapter: オプションの LoRA/QLoRA アダプター。デフォルトは `nil`。
-    ///   - contextLength: トークン単位の最大コンテキスト長。
-    ///   - displayName: 人間可読な表示名。
-    ///   - description: モデルの人間可読な説明文。
-    ///   - estimatedMemoryBytes: 推定メモリ使用量（バイト単位）。
-    ///   - profile: モデルの特性プロファイル。デフォルトは `nil`。
-    ///   - recommendedGeneration: 推奨生成設定。デフォルトは ``GenerationConfig/default``。
+    ///   - id: Stable identifier for this model.
+    ///   - base: Where the base weights come from.
+    ///   - adapter: LoRA/QLoRA adapter to apply, or `nil` for the base model alone.
+    ///   - contextLength: Context window the model was trained for, in tokens.
+    ///   - displayName: Name to show in a picker or a title.
+    ///   - description: One-line description for the same UI.
+    ///   - estimatedMemoryBytes: Rough memory occupied while generating, in bytes.
+    ///   - profile: Capability profile used to filter candidates, or `nil` when unknown.
+    ///   - recommendedGeneration: Settings this model works well with.
     public init(
         id: String,
         base: ModelSource,
@@ -73,7 +95,10 @@ public struct ModelSpec: Sendable, Hashable, Codable {
 }
 
 extension ModelSpec {
-    /// 推定メモリ使用量を人間可読な文字列で返す（例: "2.3 GB"）。
+    /// Estimated memory footprint formatted for display, such as "2.3 GB".
+    ///
+    /// Uses the memory count style, so the number is what the model will occupy while running, not
+    /// what it takes on disk — compare with `DownloadedModel.formattedSize` for the latter.
     public var formattedMemorySize: String {
         let formatter = ByteCountFormatter()
         formatter.countStyle = .memory

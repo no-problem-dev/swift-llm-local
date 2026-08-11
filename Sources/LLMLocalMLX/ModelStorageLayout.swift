@@ -2,36 +2,48 @@ import Foundation
 import HuggingFace
 import LLMLocalClient
 
-/// モデルのオンディスク保存レイアウトの単一の定義。
+/// The one definition of where models live on disk and what counts as a complete download.
 ///
-/// 保存先パスの導出とスナップショット完全性の判定を 1 箇所に集約し、
-/// 書き込み側（``DestinationHubDownloader``）と読み取り側（``LocalModelInventory``）が
-/// 共有する。両者でパス規則がドリフトすると「DL したのに未 DL 扱い」になるため、
-/// ここを唯一の真実とする。
+/// Path derivation and completeness checking live here so the writer
+/// (``DestinationHubDownloader``) and the reader (``LocalModelInventory``) cannot drift apart. If
+/// they did, a model that downloaded successfully would read as missing and be downloaded again.
 enum ModelStorageLayout {
 
-    /// モデルを配置するルート。既定は Application Support 配下（バックアップ対象外）。
+    /// The root models are stored under, creating it if needed.
+    ///
+    /// Application Support, not caches. The caches directory is the obvious home for
+    /// re-downloadable data, but iOS purges it under storage pressure at times of its choosing,
+    /// which would delete multi-gigabyte weights out from under a loaded model. Application
+    /// Support is never purged, and the directory is instead flagged as excluded from iCloud and
+    /// iTunes backup, which is what the App Store guidelines require of large re-downloadable
+    /// files.
+    ///
+    /// If Application Support cannot be located, the temporary directory is used, and that one
+    /// the system can reclaim — downloads may then not survive between launches.
     static func defaultBaseDirectory() -> URL {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
         var base = support.appendingPathComponent("swift-llm-local/models", isDirectory: true)
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        // 数 GB のモデルは再取得可能なので iCloud バックアップから除外する。
+        // Multi-gigabyte models can be fetched again, so keep them out of iCloud backup.
         var values = URLResourceValues()
         values.isExcludedFromBackup = true
         try? base.setResourceValues(values)
         return base
     }
 
-    /// HF リポジトリ ID に対する保存先ディレクトリ（`{base}/{namespace}/{name}`）。
+    /// Storage directory for a Hugging Face repository, nested by namespace then repository name.
     static func destination(for repoID: Repo.ID, base: URL) -> URL {
         base
             .appendingPathComponent(repoID.namespace, isDirectory: true)
             .appendingPathComponent(repoID.name, isDirectory: true)
     }
 
-    /// モデル仕様に対するローカル保存先。
-    /// `.huggingFace` は base 配下、`.local` はそのパス自身。HF ID が不正なら `nil`。
+    /// Local directory for a model spec.
+    ///
+    /// A `.huggingFace` spec maps under `base`; a `.local` spec is its own path. Returns `nil`
+    /// when the Hub identifier is not in `namespace/name` form, which the caller reads as
+    /// "not downloaded".
     static func directory(for spec: ModelSpec, base: URL) -> URL? {
         switch spec.base {
         case .huggingFace(let id):
@@ -42,8 +54,12 @@ enum ModelStorageLayout {
         }
     }
 
-    /// 「設定 + 重み」が揃っているかを判定する。
-    /// 重みは単一（`*.safetensors`）と分割（`*.safetensors.index.json`）の両方を許容する。
+    /// Whether the directory holds both a configuration and weights.
+    ///
+    /// Accepts single-file weights (`*.safetensors`) and sharded weights
+    /// (`*.safetensors.index.json`). The check is presence-only: it does not verify that every
+    /// shard listed in the index actually arrived, so a download interrupted between shards can
+    /// still pass and fail later at load time.
     static func hasCompleteSnapshot(at directory: URL) -> Bool {
         let fileManager = FileManager.default
         let config = directory.appendingPathComponent("config.json")
@@ -57,7 +73,10 @@ enum ModelStorageLayout {
         }
     }
 
-    /// ディレクトリ配下の総バイト数（再帰）。存在しなければ `nil`。
+    /// Total bytes under the directory, walked recursively, or nothing if it does not exist.
+    ///
+    /// Prefers allocated size over file size, so the number matches what the device reports as
+    /// storage used.
     static func directorySize(at directory: URL) -> Int64? {
         let fileManager = FileManager.default
         var isDir: ObjCBool = false
@@ -83,7 +102,7 @@ enum ModelStorageLayout {
         return total
     }
 
-    /// ディレクトリの最終更新日時（DL 完了時刻の近似）。取得できなければ `nil`。
+    /// The directory's modification date, used as an approximation of when the download finished.
     static func modificationDate(at directory: URL) -> Date? {
         let values = try? directory.resourceValues(forKeys: [.contentModificationDateKey])
         return values?.contentModificationDate

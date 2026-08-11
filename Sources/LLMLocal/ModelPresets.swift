@@ -3,30 +3,49 @@ import LLMLocalClient
 
 // swiftlint:disable type_body_length file_length
 
-/// MLX コミュニティの推奨モデルプリセット
+/// Ready-made specifications for MLX community model builds, grouped by family.
 ///
-/// 各プリセットは mlx-community（Hugging Face）の特定の量子化モデルを対象とした
-/// 事前設定済みの ``ModelSpec``。ファミリー別に整理されている。
+/// Every entry names one specific quantization of one specific Hugging Face repository, which is
+/// what makes the catalogue useful rather than decorative: the same model at 4-bit and at 6-bit is
+/// a different download, a different resident footprint, and a different quality ceiling. First use
+/// of a preset pulls gigabytes from Hugging Face into app storage; after that the recurring cost is
+/// RAM, because the weights stay resident for as long as the model is loaded.
 ///
-/// ## toolCallSupport の判定基準
+/// ## Reading the memory figures
 ///
-/// 各モデルの `toolCallSupport` は以下の積で判定している（2026-06 検証）:
-/// 1. chat template に tools 分岐があるか（ツール定義がモデルに見えるか）
-/// 2. モデルの出力形式が mlx-swift-lm の `ToolCallFormat` でパース可能か
+/// Each spec's estimated memory is roughly the quantized weights plus room for the KV cache and
+/// runtime. It decides whether a device can run the model at all. On iOS the app is killed by
+/// jetsam before physical RAM is exhausted, so the practical ceiling on a phone is a fraction of
+/// the RAM figure on the box: presets under about 2 GB are the ones that behave on current iPhones,
+/// entries in the 4 GB to 8 GB range assume a Mac or an iPad with headroom, and anything at 12 GB
+/// and above is Mac-only — the 17 GB to 22 GB entries want 32 GB of unified memory and the 40 GB
+/// entries want 64 GB. Check a candidate against the device with the memory queries on
+/// ``LLMLocalService`` rather than reading the numbers by eye.
 ///
-/// テンプレートが対応していても出力形式のパーサが mlx-swift-lm に存在しない
-/// モデル（GPT-OSS の harmony 形式、Granite の `<|tool_call|>` 形式等）は
-/// `.unsupported`。
+/// ## How the tool-call levels were decided
 ///
-/// ## contextLength
+/// The level on each profile is the product of two independent things (verified 2026-06):
+/// 1. whether the chat template has a tools branch at all, which is what makes tool definitions
+///    visible to the model, and
+/// 2. whether the model's output format can be parsed by the tool-call parsers in mlx-swift-lm.
 ///
-/// モデル本来の最大コンテキスト長（config.json の max_position_embeddings）。
-/// 実行時のメモリ予算は別途 `GenerationConfig` / デバイスメモリで管理する。
+/// A model can satisfy the first and fail the second, and is then unsupported in practice: the
+/// GPT-OSS harmony channel format and Granite's `<|tool_call|>` markup are both emitted willingly
+/// and cannot be read back. Even at the highest level, on-device tool calling is generated text
+/// matched against a template rather than a provider-side function-calling API — expect it to be
+/// less dependable than a hosted provider, increasingly so at smaller sizes and heavier
+/// quantization.
+///
+/// ## Context length
+///
+/// Each spec's context length is the model's own maximum, taken from the repository config. It is a
+/// limit, not a budget: the KV cache for a long context competes with the weights for the same RAM,
+/// so what is actually usable comes from the generation config and the device's memory.
 public enum ModelPresets {
 
     // MARK: - Qwen Family (Alibaba)
 
-    /// Qwen3 0.6B 4bit — 超軽量・基本タスク向け
+    /// Smallest preset at roughly 350 MB, 4-bit — reliable at tool calls, thin on knowledge.
     public static let qwen3_0_6B = ModelSpec(
         id: "qwen3-0.6b-4bit",
         base: .huggingFace(id: "mlx-community/Qwen3-0.6B-4bit"),
@@ -47,7 +66,7 @@ public enum ModelPresets {
         recommendedGeneration: qwenAgentic
     )
 
-    /// Qwen3 1.7B 4bit — 軽量・多言語対応
+    /// 4-bit at roughly 1 GB — the smallest preset with usable Japanese and solid tool calls.
     public static let qwen3_1_7B = ModelSpec(
         id: "qwen3-1.7b-4bit",
         base: .huggingFace(id: "mlx-community/Qwen3-1.7B-4bit"),
@@ -68,8 +87,9 @@ public enum ModelPresets {
         recommendedGeneration: qwenAgentic
     )
 
-    /// Qwen3 4B Instruct 2507 4bit-DWQ — バランス型・多言語
-    /// DWQ（蒸留量子化）は同サイズ（2.3GB）で素の 4bit より高精度。
+    /// Distillation-aware 4-bit at roughly 2.4 GB — plain 4-bit size, less quantization damage.
+    ///
+    /// Strong at Japanese and code for its footprint, with a 262k context.
     public static let qwen3_4B = ModelSpec(
         id: "qwen3-4b-instruct-2507-4bit-dwq",
         base: .huggingFace(id: "mlx-community/Qwen3-4B-Instruct-2507-4bit-DWQ-2510"),
@@ -90,7 +110,7 @@ public enum ModelPresets {
         recommendedGeneration: qwenAgentic
     )
 
-    /// Qwen3 4B 日本語ファインチューニング済み 4bit
+    /// The 4B base fine-tuned on Japanese, 4-bit at roughly 2.3 GB — best Japanese at this size.
     public static let qwen3_4B_ja = ModelSpec(
         id: "qwen3-4b-ja-4bit",
         base: .huggingFace(id: "taniguchi-kyoichi/Qwen3-4B-Instruct-2507-ja-4bit"),
@@ -111,7 +131,7 @@ public enum ModelPresets {
         recommendedGeneration: qwenAgentic
     )
 
-    /// Qwen3 8B 4bit — 高品質・多言語
+    /// 4-bit at roughly 4.7 GB — Mac-comfortable quality, with a 40k context rather than 262k.
     public static let qwen3_8B = ModelSpec(
         id: "qwen3-8b-4bit",
         base: .huggingFace(id: "mlx-community/Qwen3-8B-4bit"),
@@ -134,7 +154,7 @@ public enum ModelPresets {
 
     // MARK: - Qwen3.5 Family (Alibaba)
 
-    /// Qwen3.5 0.8B 4bit — 超軽量・ネイティブマルチモーダル
+    /// Smallest multimodal preset — 4-bit at roughly 700 MB with native image input.
     public static let qwen3_5_0_8B = ModelSpec(
         id: "qwen3.5-0.8b-4bit",
         base: .huggingFace(id: "mlx-community/Qwen3.5-0.8B-4bit"),
@@ -155,8 +175,10 @@ public enum ModelPresets {
         recommendedGeneration: qwenAgentic
     )
 
-    /// Qwen3.5 2B 6bit — 軽量・オンデバイス推論
-    /// 小型モデルは 4bit の量子化劣化が大きいため、品質/サイズのバランスで 6bit を採用。
+    /// 6-bit at roughly 2.2 GB with image input — the largest multimodal preset made for a phone.
+    ///
+    /// Quantized at 6-bit rather than 4-bit because small models lose the most to aggressive
+    /// quantization, and the size difference at this scale is small.
     public static let qwen3_5_2B = ModelSpec(
         id: "qwen3.5-2b-6bit",
         base: .huggingFace(id: "mlx-community/Qwen3.5-2B-6bit"),
@@ -177,8 +199,7 @@ public enum ModelPresets {
         recommendedGeneration: qwenAgentic
     )
 
-    /// Qwen3.5 4B 6bit — バランス型マルチモーダル
-    /// 旧 OptiQ-4bit（素性不明・4.0GB）から標準 6bit（4.1GB・ほぼ同サイズで高品質）へ。
+    /// Standard 6-bit at roughly 4.1 GB with image input — near 4-bit size at better quality.
     public static let qwen3_5_4B = ModelSpec(
         id: "qwen3.5-4b-6bit",
         base: .huggingFace(id: "mlx-community/Qwen3.5-4B-6bit"),
@@ -199,7 +220,7 @@ public enum ModelPresets {
         recommendedGeneration: qwenAgentic
     )
 
-    /// Qwen3.5 9B 4bit — 高品質マルチモーダル
+    /// 4-bit at roughly 6.4 GB with image input — the best quality that still fits a 16 GB Mac.
     public static let qwen3_5_9B = ModelSpec(
         id: "qwen3.5-9b-4bit",
         base: .huggingFace(id: "mlx-community/Qwen3.5-9B-4bit"),
@@ -222,7 +243,7 @@ public enum ModelPresets {
 
     // MARK: - Qwen3.6 Family (Alibaba)
 
-    /// Qwen3.6 27B 4bit — Mac 向け高品質 dense
+    /// Dense 4-bit at roughly 17 GB — strong at agent work, and needs a 32 GB Mac.
     public static let qwen3_6_27B = ModelSpec(
         id: "qwen3.6-27b-4bit",
         base: .huggingFace(id: "mlx-community/Qwen3.6-27B-4bit"),
@@ -243,7 +264,10 @@ public enum ModelPresets {
         recommendedGeneration: qwenAgentic
     )
 
-    /// Qwen3.6 35B-A3B 4bit — agentic 特化 MoE
+    /// Mixture-of-experts 4-bit at roughly 22 GB with 3B active per token — 32 GB Mac.
+    ///
+    /// Only the active experts are computed each step, so it generates far faster than its resident
+    /// size suggests; the whole 22 GB still has to be in memory.
     public static let qwen3_6_35B_moe = ModelSpec(
         id: "qwen3.6-35b-a3b-4bit",
         base: .huggingFace(id: "mlx-community/Qwen3.6-35B-A3B-4bit"),
@@ -266,7 +290,7 @@ public enum ModelPresets {
 
     // MARK: - Qwen 2.5 / MoE (Alibaba)
 
-    /// Qwen 2.5 14B Instruct 4bit — 大型・高品質
+    /// Previous-generation 4-bit at roughly 8.5 GB with a 32k context.
     public static let qwen2_5_14B = ModelSpec(
         id: "qwen2.5-14b-instruct-4bit",
         base: .huggingFace(id: "mlx-community/Qwen2.5-14B-Instruct-4bit"),
@@ -287,7 +311,7 @@ public enum ModelPresets {
         recommendedGeneration: qwenAgentic
     )
 
-    /// Qwen3 MoE 30B-A3B 4bit — MoE 高品質（3B アクティブ）
+    /// Mixture-of-experts 4-bit at roughly 18 GB with 3B active per token — 30B quality, 3B speed.
     public static let qwen3_moe_30B = ModelSpec(
         id: "qwen3-30b-a3b-4bit",
         base: .huggingFace(id: "mlx-community/Qwen3-30B-A3B-4bit"),
@@ -308,7 +332,7 @@ public enum ModelPresets {
         recommendedGeneration: qwenAgentic
     )
 
-    /// Qwen 2.5 32B Instruct 4bit — Mac 向けフラッグシップ
+    /// Dense 4-bit at roughly 19 GB with a 32k context — needs a 32 GB Mac.
     public static let qwen2_5_32B = ModelSpec(
         id: "qwen2.5-32b-instruct-4bit",
         base: .huggingFace(id: "mlx-community/Qwen2.5-32B-Instruct-4bit"),
@@ -329,7 +353,7 @@ public enum ModelPresets {
         recommendedGeneration: qwenAgentic
     )
 
-    /// Qwen 2.5 72B Instruct 4bit — 最大級
+    /// Largest preset here — 4-bit at roughly 42 GB, so a 64 GB Mac, and slow even there.
     public static let qwen2_5_72B = ModelSpec(
         id: "qwen2.5-72b-instruct-4bit",
         base: .huggingFace(id: "mlx-community/Qwen2.5-72B-Instruct-4bit"),
@@ -352,12 +376,14 @@ public enum ModelPresets {
 
     // MARK: - Gemma Family (Google)
     //
-    // Gemma 2/3/3n の chat template には tools 分岐がなく、mlx-swift-lm の
-    // Gemma パーサも Gemma 1 専用のため、ツールコールは二重に非対応。
-    // Gemma 4 はネイティブ function calling 対応だが、`.gemma4` 出力パーサが
-    // mlx-swift-lm 3.31.3 に未収録（main のみ）のため当面 basic。
+    // Tool calling fails twice over on Gemma 2/3/3n: their chat templates have no tools branch, so
+    // the model never sees the definitions, and the Gemma parser in mlx-swift-lm only covers
+    // Gemma 1. Gemma 4 does have native function calling, but its output parser ships only on the
+    // main branch of mlx-swift-lm and not in 3.31.3, so those entries are marked basic.
 
-    /// Gemma 3 1B QAT 4bit — 超軽量・高品質 QAT
+    /// Quantization-aware 4-bit at roughly 800 MB — keeps more quality than post-hoc 4-bit.
+    ///
+    /// Cannot call tools, and Japanese is basic.
     public static let gemma3_1B_qat = ModelSpec(
         id: "gemma-3-1b-it-qat-4bit",
         base: .huggingFace(id: "mlx-community/gemma-3-1b-it-qat-4bit"),
@@ -378,7 +404,7 @@ public enum ModelPresets {
         recommendedGeneration: gemmaAgentic
     )
 
-    /// Gemma 3 4B QAT 4bit — 高品質 QAT
+    /// Quantization-aware 4-bit at roughly 2.5 GB with a 131k context; no tool calling.
     public static let gemma3_4B_qat = ModelSpec(
         id: "gemma-3-4b-it-qat-4bit",
         base: .huggingFace(id: "mlx-community/gemma-3-4b-it-qat-4bit"),
@@ -399,7 +425,7 @@ public enum ModelPresets {
         recommendedGeneration: gemmaAgentic
     )
 
-    /// Gemma 3 12B QAT 4bit — 大型・高品質
+    /// Quantization-aware 4-bit at roughly 7 GB; no tool calling.
     public static let gemma3_12B_qat = ModelSpec(
         id: "gemma-3-12b-it-qat-4bit",
         base: .huggingFace(id: "mlx-community/gemma-3-12b-it-qat-4bit"),
@@ -420,7 +446,7 @@ public enum ModelPresets {
         recommendedGeneration: gemmaAgentic
     )
 
-    /// Gemma 3 27B QAT 4bit — Gemma 3 最大級
+    /// Largest Gemma 3 — quantization-aware 4-bit at roughly 16 GB with image input, no tool calls.
     public static let gemma3_27B_qat = ModelSpec(
         id: "gemma-3-27b-it-qat-4bit",
         base: .huggingFace(id: "mlx-community/gemma-3-27b-it-qat-4bit"),
@@ -441,7 +467,9 @@ public enum ModelPresets {
         recommendedGeneration: gemmaAgentic
     )
 
-    /// Gemma 4 E2B 4bit — モバイル特化（2B 相当・ネイティブ FC）
+    /// Mobile-oriented Gemma 4, 4-bit at roughly 3.9 GB — 2B-equivalent compute, better Japanese.
+    ///
+    /// It has native function calling, but this stack has no parser for the format it answers in.
     public static let gemma4_e2b = ModelSpec(
         id: "gemma-4-e2b-it-4bit",
         base: .huggingFace(id: "mlx-community/gemma-4-e2b-it-4bit"),
@@ -463,7 +491,9 @@ public enum ModelPresets {
         recommendedGeneration: gemmaAgentic
     )
 
-    /// Gemma 4 E4B 4bit — モバイル特化（4B 相当・ネイティブ FC）
+    /// Mobile-oriented Gemma 4, 4-bit at roughly 5.7 GB — 4B-equivalent compute.
+    ///
+    /// It has native function calling, but this stack has no parser for the format it answers in.
     public static let gemma4_e4b = ModelSpec(
         id: "gemma-4-e4b-it-4bit",
         base: .huggingFace(id: "mlx-community/gemma-4-e4b-it-4bit"),
@@ -487,7 +517,7 @@ public enum ModelPresets {
 
     // MARK: - Llama Family (Meta)
 
-    /// Llama 3.2 1B Instruct 4bit — 軽量・バランス型
+    /// 4-bit at roughly 700 MB with a 131k context — workable tool calls, weak Japanese.
     public static let llama3_2_1B = ModelSpec(
         id: "llama-3.2-1b-instruct-4bit",
         base: .huggingFace(id: "mlx-community/Llama-3.2-1B-Instruct-4bit"),
@@ -508,7 +538,7 @@ public enum ModelPresets {
         recommendedGeneration: llamaAgentic
     )
 
-    /// Llama 3.2 3B Instruct 4bit — 実用的
+    /// 4-bit at roughly 1.8 GB — the largest Llama that is realistic on a phone.
     public static let llama3_2_3B = ModelSpec(
         id: "llama-3.2-3b-instruct-4bit",
         base: .huggingFace(id: "mlx-community/Llama-3.2-3B-Instruct-4bit"),
@@ -529,7 +559,7 @@ public enum ModelPresets {
         recommendedGeneration: llamaAgentic
     )
 
-    /// Llama 3.1 8B Instruct 4bit — 定番
+    /// 4-bit at roughly 4.5 GB — broad, English-centric coverage with a 131k context.
     public static let llama3_1_8B = ModelSpec(
         id: "llama-3.1-8b-instruct-4bit",
         base: .huggingFace(id: "mlx-community/Meta-Llama-3.1-8B-Instruct-4bit"),
@@ -550,7 +580,7 @@ public enum ModelPresets {
         recommendedGeneration: llamaAgentic
     )
 
-    /// Llama 3.3 70B Instruct 4bit — フロンティア
+    /// 4-bit at roughly 40 GB — a 64 GB Mac and nothing smaller.
     public static let llama3_3_70B = ModelSpec(
         id: "llama-3.3-70b-instruct-4bit",
         base: .huggingFace(id: "mlx-community/Llama-3.3-70B-Instruct-4bit"),
@@ -573,8 +603,10 @@ public enum ModelPresets {
 
     // MARK: - Mistral Family
 
-    /// Ministral 3 3B Instruct 2512 6bit — ツールコール特化の小型モデル
-    /// FC 特化モデルは量子化劣化が tool-call 精度に直結するため 6bit を採用。
+    /// Small agent model with native function calling — 6-bit at roughly 3.7 GB.
+    ///
+    /// Quantized at 6-bit rather than 4-bit because on a function-calling model the damage shows up
+    /// directly as wrong or malformed tool arguments.
     public static let ministral3_3B = ModelSpec(
         id: "ministral-3-3b-instruct-2512-6bit",
         base: .huggingFace(id: "mlx-community/Ministral-3-3B-Instruct-2512-6bit"),
@@ -595,7 +627,7 @@ public enum ModelPresets {
         recommendedGeneration: mistralAgentic
     )
 
-    /// Ministral 3 8B Instruct 2512 4bit — 高品質エージェントモデル
+    /// 4-bit at roughly 6 GB with native function calling and a 262k context.
     public static let ministral3_8B = ModelSpec(
         id: "ministral-3-8b-instruct-2512-4bit",
         base: .huggingFace(id: "mlx-community/Ministral-3-8B-Instruct-2512-4bit"),
@@ -618,7 +650,7 @@ public enum ModelPresets {
 
     // MARK: - DeepSeek Family
 
-    /// DeepSeek R1 Distill Qwen 1.5B 4bit — 軽量推論特化
+    /// Reasoning distillation, 4-bit at roughly 900 MB — always thinks, cannot call tools.
     public static let deepseekR1_1_5B = ModelSpec(
         id: "deepseek-r1-distill-qwen-1.5b-4bit",
         base: .huggingFace(id: "mlx-community/DeepSeek-R1-Distill-Qwen-1.5B-4bit"),
@@ -639,7 +671,7 @@ public enum ModelPresets {
         recommendedGeneration: deepseekReasoning
     )
 
-    /// DeepSeek R1 Distill Qwen 7B 4bit — 推論特化
+    /// Reasoning distillation, 4-bit at roughly 4.1 GB; no tool calling.
     public static let deepseekR1_7B = ModelSpec(
         id: "deepseek-r1-distill-qwen-7b-4bit",
         base: .huggingFace(id: "mlx-community/DeepSeek-R1-Distill-Qwen-7B-4bit"),
@@ -660,7 +692,7 @@ public enum ModelPresets {
         recommendedGeneration: deepseekReasoning
     )
 
-    /// DeepSeek R1 Distill Qwen 14B 4bit — 高品質推論
+    /// Reasoning distillation, 4-bit at roughly 8.5 GB; no tool calling.
     public static let deepseekR1_14B = ModelSpec(
         id: "deepseek-r1-distill-qwen-14b-4bit",
         base: .huggingFace(id: "mlx-community/DeepSeek-R1-Distill-Qwen-14B-4bit"),
@@ -683,10 +715,11 @@ public enum ModelPresets {
 
     // MARK: - Phi Family (Microsoft)
 
-    /// Phi-4 Mini Instruct 4bit — 小型・高推論
+    /// 4-bit at roughly 2.3 GB — strong reasoning for the size, but no tool calling.
     ///
-    /// chat template は tools 対応だが、出力形式（`<|tool_call|>` functools）の
-    /// パーサが mlx-swift-lm に存在しないためツールコールは非対応。
+    /// The chat template does render tools, so the model will attempt calls; they arrive in the
+    /// `<|tool_call|>` functools markup, which mlx-swift-lm has no parser for, so nothing can be
+    /// recovered from them.
     public static let phi4_mini = ModelSpec(
         id: "phi-4-mini-instruct-4bit",
         base: .huggingFace(id: "mlx-community/Phi-4-mini-instruct-4bit"),
@@ -709,7 +742,7 @@ public enum ModelPresets {
 
     // MARK: - SmolLM Family (Hugging Face)
 
-    /// SmolLM3 3B 4bit — 軽量効率型
+    /// 4-bit at roughly 1.8 GB with a 64k context — tool calls work, Japanese does not.
     public static let smolLM3_3B = ModelSpec(
         id: "smollm3-3b-4bit",
         base: .huggingFace(id: "mlx-community/SmolLM3-3B-4bit"),
@@ -732,7 +765,7 @@ public enum ModelPresets {
 
     // MARK: - LFM Family (Liquid AI)
 
-    /// LFM2.5 1.2B Instruct 4bit — ツール特化の超高速 SLM
+    /// 6-bit at roughly 1 GB — built for tool use, and the fastest generation of the small presets.
     public static let lfm2_5_1_2B = ModelSpec(
         id: "lfm2.5-1.2b-instruct-6bit",
         base: .huggingFace(id: "mlx-community/LFM2.5-1.2B-Instruct-6bit"),
@@ -753,7 +786,7 @@ public enum ModelPresets {
         recommendedGeneration: lfmAgentic
     )
 
-    /// LFM2.5 8B-A1B 4bit — MoE（1B アクティブ）。1.2B 並の速度で 8B 級の品質。
+    /// Mixture-of-experts 4-bit at roughly 4.9 GB with 1B active — small-model speed, 8B knowledge.
     public static let lfm2_5_8B_a1b = ModelSpec(
         id: "lfm2.5-8b-a1b-4bit",
         base: .huggingFace(id: "mlx-community/LFM2.5-8B-A1B-MLX-4bit"),
@@ -774,7 +807,9 @@ public enum ModelPresets {
         recommendedGeneration: lfmAgentic
     )
 
-    /// LFM2.5 1.2B 日本語特化 4bit — Liquid AI 公式 MLX 量子化
+    /// Japanese-specialized 4-bit at roughly 750 MB — the strongest Japanese per byte here.
+    ///
+    /// Published by Liquid AI as an MLX build rather than converted by the community.
     public static let lfm2_5_1_2B_ja = ModelSpec(
         id: "lfm2.5-1.2b-jp-4bit",
         base: .huggingFace(id: "LiquidAI/LFM2.5-1.2B-JP-202606-MLX-4bit"),
@@ -797,7 +832,7 @@ public enum ModelPresets {
 
     // MARK: - GLM Family (Zhipu AI)
 
-    /// GLM-4.7 Flash 4bit — ローカルコーディング/エージェント特化 MoE
+    /// Mixture-of-experts 4-bit at roughly 18 GB with 3B active — coding and agent work, 32 GB Mac.
     public static let glm4_7_flash = ModelSpec(
         id: "glm-4.7-flash-4bit",
         base: .huggingFace(id: "mlx-community/GLM-4.7-Flash-4bit"),
@@ -820,10 +855,10 @@ public enum ModelPresets {
 
     // MARK: - Other Models
 
-    /// Granite 3.3 2B Instruct 4bit — エンタープライズ軽量
+    /// 4-bit at roughly 1.2 GB — enterprise-oriented, and no tool calling.
     ///
-    /// chat template は tools 対応だが、出力形式（`<|tool_call|>` + JSON リスト）の
-    /// パーサが mlx-swift-lm に存在しないためツールコールは非対応。
+    /// The chat template does render tools, but the model answers with `<|tool_call|>` followed by
+    /// a JSON list, a shape mlx-swift-lm has no parser for, so the calls cannot be recovered.
     public static let granite3_3_2B = ModelSpec(
         id: "granite-3.3-2b-instruct-4bit",
         base: .huggingFace(id: "mlx-community/granite-3.3-2b-instruct-4bit"),
@@ -844,10 +879,11 @@ public enum ModelPresets {
         recommendedGeneration: graniteAgentic
     )
 
-    /// GPT-OSS 20B MXFP4-Q8 — OpenAI オープンソース
+    /// Mixed MXFP4 and Q8 at roughly 12 GB — notably good Japanese, but no tool calling.
     ///
-    /// ツールコールは harmony 形式（`<|channel|>commentary to=functions.x`）で
-    /// 出力されるが、mlx-swift-lm にパーサが存在しないため非対応。
+    /// Calls are emitted in the harmony format, addressed to a channel
+    /// (`<|channel|>commentary to=functions.x`) rather than as a JSON block, and mlx-swift-lm has no
+    /// parser for it, so tools cannot be used with this model.
     public static let gptOSS_20B = ModelSpec(
         id: "gpt-oss-20b-mxfp4-q8",
         base: .huggingFace(id: "mlx-community/gpt-oss-20b-MXFP4-Q8"),
@@ -870,7 +906,11 @@ public enum ModelPresets {
 
     // MARK: - All Models
 
-    /// 全モデルプリセット一覧（推定メモリ昇順）
+    /// Every preset, ordered by estimated memory from smallest to largest.
+    ///
+    /// Pass it to the download inventory to learn which models are already on disk, and filter it
+    /// against the device's memory budget to build a picker that only offers models this machine
+    /// can actually load.
     public static let all: [ModelSpec] = [
         // Tiny (< 1GB)
         qwen3_0_6B,
@@ -913,81 +953,91 @@ public enum ModelPresets {
         qwen2_5_72B,
     ]
 
-    // MARK: - Recommended Generation（家族別の推奨生成設定）
+    // MARK: - Recommended Generation (per family)
     //
-    // エージェント（ツールコール）用途向け。思考モードは OFF（高速化）、サンプリングは
-    // 各モデルカードの推奨値に寄せる。呼び出し側は maxTokens / temperature だけ上書きする。
+    // Tuned for agent and tool-calling use: thinking off for latency, sampling close to each model
+    // card's published recommendation. Callers override only the token limit and the temperature.
 
-    /// Qwen 系: Qwen 推奨サンプリング（topP 0.8 / topK 20）+ 思考 OFF。
-    /// Qwen3.5 は思考デフォルト ON なので、OFF にすると 4B でも軽快に動く。
+    /// Qwen's published sampling (topP 0.8, topK 20) with thinking off.
+    ///
+    /// Qwen3.5 has thinking on by default; turning it off is what keeps even the 4B responsive on a
+    /// device, since every thinking token is generated at the same speed as an answer token.
     private static let qwenAgentic = GenerationConfig(
         temperature: 0.7, topP: 0.8, topK: 20, enableThinking: false
     )
 
-    /// LFM2 系（Liquid AI 推奨: 低温・min_p・繰り返しペナルティ）。
+    /// Liquid AI's recommendation for LFM2: low temperature, min-p, and a mild repetition penalty.
     private static let lfmAgentic = GenerationConfig(
         temperature: 0.3, minP: 0.15, repetitionPenalty: 1.05, enableThinking: false
     )
 
-    /// Mistral / Ministral 系: 関数呼び出しは低温が安定。
+    /// Near-deterministic sampling for Mistral and Ministral, where function calls degrade with heat.
     private static let mistralAgentic = GenerationConfig(
         temperature: 0.15, topP: 1.0, enableThinking: false
     )
 
-    /// Gemma 3/4 系: Google 公式推奨（temp 1.0 / topK 64 / topP 0.95）。
-    /// Gemma に思考モードはないため `enableThinking` は無効（false のまま統一）。
+    /// Google's published Gemma 3 and 4 sampling (temperature 1.0, topK 64, topP 0.95).
+    ///
+    /// Gemma has no thinking mode, so the thinking flag has nothing to switch and is left off for
+    /// consistency with the other families.
     private static let gemmaAgentic = GenerationConfig(
         temperature: 1.0, topP: 0.95, topK: 64, enableThinking: false
     )
 
-    /// Llama 3.x 系: Meta 公式 generation_config（temp 0.6 / topP 0.9）。思考モードなし。
+    /// Meta's published generation config for Llama 3.x (temperature 0.6, topP 0.9); no thinking mode.
     private static let llamaAgentic = GenerationConfig(
         temperature: 0.6, topP: 0.9, enableThinking: false
     )
 
-    /// Phi 系（Microsoft）: temp 0.8 / topP 0.95。Phi-4-mini に思考モードはない。
+    /// Microsoft's sampling for Phi (temperature 0.8, topP 0.95); Phi-4-mini has no thinking mode.
     private static let phiAgentic = GenerationConfig(
         temperature: 0.8, topP: 0.95, enableThinking: false
     )
 
-    /// SmolLM3: HF 推奨（temp 0.6 / topP 0.95）。ハイブリッド思考はデフォルト ON のため
-    /// `/no_think` 相当の OFF をエージェント用途の既定にする。
+    /// Hugging Face's recommended SmolLM3 sampling (temperature 0.6, topP 0.95), thinking off.
+    ///
+    /// SmolLM3's hybrid thinking is on by default, so agent use asks for the no-think path
+    /// explicitly rather than paying for reasoning tokens on every tool decision.
     private static let smolAgentic = GenerationConfig(
         temperature: 0.6, topP: 0.95, enableThinking: false
     )
 
-    /// GLM 系（Zhipu）: temp 0.6 / topP 0.95。思考モードは OFF。
+    /// Zhipu's sampling for GLM (temperature 0.6, topP 0.95) with thinking off.
     private static let glmAgentic = GenerationConfig(
         temperature: 0.6, topP: 0.95, enableThinking: false
     )
 
-    /// Granite 系（IBM）: 低温で安定。思考モードは OFF。
+    /// IBM Granite: modest temperature for stable output, thinking off.
     private static let graniteAgentic = GenerationConfig(
         temperature: 0.7, topP: 0.95, enableThinking: false
     )
 
-    // MARK: - Recommended Generation（推論モデル）
+    // MARK: - Recommended Generation (reasoning models)
     //
-    // 以下は「思考が本体」の推論特化モデル。思考を切ると性能が出ないため
-    // `enableThinking` は ON のまま、公式推奨サンプリングだけを当てる。
-    // どのプリセットも `GenerationConfig.default` には落とさない方針なので、
-    // 推論モデルにも明示の推奨設定を持たせる。
+    // The settings below belong to models whose quality comes from thinking. Switching thinking off
+    // guts them, so the flag stays on and only the published sampling is applied. No preset in this
+    // catalogue is left on the default generation config, reasoning models included.
 
-    /// DeepSeek-R1 系: 公式推奨（temp 0.6 / topP 0.95）。R1 テンプレートに思考抑制分岐は
-    /// なく、思考は常時生成される（system prompt なしが公式推奨だが、それは呼び出し側の責務）。
+    /// DeepSeek-R1's published sampling (temperature 0.6, topP 0.95) with thinking on.
+    ///
+    /// The R1 chat template has no branch for suppressing thinking, so reasoning tokens are always
+    /// generated and always paid for in latency. DeepSeek also recommends running R1 without a
+    /// system prompt, which is the caller's decision rather than this configuration's.
     private static let deepseekReasoning = GenerationConfig(
         temperature: 0.6, topP: 0.95, enableThinking: true
     )
 
-    /// GPT-OSS（harmony）: 推論深度は reasoning effort をシステムメッセージで制御する設計で、
-    /// `enable_thinking` 分岐はテンプレートに存在しない。サンプリングは公式既定寄り。
+    /// GPT-OSS sampling close to the published defaults, with thinking on.
+    ///
+    /// Harmony controls reasoning depth through a reasoning-effort line in the system message rather
+    /// than a template flag, so the thinking flag here has nothing to switch off.
     private static let gptOssReasoning = GenerationConfig(
         temperature: 1.0, topP: 1.0, enableThinking: true
     )
 
     // MARK: - Private Helpers
 
-    /// 1 MB をバイト数で表す定数
+    /// One mebibyte in bytes, the unit the memory estimates above are written in.
     private static let mb: UInt64 = 1024 * 1024
 }
 

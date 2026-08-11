@@ -3,50 +3,68 @@ import LLMLocalClient
 import PersistenceCore
 import PersistenceFileSystem
 
-/// モデルキャッシュのメタデータ管理とキャッシュ操作を提供するアクター
+/// Metadata registry for the models an app has downloaded to the device.
 ///
-/// `ModelRegistry` はローカルにダウンロード・キャッシュされたモデルを追跡し、
-/// ``RegistryStore`` 経由でメタデータを永続化する。
-/// 実際のモデル重みは MLX バックエンドが Hugging Face Hub キャッシュ経由で管理し、
-/// このアクターはメタデータレジストリのみを管理する。
+/// One ``CachedModelInfo`` per model is kept in a JSON file through a ``RegistryStore``. The
+/// registry never reads or writes model weights: the MLX backend fetches those and copies the
+/// Hugging Face snapshot into `Application Support/swift-llm-local/models/{namespace}/{name}`,
+/// which is a different tree from this registry's own directory.
+///
+/// A model is identified by ``ModelSpec/id``, a string the app picks. It is not the Hugging Face
+/// repository id and carries no revision: the backend resolves `main` unless a revision is passed
+/// to it, so the same entry can describe different weights once the upstream repository moves.
+///
+/// "Registered" therefore means an entry exists, not that complete bytes are on disk.
+/// ``isCached(_:)`` answers from the JSON file alone, and a decode failure in the store surfaces
+/// as an empty registry rather than an error — after which downloaded models look absent while
+/// their files stay on disk. To ask the file system instead, use `LocalModelInventory` in the MLX
+/// module, which requires `config.json` plus a `*.safetensors` (or `*.safetensors.index.json`)
+/// file before calling a model downloaded.
+///
+/// A download is staged through the Hugging Face cache and then copied into place, so it needs
+/// roughly twice the model's size on disk while it runs, and the staged copy is left behind in
+/// `Caches`, where the system may purge it.
 public actor ModelRegistry {
 
-    /// レジストリファイルとアダプターファイルを保存するディレクトリ。
+    /// Directory holding the registry JSON. Neither model weights nor adapter files are written
+    /// here.
     private let cacheDirectory: URL
 
-    /// モデルIDをキーとするモデルメタデータのインメモリキャッシュ。
+    /// Loaded entries, keyed by ``ModelSpec/id``.
     private var cachedMetadata: [String: CachedModelInfo] = [:]
 
-    /// ストアからの初回ロードが完了しているかどうか。
+    /// Whether the store has already been read into memory.
     private var isLoaded: Bool = false
 
-    /// レジストリを永続化するストア。
+    /// Backing store for the registry JSON. Reports an unreadable or corrupt file as an empty
+    /// registry rather than throwing.
     private let cache: any RegistryStore<CachedModelInfo>
 
-    /// 実際のダウンロード処理を行うデリゲート。
+    /// Performs the transfer for ``downloadWithProgress(_:)``.
     private let downloadDelegate: any DownloadProgressDelegate
 
-    /// レジューム可能なダウンロード用のバックグラウンドダウンローダーインスタンス。
+    /// Backing storage for ``backgroundDownloader``.
     private let _backgroundDownloader: BackgroundDownloader
 
-    /// レジューム可能なバックグラウンドモデルダウンロードを管理するダウンローダー。
+    /// Pause and resume bookkeeping for downloads the app drives itself.
     ///
-    /// バックグラウンドモデルダウンロードの開始・一時停止・再開・キャンセルに使用する。
+    /// Not involved in ``downloadWithProgress(_:)``, which goes through the download delegate
+    /// instead.
     public var backgroundDownloader: BackgroundDownloader {
         _backgroundDownloader
     }
 
-    /// 新しいモデルレジストリを作成する。
+    /// Creates a registry backed by a JSON file.
     ///
     /// - Parameters:
-    ///   - cacheDirectory: レジストリとアダプターファイルを保存するディレクトリ。
-    ///     デフォルトは `~/Library/Application Support/LLMLocal/models`。
-    ///   - registryStore: レジストリの永続化ストア。
-    ///     `nil` の場合、キャッシュディレクトリの `registry.json` を使用する。
-    ///   - downloadDelegate: ダウンロードを実行するオプションのデリゲート。
-    ///     `nil` の場合、即座のダウンロードをシミュレートするスタブデリゲートを使用する。
-    ///   - backgroundDownloader: オプションのバックグラウンドダウンローダーインスタンス。
-    ///     `nil` の場合、キャッシュディレクトリを使用してデフォルトの ``BackgroundDownloader`` を作成する。
+    ///   - cacheDirectory: Directory for the registry JSON. Defaults to
+    ///     `~/Library/Application Support/LLMLocal/models`. Model files are not written here.
+    ///   - registryStore: Persistence for the entries. When `nil`, `registry.json` inside the
+    ///     cache directory is used.
+    ///   - downloadDelegate: Performs the transfer in ``downloadWithProgress(_:)``. When `nil`, a
+    ///     stub reports a fixed 1 MB size and moves no bytes.
+    ///   - backgroundDownloader: Pause and resume bookkeeping. When `nil`, one is created against
+    ///     `bg-downloads` inside the cache directory.
     public init(
         cacheDirectory: URL? = nil,
         registryStore: (any RegistryStore<CachedModelInfo>)? = nil,
@@ -69,7 +87,7 @@ public actor ModelRegistry {
 
     // MARK: - Private Helpers
 
-    /// ストアからのデータが未ロードの場合、非同期でロードする。
+    /// Reads the store into memory on first use; later calls return immediately.
     private func ensureLoaded() async {
         guard !isLoaded else { return }
         cachedMetadata = await cache.load()
@@ -78,39 +96,50 @@ public actor ModelRegistry {
 
     // MARK: - Public API
 
-    /// すべてのキャッシュ済みモデルの一覧を返す。
+    /// Every registered model, in no particular order.
     ///
-    /// - Returns: 登録済みの全モデルの ``CachedModelInfo`` 配列。
+    /// Reads the registry file on the first call.
     public func cachedModels() async -> [CachedModelInfo] {
         await ensureLoaded()
         return Array(cachedMetadata.values)
     }
 
-    /// 指定されたモデル仕様がキャッシュに登録されているかを確認する。
+    /// Reports whether a model has a registry entry.
     ///
-    /// - Parameter spec: 確認するモデル仕様。
-    /// - Returns: モデルがキャッシュに登録されている場合は `true`。
+    /// This is answered from the registry alone, so an entry outlives its files when they are
+    /// deleted from underneath it. Ask `LocalModelInventory` in the MLX module when the question
+    /// is whether usable weights are on disk.
+    ///
+    /// - Parameter spec: Model to look up by ``ModelSpec/id``.
+    /// - Returns: `true` when an entry exists.
     public func isCached(_ spec: ModelSpec) async -> Bool {
         await ensureLoaded()
         return cachedMetadata[spec.id] != nil
     }
 
-    /// すべてのキャッシュ済みモデルの合計サイズをバイト単位で返す。
+    /// Sum of the sizes recorded for the registered models, in bytes.
     ///
-    /// - Returns: 全登録モデルの `sizeInBytes` の合計。
-    /// - Throws: 現在はスローしないが、将来のファイルシステムベースのサイズ計算に対応するシグネチャ。
+    /// The numbers are whatever was passed to
+    /// ``registerModel(_:sizeInBytes:modelFilesPath:)``; nothing is measured on disk, so entries
+    /// whose files are gone still count, and files not covered by an entry never do. No error is
+    /// produced despite the throwing signature.
     public func totalCacheSize() async throws -> Int64 {
         await ensureLoaded()
         return cachedMetadata.values.reduce(0) { $0 + $1.sizeInBytes }
     }
 
-    /// 特定モデルのキャッシュメタデータエントリを削除し、モデルファイルも除去する。
+    /// Removes a model's registry entry, and its files when the entry recorded a path.
     ///
-    /// モデルがキャッシュされていない場合、このメソッドは何も行わない。
-    /// `modelFilesPath` が設定されている場合、そのディレクトリを削除してディスク容量を解放する。
+    /// Files are deleted only when the entry carries a `modelFilesPath`. Entries created by
+    /// ``downloadWithProgress(_:)`` never do, so for those this frees no disk space and the bytes
+    /// are left orphaned. A failure to remove the directory is ignored; only saving the registry
+    /// can throw.
     ///
-    /// - Parameter spec: 削除するモデル仕様。
-    /// - Throws: レジストリの永続化に失敗した場合。
+    /// Evicting a model that a backend currently has loaded does not disturb generation in the
+    /// running process — the next load simply has to download the model again.
+    ///
+    /// - Parameter spec: Model to remove. An unregistered model still triggers a registry save.
+    /// - Throws: When the registry file cannot be written.
     public func deleteCache(for spec: ModelSpec) async throws {
         await ensureLoaded()
         if let info = cachedMetadata[spec.id], let filesPath = info.modelFilesPath {
@@ -120,9 +149,12 @@ public actor ModelRegistry {
         try await cache.save(cachedMetadata)
     }
 
-    /// すべてのキャッシュ済みモデルメタデータを削除し、モデルファイルも除去する。
+    /// Removes every registry entry, and the files of the entries that recorded a path.
     ///
-    /// - Throws: レジストリの永続化に失敗した場合。
+    /// Same caveat as ``deleteCache(for:)``: entries without a `modelFilesPath` leave their bytes
+    /// on disk with nothing left to point at them.
+    ///
+    /// - Throws: When the registry file cannot be written.
     public func clearAllCache() async throws {
         await ensureLoaded()
         for info in cachedMetadata.values {
@@ -134,18 +166,21 @@ public actor ModelRegistry {
         try await cache.save(cachedMetadata)
     }
 
-    /// モデルをキャッシュメタデータに登録する。
+    /// Records a model as downloaded.
     ///
-    /// 指定されたサイズと現在のタイムスタンプでメタデータエントリを作成する。
-    /// 実際のダウンロードは MLX バックエンドが処理する。
+    /// The entry for ``ModelSpec/id`` is inserted or overwritten with the given size and the
+    /// current time. Nothing is verified: no file is opened and the size is taken on trust. Pass
+    /// `modelFilesPath` if the entry should ever be able to free disk space, because
+    /// ``deleteCache(for:)`` deletes nothing without it.
     ///
-    /// 同じIDのモデルが既に登録されている場合は上書きされる（upsert）。
+    /// The entry's `localPath` is derived as `cacheDirectory/{id}`. That directory is not created
+    /// and is not where the weights live.
     ///
     /// - Parameters:
-    ///   - spec: 登録するモデル仕様。
-    ///   - sizeInBytes: モデルのサイズ（バイト単位）。
-    ///   - modelFilesPath: モデル実ファイルのパス。削除時にこのパスを使用してファイルを除去する。
-    /// - Throws: レジストリの永続化に失敗した場合。
+    ///   - spec: Model to record.
+    ///   - sizeInBytes: Size to record, in bytes.
+    ///   - modelFilesPath: Directory holding the downloaded files, deleted on eviction.
+    /// - Throws: When the registry file cannot be written.
     public func registerModel(
         _ spec: ModelSpec,
         sizeInBytes: Int64,
@@ -166,14 +201,27 @@ public actor ModelRegistry {
 
     // MARK: - Download with Progress
 
-    /// 進捗報告付きでモデルをダウンロードする。
+    /// Downloads a model through the download delegate and reports progress as a stream.
     ///
-    /// ダウンロードの進行に応じて ``DownloadProgress`` の更新を生成する
-    /// `AsyncThrowingStream` を返す。ダウンロードが完了しモデルがキャッシュに
-    /// 登録されるとストリームが完了する。
+    /// The stream yields a zero value immediately, then whatever the delegate reports, then a full
+    /// value once the model has been registered. Delegate progress is forwarded verbatim, produced
+    /// on whatever context the delegate calls back from rather than on this actor — the Hugging
+    /// Face downloader used by the MLX backend reports on the main actor, for instance — and
+    /// arrives on the task that iterates the stream.
     ///
-    /// - Parameter spec: ダウンロードするモデル仕様。
-    /// - Returns: ``DownloadProgress`` 値の ``AsyncThrowingStream``。
+    /// The transfer runs in an unstructured task the stream does not own, and no termination
+    /// handler is installed. Abandoning the stream, or cancelling the task iterating it, therefore
+    /// does not stop the transfer, and the model may still be registered afterwards. Registration
+    /// is skipped silently if the registry is deallocated mid-download, in which case the stream
+    /// still finishes with a full-progress value.
+    ///
+    /// The entry it registers has no `modelFilesPath`, so ``deleteCache(for:)`` will not free the
+    /// downloaded bytes afterwards. Byte counts come from the delegate; the default stub reports a
+    /// fixed 1 MB and transfers nothing.
+    ///
+    /// - Parameter spec: Model to download.
+    /// - Returns: A stream that finishes once the model is registered, or fails with the
+    ///   delegate's error and registers nothing.
     public func downloadWithProgress(
         _ spec: ModelSpec
     ) -> AsyncThrowingStream<DownloadProgress, Error> {

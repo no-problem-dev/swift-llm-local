@@ -3,18 +3,22 @@ import LLMLocalClient
 
 // MARK: - DownloadProgressDelegate
 
-/// ダウンロード動作を注入するプロトコル（テスト用）
+/// Moves the bytes behind the registry's progress stream.
 ///
-/// 実装は実際のダウンロード処理を行い、進行中にプログレスハンドラを呼び出す。
-/// 戻り値はダウンロードされたモデルの合計サイズ（バイト単位）。
+/// ``ModelRegistry`` owns the metadata; a conforming type owns the transfer. The progress handler
+/// it is given is synchronous and `Sendable`, and the registry forwards each value straight into
+/// its stream, so it may be called from any thread or actor — the Hugging Face downloader used by
+/// the MLX backend reports on the main actor.
 public protocol DownloadProgressDelegate: Sendable {
-    /// `spec` で記述されたモデルをダウンロードし、`progressHandler` で進捗を報告する。
+    /// Downloads the model and reports progress while the transfer runs.
     ///
     /// - Parameters:
-    ///   - spec: ダウンロードするモデル仕様。
-    ///   - progressHandler: ダウンロード中に進捗更新で呼び出されるクロージャ。
-    /// - Returns: ダウンロードされたモデルの合計サイズ（バイト単位）。
-    /// - Throws: ダウンロード中に発生したエラー。
+    ///   - spec: Model to download.
+    ///   - progressHandler: Called with each progress update while the download is in flight.
+    /// - Returns: Total size of the downloaded model, in bytes. The registry records this number
+    ///   verbatim as the model's size and never measures the file system.
+    /// - Throws: Whatever the transfer fails with. The registry finishes its stream with that
+    ///   error and records nothing.
     func download(
         _ spec: ModelSpec,
         progressHandler: @Sendable (DownloadProgress) -> Void
@@ -23,12 +27,13 @@ public protocol DownloadProgressDelegate: Sendable {
 
 // MARK: - StubDownloadDelegate
 
-/// ネットワークアクセスなしで完了済みダウンロードをシミュレートするデフォルトスタブデリゲート
+/// Default delegate that transfers nothing and reports a fixed size.
 ///
-/// 実際のダウンロードが行われない場合のデフォルトデリゲート。
-/// カスタムの ``DownloadProgressDelegate`` を注入することで動作を差し替えられる。
+/// Used when no delegate is injected. It never calls the progress handler, so a stream from
+/// ``ModelRegistry/downloadWithProgress(_:)`` yields only the registry's own zero and full values,
+/// and the model is registered with a size that no file on disk backs.
 struct StubDownloadDelegate: DownloadProgressDelegate {
-    /// スタブダウンロードが返す固定サイズ。
+    /// Size reported for every stub download, in bytes.
     static let stubSize: Int64 = 1_000_000
 
     func download(

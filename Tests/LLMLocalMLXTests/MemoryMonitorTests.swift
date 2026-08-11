@@ -387,7 +387,8 @@ struct MemoryMonitorMaxAllowedModelMemoryTests {
         // Act
         let maxMemory = await monitor.maxAllowedModelMemory()
 
-        // Assert: iOS は jetsam 制約のため利用可能メモリ基準、macOS は物理総量基準。
+        // Assert: iOS budgets against available memory because jetsam kills the app well below
+        // the physical total; macOS budgets against the physical total.
         #if os(iOS) || os(tvOS) || os(watchOS)
         let expected = UInt64(Double(availableMem) * 0.8)
         #else

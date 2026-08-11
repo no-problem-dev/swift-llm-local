@@ -1,62 +1,93 @@
-/// テキスト生成の設定パラメータ。
+/// Settings that control one generation: sampling, KV cache budget, and thinking mode.
 ///
-/// MLX の `GenerateParameters` が持つツマミを一通り公開する。サンプリング
-/// （temperature / topP / topK / minP / repetitionPenalty）に加え、メモリと
-/// 速度に効く KV キャッシュ設定（kvBits / maxKVSize）と、思考モードの抑制
-/// （enableThinking）を含む。
+/// The fields map one-to-one onto the MLX `GenerateParameters` knobs, with one exception:
+/// ``enableThinking`` is not a sampling setting at all, it is a flag passed to the chat template.
+/// A backend applies the whole value per call, so two calls with different configs need no reload.
+///
+/// Several knobs disable themselves at specific values rather than being validated, so a
+/// combination that looks active can be inert — the notes on each field say which value is off.
 public struct GenerationConfig: Sendable, Hashable, Codable {
     // MARK: - Length
 
-    /// 生成する最大トークン数。`nil` の場合はコンテキスト上限まで生成する。
+    /// Budget for tokens the model may generate this turn; prompt tokens do not count against it.
+    ///
+    /// `nil` means no budget: generation runs until the model emits a stop token or the caller
+    /// cancels the stream. It is not clamped to ``ModelSpec/contextLength`` — nothing in this
+    /// package enforces that number — so on a long conversation the cap that actually bites is
+    /// ``maxKVSize`` or device memory.
     public var maxTokens: Int?
 
     // MARK: - Sampling
 
-    /// サンプリング温度。低いほど決定的（ツールコール・構造化出力向き）。
+    /// Softmax temperature; lower is more deterministic, and exactly `0` is greedy decoding.
+    ///
+    /// At `0` MLX swaps in an arg-max sampler, which ignores ``topP``, ``topK``, and ``minP``
+    /// entirely — tuning them alongside a zero temperature has no effect. Use `0` for tool calls
+    /// and structured output where a single reproducible answer matters.
     public var temperature: Float
-    /// Top-p（核）サンプリングの閾値。
+    /// Nucleus sampling threshold, active only for values strictly between 0 and 1.
+    ///
+    /// `1.0` (and `0`) turn it off rather than making it maximally permissive.
     public var topP: Float
-    /// Top-k サンプリング。0 で無効。
+    /// Number of highest-probability tokens to sample from; `0` disables the filter.
     public var topK: Int
-    /// Min-p サンプリング。0 で無効。
+    /// Probability floor relative to the most likely token; `0` disables the filter.
     public var minP: Float
-    /// 繰り返しペナルティ。`nil` で無効。小型モデルのループ抑制に有効（1.05〜1.1 程度）。
+    /// Multiplicative penalty on tokens already seen in the recent window; `nil` or `0` disables it.
+    ///
+    /// Values around 1.05–1.1 are the usual range for stopping small models from looping. It also
+    /// goes inert if ``repetitionContextSize`` is not positive.
     public var repetitionPenalty: Float?
-    /// 繰り返しペナルティが参照する直近トークン数。
+    /// How many of the most recent tokens the repetition penalty looks at.
     public var repetitionContextSize: Int
-    /// 直近コンテキストに出現したトークンへの加算ペナルティ（OpenAI 互換）。`nil` で無効。
+    /// Additive penalty applied once to any token present in the recent window, as in the OpenAI API.
+    ///
+    /// `nil` or `0` disables it, as does a non-positive ``presenceContextSize``.
     public var presencePenalty: Float?
-    /// presence ペナルティが参照する直近トークン数。
+    /// How many of the most recent tokens the presence penalty looks at.
     public var presenceContextSize: Int
-    /// 出現頻度に比例する加算ペナルティ（OpenAI 互換）。`nil` で無効。
+    /// Additive penalty scaled by how often a token occurs in the recent window, as in the OpenAI API.
+    ///
+    /// `nil` or `0` disables it, as does a non-positive ``frequencyContextSize``.
     public var frequencyPenalty: Float?
-    /// frequency ペナルティが参照する直近トークン数。
+    /// How many of the most recent tokens the frequency penalty looks at.
     public var frequencyContextSize: Int
 
-    // MARK: - KV Cache（メモリ・長コンテキスト）
+    // MARK: - KV Cache (memory and long context)
 
-    /// KV キャッシュの量子化ビット数（4 / 8）。`nil` で非量子化。
-    /// 長コンテキストのメモリを 2〜4 倍圧縮する。
+    /// Bit width for KV cache quantization, 4 or 8; `nil` keeps the cache unquantized.
+    ///
+    /// This is the main lever on memory for long contexts, at some cost in output quality.
     public var kvBits: Int?
-    /// KV キャッシュの最大サイズ（トークン数）。`nil` で無制限。メモリ上限の歯止め。
+    /// Hard ceiling on cached tokens, or `nil` for an unbounded cache.
+    ///
+    /// Setting it switches MLX to a rotating cache: once the limit is reached, old entries other
+    /// than the first four tokens are overwritten. Generation does not stop and no error is raised,
+    /// so the model quietly loses the middle of a long conversation instead of running out of memory.
     public var maxKVSize: Int?
-    /// KV 量子化のグループサイズ。
+    /// Group size used when quantizing the KV cache.
     public var kvGroupSize: Int
-    /// KV 量子化を開始するトークン位置（`kvBits` 指定時のみ有効）。
-    /// 先頭トークンほど後続の注意に効くため、序盤を非量子化のまま残すと
-    /// メモリ削減と精度のバランスが取りやすい。`0` で全トークン量子化。
+    /// Token position at which KV quantization starts, honoured only when ``kvBits`` is set.
+    ///
+    /// Early tokens carry more of the attention weight for everything that follows, so leaving the
+    /// opening tokens unquantized trades a little memory for noticeably better output. `0`
+    /// quantizes from the first token.
     public var quantizedKVStart: Int
 
     // MARK: - Prefill
 
-    /// プリフィル（プロンプト処理）の 1 ステップあたりトークン数。
+    /// How many prompt tokens are processed per prefill step.
     public var prefillStepSize: Int
 
     // MARK: - Thinking
 
-    /// 思考モード（Qwen3 系などの `<think>`）を有効にするか。
-    /// `false` で空の思考ブロックを注入して思考生成を抑制し、レイテンシを大幅に削減する。
-    /// エージェント（ツールコール）用途では `false` が高速。
+    /// Whether the model is allowed to produce a reasoning span before its answer.
+    ///
+    /// This is not a sampling setting: `false` passes `enable_thinking: false` into the chat
+    /// template, and templates that honour it (Qwen3 and relatives) open and immediately close the
+    /// think block so no reasoning tokens are generated. That removes the tokens themselves, not
+    /// just their display, which is why agent and tool-calling turns are much faster with it off.
+    /// Models whose template ignores the flag keep thinking regardless.
     public var enableThinking: Bool
 
     public init(
@@ -97,6 +128,11 @@ public struct GenerationConfig: Sendable, Hashable, Codable {
         self.enableThinking = enableThinking
     }
 
-    /// 既定の生成設定。
+    /// Balanced chat defaults: temperature 0.7, nucleus sampling at 0.9, no penalties, no KV
+    /// quantization, thinking enabled.
+    ///
+    /// These are deliberately not the MLX library defaults. Agent and tool-calling work wants a
+    /// lower temperature and ``enableThinking`` off, which is what the per-model
+    /// ``ModelSpec/recommendedGeneration`` carries.
     public static let `default` = GenerationConfig()
 }

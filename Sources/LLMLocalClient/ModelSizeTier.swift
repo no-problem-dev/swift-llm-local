@@ -1,17 +1,22 @@
-/// モデルの推定メモリ使用量に基づくサイズ分類
+/// Coarse size bucket derived from a model's estimated memory footprint.
+///
+/// Buckets exist for grouping and filtering a model list, not for deciding whether a model will
+/// actually run: the boundaries encode memory alone and say nothing about a device class. Compare
+/// ``ModelSpec/estimatedMemoryBytes`` against the memory the process can actually claim to answer
+/// that. The tiers are ordered smallest to largest, so they sort and compare directly.
 public enum ModelSizeTier: String, CaseIterable, Sendable, Comparable {
-    /// 1GB 未満
+    /// Under 1 GiB.
     case tiny
-    /// 1〜3GB
+    /// 1 GiB up to but not including 3 GiB.
     case small
-    /// 3〜8GB
+    /// 3 GiB up to but not including 8 GiB.
     case medium
-    /// 8〜20GB
+    /// 8 GiB up to but not including 20 GiB.
     case large
-    /// 20GB 以上
+    /// 20 GiB and above.
     case extraLarge
 
-    /// UI 表示用の名前
+    /// Tier name with its size range, ready to show in a list header or a filter control.
     public var displayName: String {
         switch self {
         case .tiny: "Tiny (< 1 GB)"
@@ -28,7 +33,10 @@ public enum ModelSizeTier: String, CaseIterable, Sendable, Comparable {
 }
 
 extension ModelSpec {
-    /// 推定メモリ使用量に基づくサイズティア
+    /// Size bucket this model falls into, from its estimated memory footprint.
+    ///
+    /// Computed from ``estimatedMemoryBytes`` in gibibytes, so a model advertised as "8 GB" that is
+    /// counted in decimal units lands one tier lower than its marketing name suggests.
     public var sizeTier: ModelSizeTier {
         let gb = Double(estimatedMemoryBytes) / (1024 * 1024 * 1024)
         switch gb {

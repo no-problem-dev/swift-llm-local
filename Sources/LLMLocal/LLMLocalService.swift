@@ -4,14 +4,22 @@ import LLMLocalClient
 import LLMLocalMLX
 import LLMLocalModels
 
-/// バックエンドとモデルレジストリを統合した高レベル LLM 操作ファサード
+/// High-level facade for on-device text generation, binding an inference backend to a model catalogue.
 ///
-/// テキスト生成のための高レベル API を提供する。
-/// 必要に応じてモデルの読み込みを自動的に処理し、生成統計を追跡する。
-/// オプションで ``MemoryMonitor`` を渡すと、メモリ圧迫時の自動モデルアンロードを
-/// 有効にできる。
+/// Everything here runs locally through Apple MLX. There is no network round trip at generation
+/// time, nothing is billed per token, and no server-side rate limit exists, so the retry, backoff,
+/// and quota machinery a hosted provider client needs has nothing to act on. The costs are physical
+/// instead: model weights are resident RAM measured in gigabytes, and the first use of a model has
+/// to pull that many gigabytes down from Hugging Face.
 ///
-/// ## 使用例
+/// Loading is implicit. Every generation entry point loads the requested model if the backend is
+/// not already holding it, so time to first token on a cold model includes the download (once) and
+/// the load into memory (on every model change). Pass a ``ModelSwitcher`` to route loading through
+/// eviction bookkeeping, or a `MemoryMonitor` to have the resident model dropped automatically
+/// when the system raises a memory warning — on iOS the app is killed by jetsam before physical RAM
+/// runs out, so releasing the weights is the only useful response to that warning.
+///
+/// ## Example
 ///
 /// ```swift
 /// let monitor = MemoryMonitor()
@@ -36,22 +44,32 @@ public actor LLMLocalService {
     private let modelRegistry: ModelRegistry
     private let memoryMonitor: MemoryMonitor?
     private let modelSwitcher: ModelSwitcher?
-    /// ディスク上のダウンロード済みモデルを問い合わせる在庫。
-    /// インメモリのレジストリと異なり、アプリ再起動後も実体を正しく反映する。
+    /// Inventory that answers download questions by reading the disk.
+    ///
+    /// Unlike an in-memory registry, it stays correct across app restarts and for models that are
+    /// downloaded but not loaded.
     private let inventory: LocalModelInventory
 
-    /// 最新の完了した生成の統計情報。まだ生成が完了していない場合は `nil`。
+    /// Statistics for the most recently finished generation, or `nil` until one finishes.
+    ///
+    /// The duration is wall clock measured from the moment the generation call was made, so on a
+    /// cold model it includes the download and the load; the throughput figure, when the backend
+    /// measures it, covers the generation phase only. The two are meant to disagree.
     private(set) public var lastGenerationStats: GenerationStats?
 
-    /// 指定されたバックエンド、モデルレジストリ、およびオプションのメモリモニターと
-    /// モデルスイッチャーで新しいサービスを作成する。
+    /// Creates a service over the given backend, with optional memory monitoring and model switching.
     ///
     /// - Parameters:
-    ///   - backend: モデルの読み込みとテキスト生成に使用する推論バックエンド。
-    ///   - modelRegistry: キャッシュ照会用のモデルレジストリ。
-    ///   - memoryMonitor: メモリ圧迫時の自動モデルアンロード用のオプションメモリモニター。デフォルトは `nil`。
-    ///   - modelSwitcher: LRUベースのマルチモデル管理用のオプションモデルスイッチャー。
-    ///     指定された場合、バックエンドへの直接呼び出しの代わりにスイッチャーにモデル読み込みを委譲する。デフォルトは `nil`。
+    ///   - backend: Inference backend that loads weights and produces tokens.
+    ///   - modelRegistry: Metadata registry. It is retained but not consulted by this type; download
+    ///     state is read from disk through the inventory instead.
+    ///   - memoryMonitor: Monitor used to unload the resident model on a system memory warning.
+    ///     Without one, the memory queries on this type return `nil` and no automatic unload happens.
+    ///   - modelSwitcher: Switcher that owns load and eviction bookkeeping. When supplied, the
+    ///     generation entry points ask it to load rather than calling the backend directly.
+    ///     Preloading through this type always bypasses it.
+    ///   - inventory: Reader for the on-disk model store. Point it at a different root only if the
+    ///     backend's downloader was pointed there too, or downloaded models will look missing.
     public init(
         backend: any LLMLocalBackend,
         modelRegistry: ModelRegistry,
@@ -66,29 +84,32 @@ public actor LLMLocalService {
         self.inventory = inventory
     }
 
-    /// 指定されたモデルを使用してプロンプトからテキストを生成する。
+    /// Generates text from a prompt, streaming each chunk as the model produces it.
     ///
-    /// モデルがバックエンドに現在読み込まれていない場合、生成開始前に自動的に
-    /// 読み込まれる。生成統計は追跡され、ストリーム完了後に
-    /// ``lastGenerationStats`` で参照できる。
+    /// If the backend is not already holding this model, it is loaded first: downloaded from
+    /// Hugging Face on first use, and mapped into RAM on every model change. The first chunk of a
+    /// cold model can therefore be many seconds behind the call. Once the model is warm the whole
+    /// run is local — nothing is sent anywhere, nothing is billed, and there is no rate limit to
+    /// back off from. Statistics land in ``lastGenerationStats`` when the stream finishes.
     ///
-    /// > Important: このメソッドは**会話継続（ステートフル）API**。内部の
-    /// > `ChatSession` を使い回すため、連続して呼び出すと過去のプロンプト・応答が
-    /// > 履歴として蓄積される（チャット用途ではこれが望ましい）。
-    /// > 各呼び出しを**独立した one-shot** として扱いたい場合は、呼び出し前に
-    /// > ``resetChatSession()`` で履歴をクリアするか、会話配列を明示的に渡せて
-    /// > 履歴が累積しない ``generateFromMessages(model:messages:systemPrompt:config:tools:)``
-    /// > を使用する。
+    /// > Important: This is the stateful entry point. It reuses one internal chat session, so
+    /// > consecutive calls accumulate earlier prompts and replies as conversation history, which is
+    /// > what chat wants. To treat each call as independent, clear the history first with
+    /// > ``resetChatSession()``, or use
+    /// > ``generateFromMessages(model:messages:systemPrompt:config:tools:)``, which takes the whole
+    /// > conversation as an argument and accumulates nothing.
     ///
-    /// > Note: この経路の ``GenerationStats/tokensPerSecond`` は、バックエンドが
-    /// > 実測トークン統計を流さないためテキストチャンク数による近似値。実測値が
-    /// > 必要な場合は ``generateWithTools`` / ``generateFromMessages`` を使用する。
+    /// > Note: `GenerationStats.tokensPerSecond` recorded here is approximated from the number of
+    /// > text chunks, because this path of the backend emits no measured token counters. For
+    /// > measured throughput use ``generateWithTools(model:prompt:tools:config:)`` or
+    /// > ``generateFromMessages(model:messages:systemPrompt:config:tools:)``.
     ///
     /// - Parameters:
-    ///   - model: 生成に使用するモデル仕様。
-    ///   - prompt: 生成元の入力プロンプト。
-    ///   - config: 生成を制御する設定パラメータ。デフォルトは ``GenerationConfig/default``。
-    /// - Returns: 生成されたトークン文字列の非同期ストリーム。
+    ///   - model: Model to generate with.
+    ///   - prompt: Input prompt.
+    ///   - config: Sampling, KV cache, and thinking-mode settings.
+    /// - Returns: A stream of text chunks. Cancelling the consuming task stops generation and
+    ///   finishes the stream with `LLMLocalError.cancelled`.
     public func generate(
         model: ModelSpec,
         prompt: String,
@@ -144,22 +165,30 @@ public actor LLMLocalService {
         }
     }
 
-    /// 指定されたモデルを使用してツール呼び出しサポート付きのレスポンスを生成する。
+    /// Generates a response that may contain tool calls, streaming text and calls as they arrive.
     ///
-    /// モデルがバックエンドに現在読み込まれていない場合、生成開始前に自動的に
-    /// 読み込まれる。生成統計は追跡され、ストリーム完了後に
-    /// ``lastGenerationStats`` で参照できる。
+    /// Tool calling on-device is driven by the model's own chat template and output format, not by
+    /// a provider-side function-calling API. It is markedly less dependable than a hosted provider:
+    /// small quantized models skip calls, emit arguments that do not match the schema, or answer in
+    /// a format the backend has no parser for. A model whose profile declares tool calls
+    /// unsupported is rejected up front — the stream finishes with
+    /// `LLMLocalError.toolCallsUnsupported(modelId:)` — rather than quietly dropping the tools,
+    /// because an agent loop reads a tool-free reply as "no tool needed" and ends the turn.
     ///
-    /// > Important: ``generate(model:prompt:config:)`` と同様に**会話継続
-    /// > （ステートフル）API**。独立した呼び出しにしたい場合は事前に
-    /// > ``resetChatSession()`` を呼ぶか、``generateFromMessages`` を使用する。
+    /// The model is loaded first if the backend is not already holding it. Unlike the plain text
+    /// path, this one records measured token counts and throughput in ``lastGenerationStats`` when
+    /// the backend reports them.
+    ///
+    /// > Important: Stateful like ``generate(model:prompt:config:)``. It reuses the same chat
+    /// > session, so history accumulates across calls; call ``resetChatSession()`` first, or use
+    /// > ``generateFromMessages(model:messages:systemPrompt:config:tools:)``.
     ///
     /// - Parameters:
-    ///   - model: 生成に使用するモデル仕様。
-    ///   - prompt: 生成元の入力プロンプト。
-    ///   - tools: モデルが使用可能なツール定義。
-    ///   - config: 生成を制御する設定パラメータ。デフォルトは ``GenerationConfig/default``。
-    /// - Returns: ``GenerationOutput`` 値の非同期ストリーム。
+    ///   - model: Model to generate with.
+    ///   - prompt: Input prompt.
+    ///   - tools: Tool definitions offered to the model.
+    ///   - config: Sampling, KV cache, and thinking-mode settings.
+    /// - Returns: A stream of text chunks, parsed tool calls, and a final statistics event.
     public func generateWithTools(
         model: ModelSpec,
         prompt: String,
@@ -208,24 +237,32 @@ public actor LLMLocalService {
         }
     }
 
-    /// 構造化メッセージ配列からレスポンスを生成する。
+    /// Generates a response from an explicit message array, applying the chat template exactly once.
     ///
-    /// チャットテンプレートは内部で1回だけ適用される。
-    /// `MessageFormatter` 等で事前フォーマットした文字列を `generate()` に渡す場合と異なり、
-    /// 二重テンプレート適用を回避する。
+    /// This entry point is stateless: the full conversation arrives on every call and nothing
+    /// accumulates inside the service. Handing a pre-rendered prompt string to
+    /// ``generate(model:prompt:config:)`` instead would apply the chat template a second time on
+    /// top of the first.
     ///
-    /// 履歴は累積しない（毎回フルメッセージ配列を受け取る）ステートレス API。
-    /// 一方でバックエンド（MLX）は直前ターンと共通するプロンプト接頭辞の KV キャッシュを
-    /// 再利用するため、エージェントループのように会話が伸びても prefill コストは差分のみに
-    /// 抑えられる。
+    /// Statelessness does not mean the prompt is reprocessed from scratch. The MLX backend keeps
+    /// the KV cache from the previous turn and compares token prefixes, so a growing agent
+    /// conversation only prefills the tokens that changed; prompt processing stays proportional to
+    /// the new suffix rather than to the whole history. That cache is dropped on model switch,
+    /// session reset, and unload. If a second generation starts while one is still running, it uses
+    /// a throwaway cache and prefills everything, so two conversations sharing a backend cannot
+    /// leak context into each other.
+    ///
+    /// A model whose profile declares tool calls unsupported is rejected before generation starts,
+    /// and the stream finishes with `LLMLocalError.toolCallsUnsupported(modelId:)`.
     ///
     /// - Parameters:
-    ///   - model: 生成に使用するモデル仕様。
-    ///   - messages: 会話履歴のメッセージ配列。
-    ///   - systemPrompt: システムプロンプト（オプション）。
-    ///   - config: 生成を制御する設定パラメータ。デフォルトは ``GenerationConfig/default``。
-    ///   - tools: モデルが使用可能なツール定義。
-    /// - Returns: ``GenerationOutput`` 値の非同期ストリーム。
+    ///   - model: Model to generate with.
+    ///   - messages: Full conversation, oldest first.
+    ///   - systemPrompt: System prompt, or `nil` to send none.
+    ///   - config: Sampling, KV cache, and thinking-mode settings.
+    ///   - tools: Tool definitions offered to the model.
+    /// - Returns: A stream of text chunks, parsed tool calls, and a final statistics event carrying
+    ///   measured prompt and generation token counts.
     public func generateFromMessages(
         model: ModelSpec,
         messages: [LLMMessage],
@@ -280,11 +317,12 @@ public actor LLMLocalService {
 
     // MARK: - Tool Call Capability
 
-    /// ツールコール非対応モデルへのツール付きリクエストを拒否する。
+    /// Rejects tool-bearing requests aimed at models that cannot produce tool calls.
     ///
-    /// ツールコール対応はバックエンドではなくモデル（チャットテンプレート）に
-    /// 依存するため、型レベルではなくモデルプロファイルで検証する。
-    /// プロファイル未設定のモデルは検証をスキップする（対応未知として許容）。
+    /// On-device, tool-call capability belongs to the model — its chat template has to render the
+    /// tools and its output format has to be parseable — not to the backend, so the check reads the
+    /// model profile rather than a type-level capability. A model with no profile is allowed
+    /// through: its support is unknown, not known to be absent.
     private static func validateToolCallSupport(
         model: ModelSpec,
         tools: [ToolDefinition]
@@ -297,77 +335,100 @@ public actor LLMLocalService {
 
     // MARK: - System Prompt
 
-    /// 現在のシステムプロンプト。設定されていない場合は `nil`。
     public var systemPrompt: String? {
         get async { await backend.systemPrompt }
     }
 
-    /// 以降の生成に使用するシステムプロンプトを設定する。
+    /// Sets the system prompt used by subsequent generations.
     ///
-    /// プロンプトはバックエンドに転送され、アクティブなチャットセッションに即座に適用される。
+    /// The prompt is forwarded to the backend, applied to the live chat session immediately, and
+    /// retained across model loads, so the session created for the next model starts with it
+    /// already in place.
     ///
-    /// - Parameter prompt: システムプロンプト文字列、またはクリアする場合は `nil`。
+    /// - Parameter prompt: New system prompt, or `nil` to clear it.
     public func setSystemPrompt(_ prompt: String?) async {
         await backend.setSystemPrompt(prompt)
     }
 
     // MARK: - Downloaded Models (disk truth)
 
-    /// 指定モデルがディスク上に**完全な形でダウンロード済み**かを返す。
+    /// Reports whether the model is present on disk as a complete snapshot.
     ///
-    /// ダウンロード状態の唯一の真実はディスクの実体（完全なスナップショット）。
-    /// アプリ再起動後も正しく判定できる。エンジン選択 UI の「DL 済みのみ選択可」判定や
-    /// 一覧画面のバッジ表示はこれを使う。
+    /// Disk is the only truth about download state: the check looks for the config file plus
+    /// weights in the model's directory, so it stays correct after an app restart and for models
+    /// that are downloaded but not loaded. A download interrupted partway leaves its finished files
+    /// behind and still answers `false`, because the weights are incomplete. Use this to gate a
+    /// model picker to what can start without a multi-gigabyte wait, and to badge a list.
     public func isDownloaded(_ spec: ModelSpec) -> Bool {
         inventory.isDownloaded(spec)
     }
 
-    /// 候補のうちダウンロード済みのものを ``DownloadedModel``（実サイズ・DL 時刻込み）で返す。
+    /// Returns the downloaded members of a candidate list with their on-disk size and download time.
+    ///
+    /// Snapshots are stored under their Hugging Face repository path, independent of the app's
+    /// model ids, so candidates have to be supplied rather than discovered — usually
+    /// ``ModelPresets/all``. Most recently downloaded first.
+    ///
+    /// - Parameter specs: Models to look for on disk.
     public func downloadedModels(among specs: [ModelSpec]) -> [DownloadedModel] {
         inventory.downloadedModels(among: specs)
     }
 
-    /// 指定モデルのディスク実サイズ（バイト単位）。未ダウンロードなら `nil`。
+    /// Bytes the model's files occupy on disk, or `nil` when it is not fully downloaded.
     public func downloadSize(of spec: ModelSpec) -> Int64? {
         inventory.diskSize(of: spec)
     }
 
-    /// 候補のうちダウンロード済みモデルの合計ディスク使用量（バイト単位）。
+    /// Total bytes occupied on disk by the downloaded members of a candidate list.
     public func totalDownloadedSize(among specs: [ModelSpec]) -> Int64 {
         inventory.totalDiskSize(among: specs)
     }
 
-    /// 指定モデルのダウンロード済みファイルをディスクから削除する（容量解放）。
+    /// Deletes a model's downloaded files to reclaim disk space.
     ///
-    /// 現在ロード中のモデルを削除する場合は、先に ``backend`` をアンロードする。
-    /// `.local` 指定のモデルは外部所有のため削除しない。
+    /// Weights run to gigabytes each, so this is the counterpart of keeping several models
+    /// available offline. If the model is the one the backend currently holds, it is unloaded first
+    /// so the files are not removed while they are open. Models sourced from a local path belong to
+    /// the caller and are left untouched, and deleting a model that was never downloaded does
+    /// nothing.
     ///
-    /// - Parameter spec: 削除するモデル仕様。
-    /// - Throws: ディレクトリ削除に失敗した場合。
+    /// - Parameter spec: Model whose files should be removed.
+    /// - Throws: If the directory cannot be removed.
     public func deleteDownload(_ spec: ModelSpec) async throws {
-        // 削除対象が現在ロード中なら、ファイルを掴んだままにしないようアンロードする。
+        // Unload first when the target is resident, so the files are not held open while removed.
         if await backend.currentModel == spec {
             await backend.unloadModel()
         }
         try inventory.delete(spec)
     }
 
-    /// 指定されたモデルをバックエンドにプリロードする。
+    /// Loads a model into the backend ahead of the first generation request.
     ///
-    /// ユーザーが生成を要求する前にモデルをウォームアップし、体感レイテンシを低減するのに有用。
+    /// This moves the cold-start cost — the Hugging Face download on first use, and the load into
+    /// RAM on every model change — off the user's first prompt. The weights then stay resident
+    /// until another model is loaded, the backend is unloaded, or a memory warning evicts them.
+    /// This calls the backend directly and does not go through ``ModelSwitcher``, so switcher
+    /// bookkeeping does not learn about the model loaded this way.
     ///
-    /// - Parameter spec: プリロードするモデル仕様。
-    /// - Throws: モデルの読み込みに失敗した場合。
+    /// - Parameter spec: Model to load.
+    /// - Throws: `LLMLocalError.downloadFailed(modelId:reason:)` if the weights cannot be
+    ///   fetched, `LLMLocalError.loadInProgress` if another load is already running, or
+    ///   `LLMLocalError.loadFailed(modelId:reason:)` for anything else.
     public func prefetch(_ spec: ModelSpec) async throws {
         try await backend.loadModel(spec)
     }
 
-    /// 指定されたモデルをプリロードし、ダウンロード進捗を報告する。
+    /// Loads a model ahead of time and reports download progress while it runs.
+    ///
+    /// Progress covers the download only. A model already on disk jumps straight to complete, and
+    /// the remaining wait is the load into memory, which is not reported. An interrupted download
+    /// keeps the files it finished and the partial bytes of the file it was on, and resumes from
+    /// there on the next attempt instead of starting the gigabytes again.
     ///
     /// - Parameters:
-    ///   - spec: プリロードするモデル仕様。
-    ///   - onProgress: ダウンロード進捗の更新時に呼び出されるクロージャ。
-    /// - Throws: モデルの読み込みに失敗した場合。
+    ///   - spec: Model to load.
+    ///   - onProgress: Called as the download advances.
+    /// - Throws: The same failures as ``prefetch(_:)``.
     public func prefetch(
         _ spec: ModelSpec,
         onProgress: @Sendable @escaping (DownloadProgress) -> Void
@@ -377,18 +438,23 @@ public actor LLMLocalService {
 
     // MARK: - Session Management
 
-    /// チャットセッションの会話履歴をリセットする。
+    /// Clears the conversation history while keeping the model in memory.
     ///
-    /// モデルは読み込まれたまま保持し、会話のみをクリアして新しい会話を開始する。
+    /// Only chat state is discarded; the weights stay resident, so the next generation does not pay
+    /// the load cost again. The prompt cache used by the message-array path is dropped too, so the
+    /// first turn after a reset prefills its whole prompt.
     public func resetChatSession() async {
         await backend.resetSession()
     }
 
     // MARK: - Memory Monitoring
 
-    /// メモリ監視を開始する。メモリ警告を受信すると、現在読み込まれているモデルが自動的にアンロードされる。
+    /// Starts watching for system memory warnings and unloads the resident model when one arrives.
     ///
-    /// 初期化時に ``MemoryMonitor`` が提供されていない場合、何も行わない。
+    /// A loaded model is gigabytes of resident RAM, and on iOS the app is killed by jetsam well
+    /// before physical memory is exhausted, so releasing the weights is the only useful response to
+    /// a warning. The next generation reloads them from disk. Does nothing when no memory monitor
+    /// was supplied at initialization.
     public func startMemoryMonitoring() async {
         guard let monitor = memoryMonitor else { return }
         let backend = self.backend
@@ -397,55 +463,62 @@ public actor LLMLocalService {
         }
     }
 
-    /// メモリ監視を停止する。
+    /// Stops watching for memory warnings, leaving any loaded model resident.
     ///
-    /// 初期化時に ``MemoryMonitor`` が提供されていない場合、何も行わない。
+    /// Does nothing when no memory monitor was supplied at initialization.
     public func stopMemoryMonitoring() async {
         await memoryMonitor?.stopMonitoring()
     }
 
-    /// デバイスメモリに基づく推奨コンテキスト長を返す。
+    /// Suggests a context length the device's memory can carry.
     ///
-    /// - 8GB 以下: 2048
-    /// - 12GB 以上: 4096
+    /// The KV cache grows with context length and competes with the weights for the same RAM, so
+    /// the ceiling is a property of the device rather than of the model. Devices with less than
+    /// 12 GB of physical memory get 2048 tokens; 12 GB or more gets 4096.
     ///
-    /// - Returns: 推奨コンテキスト長。メモリモニターが設定されていない場合は `nil`。
+    /// - Returns: Suggested context length in tokens, or `nil` when no memory monitor was supplied.
     public func recommendedContextLength() async -> Int? {
         guard let monitor = memoryMonitor else { return nil }
         return await monitor.recommendedContextLength()
     }
 
-    /// デバイスの物理メモリ総量をバイト単位で返す。
-    ///
-    /// - Returns: 総メモリ量。メモリモニターが設定されていない場合は `nil`。
+    /// Physical memory installed in the device, in bytes, or `nil` without a memory monitor.
     public func totalMemory() async -> UInt64? {
         guard let monitor = memoryMonitor else { return nil }
         return await monitor.totalMemory()
     }
 
-    /// 現在利用可能なメモリをバイト単位で返す。
+    /// Memory currently available in bytes, or `nil` when no memory monitor was supplied.
     ///
-    /// - Returns: 利用可能メモリ量。メモリモニターが設定されていない場合は `nil`。
+    /// On iOS this is what this process may still allocate before jetsam intervenes, not free
+    /// system RAM, and it moves while the app runs. On macOS it is an estimate from free and
+    /// inactive pages.
     public func availableMemory() async -> UInt64? {
         guard let monitor = memoryMonitor else { return nil }
         return await monitor.availableMemory()
     }
 
-    /// 指定されたモデルがこのデバイスで実行可能かを判定する。
+    /// Reports whether this device can be expected to hold the model's weights.
     ///
-    /// 判定基準: モデルの推定メモリ使用量 ≤ デバイス総メモリ × 0.8。
+    /// The test compares the model's estimated memory against ``maxAllowedModelMemory()``. Since
+    /// the iOS budget is derived from memory available right now, the same model can be judged
+    /// compatible at launch and incompatible later in the session.
     ///
-    /// - Parameter spec: 確認するモデル仕様。
-    /// - Returns: 実行可能な場合は `true`。メモリモニターが未設定の場合は `nil`。
+    /// - Parameter spec: Model to check.
+    /// - Returns: `true` when it fits, or `nil` when no memory monitor was supplied.
     public func isModelCompatible(_ spec: ModelSpec) async -> Bool? {
         guard let monitor = memoryMonitor else { return nil }
         return await monitor.isModelCompatible(spec)
     }
 
-    /// デバイスで実行可能なモデルの最大メモリ量をバイト単位で返す。
+    /// Largest model, in bytes, this device is expected to hold.
     ///
-    /// デバイス総メモリの 80% を上限とする。
-    /// - Returns: 最大許容メモリ量。メモリモニターが未設定の場合は `nil`。
+    /// On iOS, tvOS, and watchOS the budget is 80% of the memory the process may still allocate,
+    /// because an app is killed by jetsam before physical RAM is exhausted and a total-memory
+    /// budget would call a 5 GB model safe on an 8 GB phone. On macOS it is 80% of physical
+    /// memory. The margin covers the KV cache, activations, and the rest of the app.
+    ///
+    /// - Returns: Budget in bytes, or `nil` when no memory monitor was supplied.
     public func maxAllowedModelMemory() async -> UInt64? {
         guard let monitor = memoryMonitor else { return nil }
         return await monitor.maxAllowedModelMemory()
@@ -458,10 +531,13 @@ public actor LLMLocalService {
     }
 }
 
-/// 生成ストリームからトークン統計を集計するヘルパー
+/// Aggregates token statistics while a generation stream is consumed.
 ///
-/// バックエンドが ``GenerationInfo`` を流した場合は実測値を優先し、
-/// 流さない場合はテキストチャンク数で近似する。
+/// When the backend emits a measured info event, its token count and throughput win; the throughput
+/// it reports covers the generation phase only, excluding prompt processing. When no info event
+/// arrives — the plain text path never sends one — the count falls back to the number of text
+/// chunks, which is an approximation of token count, not a measurement of it. Duration is wall
+/// clock either way, and includes model download and load when the model started cold.
 private struct TokenCounter {
     private var chunkCount = 0
     private var info: GenerationInfo?

@@ -94,12 +94,14 @@ struct ModelPresetsTests {
 
     // MARK: - Recommended Generation invariants
     //
-    // どのプリセットも `GenerationConfig.default`（思考 ON・generic サンプリング）に
-    // 落とさず、ファミリー別の明示設定を必ず持つことを保証する。これが欠けると
-    // 大型 Qwen のように思考モードが意図せず ON のまま回り、極端に遅くなる。
+    // Every preset must carry an explicit family-specific generation config instead of falling
+    // back to `GenerationConfig.default`, which turns thinking on and uses generic sampling.
+    // When a preset loses its explicit config, a large model such as Qwen keeps running in
+    // thinking mode unnoticed and becomes extremely slow.
 
-    /// 思考を本体とする推論特化モデル（思考 ON が正しい）の ID 許可リスト。
-    /// これ以外の全モデルはエージェント用途で思考 OFF を既定とする。
+    /// Allow list of reasoning-first model IDs, the only ones for which thinking mode is correct.
+    /// Every other on-device model defaults to thinking off, because agent use pays for the
+    /// thinking tokens in latency without gaining anything.
     static let reasoningModelIDs: Set<String> = [
         "deepseek-r1-distill-qwen-1.5b-4bit",
         "deepseek-r1-distill-qwen-7b-4bit",

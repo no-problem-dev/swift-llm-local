@@ -3,81 +3,106 @@ import LLMLocalClient
 
 // MARK: - DownloadState
 
-/// バックグラウンドダウンロードの追跡に使用する内部状態
+/// The stage a tracked download is in.
+///
+/// ``BackgroundDownloader`` keeps one of these per URL. Only `downloading` and `paused` are ever
+/// observable: `completed` and `failed` are assigned and the entry removed within the same actor
+/// step, so no caller can read them.
 public enum DownloadState: Sendable {
-    /// ダウンロードが進行中。
-    /// - Note: URLSession のタスクが開始直後に設定される。
+    /// A transfer has been handed to the delegate and has not returned yet.
     case downloading
 
-    /// レジュームデータを保存してダウンロードが一時停止中。
-    /// - Parameter resumeData: 中断時点の再開用データ。
+    /// The transfer was stopped and its resume data kept so it can be restarted.
+    ///
+    /// When the delegate hands back no resume data, an empty `Data` is stored rather than nothing,
+    /// so a paused URL always looks resumable even when there is nothing to resume from.
+    /// - Parameter resumeData: Bytes the delegate returned when the transfer was cancelled.
     case paused(resumeData: Data)
 
-    /// ダウンロードが正常に完了。
-    /// - Parameter localURL: ダウンロードされたファイルが保存されたローカルURL。
+    /// The transfer finished and the file is at the reported location.
+    /// - Parameter localURL: Location the delegate reported for the finished file.
     case completed(localURL: URL)
 
-    /// ダウンロードがエラーで失敗。
-    /// - Parameter error: 失敗の原因となったエラー。
+    /// The delegate threw while transferring.
+    /// - Parameter error: The error that was rethrown to the caller.
     case failed(error: any Error)
 }
 
 // MARK: - BackgroundDownloadError
 
-/// バックグラウンドダウンロード操作固有のエラー
+/// Errors raised by the download bookkeeping.
 public enum BackgroundDownloadError: Error, Sendable, Equatable {
-    /// `resume(url:)` 呼び出し時に、対象URLのレジュームデータが存在しなかった。
+    /// Resume was requested for a URL that has no stored resume data.
     case noResumeData
 
-    /// `pause(url:)` 呼び出し時に、対象URLがアクティブダウンロード中でなかった。
+    /// Pause was requested for a URL that is not being tracked, including one that already
+    /// finished.
     case notDownloading
 
-    /// レジュームデータのディスク保存に失敗。
-    /// - Parameter reason: 失敗の人間可読な説明。
+    /// Writing resume data to persistent storage failed.
+    ///
+    /// ``BackgroundDownloader`` holds resume data in memory only and never throws this; it exists
+    /// for delegates that persist their own.
+    /// - Parameter reason: Human-readable description of the failure.
     case resumeDataPersistenceFailed(reason: String)
 }
 
 // MARK: - BackgroundDownloadDelegate
 
-/// バックグラウンドダウンロード操作のプロトコル
+/// Moves the bytes for a model download.
 ///
-/// テスト用の依存性注入を可能にする。実装は実際の URLSession
-/// バックグラウンドダウンロード動作またはテストスタブを提供する。
+/// ``BackgroundDownloader`` owns only the bookkeeping — which URLs are in flight and which resume
+/// data belongs to them — and hands every transfer here. Nothing in this package implements this
+/// protocol on top of `URLSession`, so whether a transfer survives app suspension, and whether a
+/// background session's completion handler is involved at all, is decided entirely by the
+/// conforming type the app injects.
 public protocol BackgroundDownloadDelegate: Sendable {
-    /// バックグラウンドダウンロードを開始または再開する。
+    /// Starts a transfer, continuing from resume data when it is supplied.
     ///
     /// - Parameters:
-    ///   - url: ダウンロード元のリモートURL。
-    ///   - resumeData: 以前一時停止したダウンロードからのレジュームデータ（オプション）。
-    /// - Returns: ダウンロードが保存されたローカルファイルURL。
-    /// - Throws: ダウンロード中に発生したエラー。
+    ///   - url: Remote URL to fetch.
+    ///   - resumeData: Bytes from a transfer that was cancelled earlier.
+    ///     ``BackgroundDownloader`` passes empty data rather than `nil` when a pause produced no
+    ///     resume data, so treat empty data as "start from the beginning".
+    /// - Returns: Location of the finished file on disk.
     func startDownload(url: URL, resumeData: Data?) async throws -> URL
 
-    /// 指定されたURLのダウンロードが再開可能かを確認する。
+    /// Reports whether the delegate itself holds resume data for a URL.
     ///
-    /// - Parameter url: 確認するリモートURL。
-    /// - Returns: レジュームデータが利用可能な場合は `true`。
+    /// ``BackgroundDownloader`` keeps its own resume-data table and never calls this, so it only
+    /// matters to code that talks to a delegate directly.
+    ///
+    /// - Parameter url: Remote URL to check.
+    /// - Returns: `true` when the delegate can resume this URL.
     func canResume(for url: URL) -> Bool
 
-    /// URLに対する保存済みレジュームデータを取得する（存在する場合）。
+    /// Returns the delegate's own resume data for a URL.
     ///
-    /// - Parameter url: 検索するリモートURL。
-    /// - Returns: レジュームデータ。保存されていない場合は `nil`。
+    /// Not called by ``BackgroundDownloader``, which passes the resume data it stored itself into
+    /// `startDownload(url:resumeData:)`.
+    ///
+    /// - Parameter url: Remote URL to look up.
+    /// - Returns: Resume data held by the delegate, or `nil`.
     func resumeData(for url: URL) -> Data?
 
-    /// アクティブなダウンロードをキャンセルし、レジュームデータを返す。
+    /// Stops an in-flight transfer and hands back resume data when the transport supports it.
     ///
-    /// - Parameter url: キャンセルするリモートURL。
-    /// - Returns: 利用可能なレジュームデータ。なければ `nil`。
+    /// Called for both pause and cancel. Returning `nil` is taken as "not resumable": a pause
+    /// still marks the URL paused, and the next start receives empty resume data.
+    ///
+    /// - Parameter url: Remote URL whose transfer should stop.
+    /// - Returns: Resume data, or `nil` when the transfer cannot be resumed.
     func cancelDownload(for url: URL) async throws -> Data?
 }
 
 // MARK: - StubBackgroundDownloadDelegate
 
-/// ネットワークアクセスなしでバックグラウンドダウンロードをシミュレートするデフォルトスタブデリゲート
+/// Default delegate that performs no I/O.
 ///
-/// カスタムデリゲートが提供されない場合のデフォルトデリゲートとして使用される。
-/// ダウンロードURLの最終パスコンポーネントに基づくシミュレートされたローカルファイルURLを返す。
+/// Used when no delegate is injected. `startDownload(url:resumeData:)` returns a path in the
+/// temporary directory built from the URL's last path component without creating any file, and
+/// pause and cancel report no resume data. A downloader left on this delegate therefore reports
+/// instant success while nothing is downloaded.
 struct StubBackgroundDownloadDelegate: BackgroundDownloadDelegate, Sendable {
 
     init() {}
@@ -102,14 +127,24 @@ struct StubBackgroundDownloadDelegate: BackgroundDownloadDelegate, Sendable {
 
 // MARK: - BackgroundDownloader
 
-/// レジューム機能付きのバックグラウンドモデルダウンロードを管理するアクター
+/// Tracks pause, resume, and cancel state for long-running model downloads.
 ///
-/// `BackgroundDownloader` は大容量モデルファイルのダウンロードに対して、
-/// 一時停止・再開・キャンセル操作を提供する。レジュームデータをメモリに保存し、
-/// 実際のダウンロード処理を ``BackgroundDownloadDelegate`` に委譲する。
+/// This actor is bookkeeping only. It records which URLs are in flight, keeps the resume data a
+/// pause produced, and forwards every transfer to a ``BackgroundDownloadDelegate``. It creates no
+/// `URLSession` of its own — background or foreground — and reports no progress; use
+/// ``ModelRegistry/downloadWithProgress(_:)`` when byte counts are needed.
 ///
-/// ライブラリレベルのアクター。アプリ側は独自の
-/// App Delegate で URLSession バックグラウンドセッションイベントを処理する。
+/// Nothing survives the process. Resume data is held in memory, so a download interrupted by app
+/// termination restarts from the first byte, and so does one interrupted by suspension unless the
+/// injected delegate arranges otherwise. The `storageDirectory` passed to the initializer is
+/// stored but never created or written to.
+///
+/// ``sessionIdentifier`` is a constant offered to an app that wires up its own background session
+/// and its app-delegate completion handler; this type does not use it. Whether transfers continue
+/// while the app is suspended depends solely on the delegate.
+///
+/// Every query hops onto the actor, so an answer from ``isDownloading(_:)`` or
+/// ``hasResumeData(for:)`` can already be stale by the time the caller acts on it.
 ///
 /// ## Usage
 ///
@@ -119,28 +154,34 @@ struct StubBackgroundDownloadDelegate: BackgroundDownloadDelegate, Sendable {
 /// ```
 public actor BackgroundDownloader {
 
-    /// バックグラウンドダウンロード用の URLSession 設定識別子。
+    /// Identifier reserved for an app-owned background download session.
+    ///
+    /// Nothing in this package creates a session with it.
     public static let sessionIdentifier = "com.llmlocal.background-download"
 
-    /// URLをキーとするアクティブなダウンロードタスク。
+    /// Transfers in flight. Entries are dropped as soon as they finish or fail, so completed and
+    /// failed states never linger here.
     private var activeDownloads: [URL: DownloadState] = [:]
 
-    /// 一時停止・中断されたダウンロードの保存済みレジュームデータ。
+    /// Resume data from paused transfers. Memory only — it is not written to `storageDirectory`
+    /// and does not survive process exit.
     private var resumeDataStore: [URL: Data] = [:]
 
-    /// レジュームデータをディスクに保存するディレクトリ。
+    /// Directory the caller nominated for resume data. Never created, read, or written.
     private let storageDirectory: URL
 
-    /// バックグラウンドダウンロードデリゲート（テスト用に注入可能）。
+    /// Performs the transfers. Defaults to a stub that moves no bytes.
     private let delegate: any BackgroundDownloadDelegate
 
-    /// 新しいバックグラウンドダウンローダーを作成する。
+    /// Creates a downloader that tracks state in memory and delegates every transfer.
     ///
     /// - Parameters:
-    ///   - storageDirectory: レジュームデータをディスクに保存するディレクトリ。
-    ///     デフォルトは `~/Library/Application Support/LLMLocal/bg-downloads`。
-    ///   - delegate: ダウンロードを実行するオプションのデリゲート。
-    ///     `nil` の場合、``StubBackgroundDownloadDelegate`` を使用する。
+    ///   - storageDirectory: Directory nominated for resume data. It is retained but never touched,
+    ///     so passing one changes no behaviour. Defaults to
+    ///     `~/Library/Application Support/LLMLocal/bg-downloads`.
+    ///   - delegate: Performs the transfers. When `nil`,
+    ///     ``StubBackgroundDownloadDelegate`` is used and downloads complete instantly without
+    ///     fetching anything.
     public init(
         storageDirectory: URL? = nil,
         delegate: (any BackgroundDownloadDelegate)? = nil
@@ -154,14 +195,19 @@ public actor BackgroundDownloader {
 
     // MARK: - Public API
 
-    /// URLからのダウンロードを開始または再開する。
+    /// Starts a transfer, reusing stored resume data for the URL when there is any.
     ///
-    /// このURLのレジュームデータが存在する場合、ダウンロードの再開に使用される。
-    /// ダウンロード完了時にローカルファイルURLを返す。
+    /// The URL is marked in flight, handed to the delegate, and cleared from both the in-flight
+    /// table and the resume-data table once the delegate returns, so a finished URL is no longer
+    /// reported by ``isDownloading(_:)`` or ``hasResumeData(for:)``. On a thrown error the
+    /// in-flight entry is cleared too, while resume data kept by an earlier pause is left in place.
     ///
-    /// - Parameter url: ダウンロードするリモートURL。
-    /// - Returns: ダウンロードが保存されたローカルファイルURL。
-    /// - Throws: デリゲートから伝播されたエラー、またはダウンロード失敗時のエラー。
+    /// Concurrent starts are not guarded: calling this twice for the same URL runs two delegate
+    /// transfers, and the second one owns the bookkeeping.
+    ///
+    /// - Parameter url: Remote URL to fetch.
+    /// - Returns: Location the delegate reported for the finished file.
+    /// - Throws: Whatever the delegate throws.
     public func download(from url: URL) async throws -> URL {
         // Check for existing resume data
         let existingResumeData = resumeDataStore[url]
@@ -191,10 +237,16 @@ public actor BackgroundDownloader {
         }
     }
 
-    /// ダウンロードを一時停止し、レジュームデータを保存する。
+    /// Stops the tracked transfer for a URL and keeps whatever resume data comes back.
     ///
-    /// - Parameter url: ダウンロードを一時停止するリモートURL。
-    /// - Throws: アクティブなダウンロードが存在しない場合は ``BackgroundDownloadError/notDownloading``。
+    /// When the delegate returns no resume data the URL is still marked paused and empty data is
+    /// stored, so ``hasResumeData(for:)`` answers `true` and ``resume(url:)`` succeeds while the
+    /// transfer actually restarts from the first byte. What happens to a suspended
+    /// ``download(from:)`` call is up to the delegate.
+    ///
+    /// - Parameter url: Remote URL to pause.
+    /// - Throws: ``BackgroundDownloadError/notDownloading`` when the URL is not tracked, and
+    ///   whatever the delegate throws while cancelling.
     public func pause(url: URL) async throws {
         guard activeDownloads[url] != nil else {
             throw BackgroundDownloadError.notDownloading
@@ -213,11 +265,14 @@ public actor BackgroundDownloader {
         }
     }
 
-    /// 一時停止したダウンロードを再開する。
+    /// Restarts a paused transfer from its stored resume data.
     ///
-    /// - Parameter url: ダウンロードを再開するリモートURL。
-    /// - Returns: ダウンロード完了時のローカルファイルURL。
-    /// - Throws: レジュームデータが存在しない場合は ``BackgroundDownloadError/noResumeData``。
+    /// This is ``download(from:)`` with a precondition: the stored data is picked up there, so an
+    /// empty stored value silently restarts from the beginning.
+    ///
+    /// - Parameter url: Remote URL to restart.
+    /// - Returns: Location the delegate reported for the finished file.
+    /// - Throws: ``BackgroundDownloadError/noResumeData`` when nothing is stored for the URL.
     public func resume(url: URL) async throws -> URL {
         guard resumeDataStore[url] != nil else {
             throw BackgroundDownloadError.noResumeData
@@ -227,11 +282,13 @@ public actor BackgroundDownloader {
         return try await download(from: url)
     }
 
-    /// ダウンロードをキャンセルし、関連するすべての状態をクリアする。
+    /// Drops all tracking for a URL and tells the delegate to stop.
     ///
-    /// このURLのアクティブなダウンロードがない場合、このメソッドは何もしない。
+    /// Any resume data is discarded, so the next ``download(from:)`` for the URL starts from the
+    /// first byte. The delegate's error is swallowed, so this never actually fails despite being
+    /// throwing. An untracked URL is a no-op.
     ///
-    /// - Parameter url: キャンセルするリモートURL。
+    /// - Parameter url: Remote URL to cancel.
     public func cancel(url: URL) async throws {
         if activeDownloads[url] != nil {
             _ = try? await delegate.cancelDownload(for: url)
@@ -240,10 +297,12 @@ public actor BackgroundDownloader {
         resumeDataStore.removeValue(forKey: url)
     }
 
-    /// URLに対してダウンロードが現在アクティブかどうか。
+    /// Reports whether a transfer for the URL is in flight right now.
     ///
-    /// - Parameter url: 確認するリモートURL。
-    /// - Returns: URLがアクティブダウンロード辞書に `.downloading` 状態で存在する場合は `true`。
+    /// A paused URL answers `false` even though its resume data is still held.
+    ///
+    /// - Parameter url: Remote URL to check.
+    /// - Returns: `true` while the delegate call for this URL has not returned.
     public func isDownloading(_ url: URL) -> Bool {
         guard let state = activeDownloads[url] else { return false }
         if case .downloading = state {
@@ -252,17 +311,20 @@ public actor BackgroundDownloader {
         return false
     }
 
-    /// URLのレジュームデータが存在するかどうか。
+    /// Reports whether a pause left resume data for the URL.
     ///
-    /// - Parameter url: 確認するリモートURL。
-    /// - Returns: このURLのレジュームデータが保存されている場合は `true`。
+    /// Answers `true` after a pause that produced nothing, because empty data is stored in that
+    /// case; it is not a promise that the transfer can continue where it left off.
+    ///
+    /// - Parameter url: Remote URL to check.
+    /// - Returns: `true` when an entry exists in the resume-data table.
     public func hasResumeData(for url: URL) -> Bool {
         resumeDataStore[url] != nil
     }
 
-    /// すべてのアクティブなダウンロードURLを返す。
+    /// The URLs whose transfers are in flight, excluding paused ones.
     ///
-    /// - Returns: 現在ダウンロード中のURLの配列。
+    /// The order is undefined — the entries come from a dictionary.
     public func activeDownloadURLs() -> [URL] {
         activeDownloads.compactMap { url, state in
             if case .downloading = state {
@@ -274,12 +336,11 @@ public actor BackgroundDownloader {
 
     // MARK: - Internal (for testing)
 
-    /// URLをアクティブダウンロード中としてマークする。
+    /// Marks a URL as in flight without starting a transfer.
     ///
-    /// テスト目的のヘルパー。一時停止やキャンセルが可能な
-    /// 進行中のダウンロードをシミュレートする。
+    /// Test seam that lets pause and cancel be exercised with no delegate call running.
     ///
-    /// - Parameter url: ダウンロード中としてマークするURL。
+    /// - Parameter url: URL to mark.
     func markAsDownloading(_ url: URL) {
         activeDownloads[url] = .downloading
     }

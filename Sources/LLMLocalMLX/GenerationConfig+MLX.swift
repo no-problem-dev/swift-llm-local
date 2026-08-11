@@ -2,9 +2,11 @@ import LLMLocalClient
 import MLXLMCommon
 
 extension GenerationConfig {
-    /// この ``GenerationConfig`` を MLX の ``GenerateParameters`` に変換する。
-    /// 思考モード（``enableThinking``）はサンプリングではなくチャットテンプレートの
-    /// 制御なので、ここではなく `applyChatTemplate` の additionalContext で扱う。
+    /// Maps this configuration onto the MLX generation parameters.
+    ///
+    /// Everything that steers sampling, the KV cache, and prefill crosses over one-to-one.
+    /// Thinking mode does not: it is a chat template switch rather than a sampling knob, so it
+    /// travels through ``chatTemplateContext`` instead.
     var mlxParameters: GenerateParameters {
         GenerateParameters(
             maxTokens: maxTokens,
@@ -26,9 +28,14 @@ extension GenerationConfig {
         )
     }
 
-    /// チャットテンプレートへ渡す追加コンテキスト。思考モードの抑制フラグを載せる。
-    /// Qwen3 系テンプレートは `enable_thinking == false` で空の `<think></think>` を
-    /// 注入し、思考生成をスキップさせる。
+    /// Extra variables handed to the chat template, carrying the thinking-mode switch.
+    ///
+    /// Qwen3-style templates read `enable_thinking == false` and emit an empty `<think></think>`
+    /// span, which makes the model skip reasoning and answer directly. Returns `nil` when thinking
+    /// is enabled, leaving the template at its own default.
+    ///
+    /// A model whose template ignores the flag simply keeps thinking; nothing reports that the
+    /// request had no effect.
     var chatTemplateContext: [String: any Sendable]? {
         enableThinking ? nil : ["enable_thinking": false]
     }

@@ -15,8 +15,12 @@ struct LocalModelInventoryTests {
         return dir
     }
 
-    /// base 配下に `{namespace}/{name}` のスナップショットを作る。
-    /// - Parameter complete: true なら config.json + 重みを置く（完全）、false なら config.json のみ。
+    /// Writes a Hugging Face style snapshot at `{namespace}/{name}` under the given base directory.
+    ///
+    /// - Parameters:
+    ///   - complete: Writes both config.json and a weights file when true, so the inventory sees a
+    ///     usable model; writes only config.json when false, which is the half-downloaded shape.
+    ///   - weightBytes: Size of the placeholder weights file, used to check reported disk usage.
     private static func writeSnapshot(
         base: URL, hfID: String, complete: Bool, weightBytes: Int = 1024
     ) throws {

@@ -31,10 +31,11 @@ private struct WeatherTool: Tool {
 
 // MARK: - Generic Dispatch Helpers
 //
-// LocalAgentClient のメソッドを必ずプロトコル制約付きジェネリクス経由で呼ぶ。
-// 具象型経由の呼び出しではシグネチャ不一致（witness 不成立）を検出できないため。
-// witness が protocol extension のデフォルト実装に落ちると、
-// generateWithUsage は無限再帰、streamAgentStep は delta なしになる。
+// These helpers force every LocalAgentClient call through a protocol-constrained generic.
+// Calling the concrete type directly would hide a signature mismatch, because nothing would
+// check that the concrete method actually satisfies the protocol requirement. When the witness
+// is missing, the call silently resolves to the protocol extension default, where
+// generateWithUsage recurses forever and streamAgentStep emits no deltas.
 
 private func generateStructured<C: StructuredLLMClient, T: StructuredProtocol>(
     _ client: C,
@@ -170,7 +171,7 @@ struct LocalAgentClientTests {
         tokensPerSecond: 30
     )
 
-    // MARK: - StructuredLLMClient (witness 不成立なら無限再帰でタイムアウト)
+    // MARK: - StructuredLLMClient (a missing witness recurses forever, so these time out)
 
     @Test("generateWithUsage はプロトコル経由で witness にディスパッチされ JSON をデコードする")
     func structuredDispatch() async throws {
@@ -378,8 +379,9 @@ struct LocalAgentClientTests {
             }
         }
 
-        // protocol extension のデフォルト実装（非ストリーミングのラップ）に
-        // フォールバックすると delta は一切流れない — witness 退行の検出点
+        // If dispatch falls back to the protocol extension default, which just wraps the
+        // non-streaming call, no delta is emitted at all. This is where a witness regression
+        // surfaces.
         #expect(!thinkingDeltas.isEmpty)
         #expect(!textDeltas.isEmpty)
         #expect(completed != nil)

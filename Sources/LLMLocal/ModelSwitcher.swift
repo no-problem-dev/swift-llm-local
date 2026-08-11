@@ -1,71 +1,77 @@
 import Foundation
 import LLMLocalClient
 
-/// 読み込み済みモデルを追跡する内部エントリ。
 struct LoadedModelEntry: Sendable {
     let spec: ModelSpec
     var lastAccessed: Date
 }
 
-/// LRU エビクション戦略で読み込み済みモデルを管理するアクター
+/// Tracks which models are loaded and evicts the least recently used one when the limit is reached.
 ///
-/// どのモデルが読み込まれているか、最後にアクセスされた時間を追跡する。
-/// 最大容量に達した場合、最も最近使用されていないモデルが
-/// 新しいモデルの読み込み前にエビクトされる。
+/// Model weights are resident RAM measured in gigabytes, so loading a second model without
+/// releasing the first is what gets an app killed. This actor owns that decision: it records what
+/// has been loaded and when it was last used, and drops the oldest entry — asking the backend to
+/// release memory — before a new model is read from disk. The backend performs the actual load and
+/// unload; this type only decides when.
 ///
-/// ## 使用例
+/// ## Example
 ///
 /// ```swift
 /// let switcher = ModelSwitcher(backend: mlxBackend, maxLoadedModels: 2)
 /// try await switcher.ensureLoaded(ModelPresets.qwen3_0_6B)
 /// ```
 ///
-/// `maxLoadedModels: 1`（デフォルト）の場合、一度に1つのモデルのみ読み込み可能な
-/// 現在のシステムと同じ動作。バックエンドの `loadModel` が実際のモデル読み込みを
-/// 処理し、スイッチャーは LRU 追跡とエビクション判定を管理する。
+/// With the default limit of one, the bookkeeping matches what the machine does: the MLX backend
+/// holds exactly one model, and loading another releases the first. Raising the limit widens the
+/// bookkeeping without widening the backend — a second model still displaces the first in memory,
+/// while this actor keeps reporting both as loaded and ``ensureLoaded(_:)`` returns immediately for
+/// a model whose weights are already gone.
 public actor ModelSwitcher {
 
-    /// 同時に読み込み可能なモデルの最大数。
+    /// Number of models tracked before eviction starts; values above one exceed what the backend holds.
     public nonisolated let maxLoadedModels: Int
 
-    /// アクセスタイムスタンプ付きの読み込み済みモデルの内部追跡。
     private var loadedModels: [String: LoadedModelEntry] = [:]
 
-    /// モデルの読み込み・アンロードに使用するバックエンド。
     private let backend: any LLMLocalBackend
 
-    /// 新しいモデルスイッチャーを作成する。
+    /// Creates a switcher over the given backend.
     ///
     /// - Parameters:
-    ///   - backend: モデルの読み込みとアンロードに使用する推論バックエンド。
-    ///   - maxLoadedModels: 同時に読み込み可能なモデルの最大数。デフォルトは `1`。
+    ///   - backend: Inference backend that performs the loads and unloads.
+    ///   - maxLoadedModels: How many models to track as loaded before evicting the least recently
+    ///     used one. The MLX backend can only hold one at a time, so this is the default.
     public init(backend: any LLMLocalBackend, maxLoadedModels: Int = 1) {
         self.backend = backend
         self.maxLoadedModels = maxLoadedModels
     }
 
-    /// 指定されたモデルが読み込まれていることを保証し、容量超過時は LRU をエビクトする。
+    /// Makes sure the model is loaded, evicting the least recently used one if the limit is reached.
     ///
-    /// モデルが既に読み込まれている場合、再読み込みせずにアクセス時間を更新する。
-    /// キャッシュが容量に達している場合、最も最近使用されていないモデルが
-    /// 新しいモデルの読み込み前にエビクトされる。
+    /// A model that is already tracked is not reloaded; only its access time moves. Otherwise, when
+    /// the tracker is at capacity, the least recently used entry is dropped and the backend
+    /// releases memory before the new weights are read from disk. Evicting first is the point: it
+    /// keeps two sets of weights from being resident at the same moment, which is what the OS kills
+    /// an app for.
     ///
-    /// - Parameter spec: 読み込むモデル仕様。
-    /// - Throws: バックエンドがモデルを読み込めない場合。
+    /// - Parameter spec: Model to load.
+    /// - Throws: Whatever the backend reports, including a failed download for a model that is not
+    ///   on disk yet.
     public func ensureLoaded(_ spec: ModelSpec) async throws {
         try await ensureLoaded(spec, progressHandler: { _ in })
     }
 
-    /// 指定されたモデルが読み込まれていることを保証し、ダウンロード進捗を報告する。
+    /// Makes sure the model is loaded, reporting download progress while it is fetched.
     ///
-    /// モデルが既に読み込まれている場合、再読み込みせずにアクセス時間を更新する。
-    /// キャッシュが容量に達している場合、最も最近使用されていないモデルが
-    /// 新しいモデルの読み込み前にエビクトされる。
+    /// Eviction works exactly as in ``ensureLoaded(_:)``. Progress covers the Hugging Face download
+    /// only: a model already on disk completes immediately, and the remaining wait is the load into
+    /// memory, which is not reported. An interrupted download keeps what it already fetched and
+    /// resumes from there rather than restarting the gigabytes.
     ///
     /// - Parameters:
-    ///   - spec: 読み込むモデル仕様。
-    ///   - progressHandler: ダウンロード進捗の更新時に呼び出されるクロージャ。
-    /// - Throws: バックエンドがモデルを読み込めない場合。
+    ///   - spec: Model to load.
+    ///   - progressHandler: Called as the download advances.
+    /// - Throws: Whatever the backend reports while downloading or loading.
     public func ensureLoaded(
         _ spec: ModelSpec,
         progressHandler: @Sendable @escaping (DownloadProgress) -> Void
@@ -91,28 +97,24 @@ public actor ModelSwitcher {
         )
     }
 
-    /// 現在読み込まれているモデル仕様を最近アクセスされた順に返す。
-    ///
-    /// - Returns: アクセス時間順（最新が先頭）のモデル仕様配列。
+    /// Returns the tracked models, most recently used first.
     public func loadedModelSpecs() -> [ModelSpec] {
         loadedModels.values
             .sorted { $0.lastAccessed > $1.lastAccessed }
             .map(\.spec)
     }
 
-    /// 現在読み込まれているモデル数を返す。
-    ///
-    /// - Returns: 現在追跡中のモデル数。
     public func loadedCount() -> Int {
         loadedModels.count
     }
 
-    /// 特定のモデルをアンロードする。
+    /// Stops tracking a model and frees its weights if the backend still holds them.
     ///
-    /// モデルが現在バックエンドのアクティブモデルである場合、バックエンドにもアンロードを要求する。
-    /// モデルが読み込まれていない場合は何も行わない。
+    /// The backend is only asked to unload when this model is the one it currently has resident, so
+    /// forgetting a model that was already displaced does not disturb the live one. Does nothing
+    /// for a model that is not tracked.
     ///
-    /// - Parameter spec: アンロードするモデル仕様。
+    /// - Parameter spec: Model to unload.
     public func unload(_ spec: ModelSpec) async {
         guard loadedModels.removeValue(forKey: spec.id) != nil else {
             return
@@ -124,28 +126,32 @@ public actor ModelSwitcher {
         }
     }
 
-    /// すべてのモデルをアンロードする。
+    /// Clears all tracking and releases the weights the backend is holding.
     ///
-    /// 追跡中のすべてのモデルをクリアし、バックエンドに現在読み込まれているモデルのアンロードを要求する。
+    /// Use it to hand the memory back — to another feature, or to survive a memory warning. The
+    /// next generation pays a full load again.
     public func unloadAll() async {
         loadedModels.removeAll()
         await backend.unloadModel()
     }
 
-    /// 指定されたモデルが現在読み込まれているかどうか。
+    /// Reports whether the model is tracked as loaded.
     ///
-    /// - Parameter spec: 確認するモデル仕様。
-    /// - Returns: モデルが読み込み済みとして追跡されている場合は `true`。
+    /// This is the tracker's view, not the backend's. With a limit above one it can answer `true`
+    /// for a model whose weights the backend has already displaced.
+    ///
+    /// - Parameter spec: Model to check.
     public func isLoaded(_ spec: ModelSpec) -> Bool {
         loadedModels[spec.id] != nil
     }
 
     // MARK: - Private
 
-    /// 最も最近使用されていないモデルをキャッシュからエビクトする。
+    /// Drops the least recently used entry and asks the backend to release its resident model.
     ///
-    /// LRU エントリを追跡から削除し、次のモデルをクリーンに読み込めるよう
-    /// バックエンドに現在読み込まれているモデルのアンロードを要求する。
+    /// The backend has no per-model unload — it releases whatever it is currently holding. With the
+    /// default limit of one tracked model these are the same model; with a larger limit, the entry
+    /// that is forgotten and the weights that are freed can be different models.
     private func evictLRU() async {
         guard let lruEntry = loadedModels.values.min(by: { $0.lastAccessed < $1.lastAccessed }) else {
             return
