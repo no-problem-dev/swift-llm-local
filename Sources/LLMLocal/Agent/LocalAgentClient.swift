@@ -60,16 +60,12 @@ extension LocalAgentClient: StructuredLLMClient {
     public func generateWithUsage<T: StructuredProtocol>(
         input: LLMInput,
         model: ModelSpec,
-        systemPrompt: SystemPrompt?,
-        temperature: Double?,
-        maxTokens: Int?
+        options: GenerationOptions
     ) async throws -> GenerationResult<T> {
         try await generateWithUsage(
             messages: [.user(input.prompt.render())],
             model: model,
-            systemPrompt: systemPrompt,
-            temperature: temperature,
-            maxTokens: maxTokens
+            options: options
         )
     }
 
@@ -86,27 +82,23 @@ extension LocalAgentClient: StructuredLLMClient {
     /// - Parameters:
     ///   - messages: Chat history, oldest first.
     ///   - model: Model to generate with.
-    ///   - systemPrompt: System prompt, or `nil` to send none.
-    ///   - temperature: Sampling temperature; `nil` keeps the model's recommended value.
-    ///   - maxTokens: Generation limit; `nil` means generate until the model stops or the context
-    ///     runs out.
+    ///   - options: System prompt, temperature, and token ceiling. Anything left unset keeps the
+    ///     model's own default.
     /// - Returns: The decoded value with the token counts measured on this device.
     /// - Throws: A model load or download failure, or a decoding failure when the output is not
     ///   valid JSON for `T`.
     public func generateWithUsage<T: StructuredProtocol>(
         messages: [LLMMessage],
         model: ModelSpec,
-        systemPrompt: SystemPrompt?,
-        temperature: Double?,
-        maxTokens: Int?
+        options: GenerationOptions
     ) async throws -> GenerationResult<T> {
         let outcome = try await runGeneration(
             messages: messages,
             model: model,
-            systemPrompt: systemPrompt,
+            systemPrompt: options.systemPrompt,
             tools: ToolSet(),
-            temperature: temperature,
-            maxTokens: maxTokens
+            temperature: options.temperature,
+            maxTokens: options.maxTokens
         )
 
         let jsonText = Self.extractJSONPayload(from: outcome.text)

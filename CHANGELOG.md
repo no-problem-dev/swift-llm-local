@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **BREAKING** — `LocalAgentClient.generateWithUsage` takes a `GenerationOptions` value instead of
+  separate `systemPrompt`, `temperature` and `maxTokens` arguments, following swift-llm-client
+  4.0.0. The requirement's signature now differs from the convenience method beside it, which is
+  what stops a conformance that forgets the requirement from calling the convenience back into
+  itself forever. Call sites that pass the arguments individually keep working — llm-client still
+  ships those as defaulted convenience overloads.
+
+### Changed
+
+- Raised the swift-llm-client pin to 4.0.0.
+
+
 Nothing.
 
 ## [3.0.0] - 2026-07-19
