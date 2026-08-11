@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [7.0.0] - 2026-08-11
+
 ### Added
 
 - Tests for the MLX → canonical tool call bridge, which had none. They pin the payload contract:
