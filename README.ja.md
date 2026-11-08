@@ -55,9 +55,9 @@ for try await token in await service.generate(
 
 ## ドキュメント
 
-- [API リファレンス](https://no-problem-dev.github.io/swift-llm-local/documentation/llmlocal/) — モジュールごとの全パブリックシンボル
-- [Getting Started](https://no-problem-dev.github.io/swift-llm-local/documentation/llmlocal/gettingstarted) — モデル選択・ツールコール・ダウンロード管理
-- [Architecture](https://no-problem-dev.github.io/swift-llm-local/documentation/llmlocal/architecture) — 4 層構造と、どの層に依存すべきか
+- [API リファレンス](Sources/LLMLocal/Documentation.docc) — モジュールごとの全パブリックシンボル
+- [Getting Started](Sources/LLMLocal/Documentation.docc/GettingStarted.md) — モデル選択・ツールコール・ダウンロード管理
+- [Architecture](Sources/LLMLocal/Documentation.docc/Architecture.md) — 4 層構造と、どの層に依存すべきか
 
 ## インストール
 
