@@ -55,9 +55,9 @@ for try await token in await service.generate(
 
 ## Documentation
 
-- [API reference](https://no-problem-dev.github.io/swift-llm-local/documentation/llmlocal/) — every public symbol, per module
-- [Getting started](https://no-problem-dev.github.io/swift-llm-local/documentation/llmlocal/gettingstarted) — model selection, tool calling, and managing downloads
-- [Architecture](https://no-problem-dev.github.io/swift-llm-local/documentation/llmlocal/architecture) — the four layers, and which one to depend on
+- [API reference](Sources/LLMLocal/Documentation.docc) — every public symbol, per module
+- [Getting started](Sources/LLMLocal/Documentation.docc/GettingStarted.md) — model selection, tool calling, and managing downloads
+- [Architecture](Sources/LLMLocal/Documentation.docc/Architecture.md) — the four layers, and which one to depend on
 
 ## Installation
 
